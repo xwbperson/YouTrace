@@ -1,0 +1,606 @@
+import type Database from 'better-sqlite3'
+import type {
+  Course,
+  CreateCourseInput,
+  CreateHabitInput,
+  CreateKnowledgeInput,
+  CreateMetricInput,
+  CreateMistakeInput,
+  Habit,
+  KnowledgeItem,
+  Metric,
+  Mistake,
+  RecordHabitInput,
+  RecordMetricInput
+} from '../../../shared/contracts'
+
+interface HabitRow {
+  id: string
+  project_id: string | null
+  name: string
+  description: string
+  frequency: Habit['frequency']
+  target_count: number
+  weekdays_json: string
+  reminder_time: string | null
+  start_date: string
+  end_date: string | null
+  today_status: Habit['todayStatus']
+  total_completed: number
+  created_at: string
+  updated_at: string
+}
+
+interface MetricRow {
+  id: string
+  project_id: string | null
+  name: string
+  target_value: number
+  unit: string
+  direction: Metric['direction']
+  period: Metric['period']
+  current_value: number | null
+  last_recorded_at: string | null
+  entry_count: number
+  created_at: string
+  updated_at: string
+}
+
+interface CourseRow {
+  id: string
+  project_id: string
+  course_name: string
+  exam_date: string | null
+  textbook_id: string | null
+  textbook_title: string | null
+  author: string | null
+  edition: string | null
+  isbn: string | null
+  publisher: string | null
+  knowledge_count: number
+  mistake_count: number
+  pending_review_count: number
+  created_at: string
+  updated_at: string
+}
+
+interface KnowledgeRow {
+  id: string
+  project_id: string
+  milestone_id: string | null
+  title: string
+  content: string
+  mastery: number | null
+  last_reviewed_at: string | null
+  next_review_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface MistakeRow {
+  id: string
+  project_id: string
+  knowledge_item_id: string | null
+  question: string
+  wrong_answer: string
+  correct_answer: string
+  analysis: string
+  mastery: number | null
+  next_review_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export class PracticeRepository {
+  constructor(private readonly database: () => Database.Database) {}
+
+  listHabits(projectId: string | null, date: string): HabitRow[] {
+    const condition = projectId === null ? 'h.project_id IS NULL' : 'h.project_id = ?'
+    const params = projectId === null ? [date] : [date, projectId]
+    return this.database()
+      .prepare(
+        `SELECT h.id, h.project_id, h.name, h.description, h.frequency, h.target_count,
+                h.weekdays_json, h.reminder_time, h.start_date, h.end_date,
+                hi.status AS today_status,
+                (SELECT COUNT(*) FROM habit_instances total
+                  WHERE total.habit_rule_id = h.id AND total.status = 'completed') AS total_completed,
+                h.created_at, h.updated_at
+           FROM habit_rules h
+           LEFT JOIN habit_instances hi
+             ON hi.habit_rule_id = h.id AND hi.scheduled_date = ?
+          WHERE ${condition} AND h.deleted_at IS NULL AND h.archived_at IS NULL
+          ORDER BY h.created_at`
+      )
+      .all(...params) as HabitRow[]
+  }
+
+  getHabit(id: string, date: string): HabitRow | null {
+    return (
+      (this.database()
+        .prepare(
+          `SELECT h.id, h.project_id, h.name, h.description, h.frequency, h.target_count,
+                  h.weekdays_json, h.reminder_time, h.start_date, h.end_date,
+                  hi.status AS today_status,
+                  (SELECT COUNT(*) FROM habit_instances total
+                    WHERE total.habit_rule_id = h.id AND total.status = 'completed') AS total_completed,
+                  h.created_at, h.updated_at
+             FROM habit_rules h
+             LEFT JOIN habit_instances hi
+               ON hi.habit_rule_id = h.id AND hi.scheduled_date = ?
+            WHERE h.id = ? AND h.deleted_at IS NULL`
+        )
+        .get(date, id) as HabitRow | undefined) ?? null
+    )
+  }
+
+  insertHabit(id: string, input: CreateHabitInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO habit_rules(
+           id, project_id, name, description, frequency, target_count, weekdays_json,
+           reminder_time, start_date, end_date, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.name,
+        input.description,
+        input.frequency,
+        input.targetCount,
+        JSON.stringify(input.weekdays),
+        input.reminderTime,
+        input.startDate,
+        input.endDate,
+        now,
+        now
+      )
+    this.insertAudit(database, 'habit', id, 'created', null, input, now)
+  }
+
+  recordHabit(id: string, input: RecordHabitInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO habit_instances(
+           id, habit_rule_id, scheduled_date, status, completed_at, skip_reason,
+           created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(habit_rule_id, scheduled_date) DO UPDATE SET
+           status = excluded.status,
+           completed_at = excluded.completed_at,
+           skip_reason = excluded.skip_reason,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        id,
+        input.habitId,
+        input.date,
+        input.status,
+        input.status === 'completed' ? now : null,
+        input.skipReason,
+        now,
+        now
+      )
+    this.insertAudit(database, 'habit', input.habitId, 'instance_recorded', null, input, now)
+  }
+
+  getCompletedHabitDates(habitId: string): string[] {
+    return (
+      this.database()
+        .prepare(
+          `SELECT scheduled_date FROM habit_instances
+            WHERE habit_rule_id = ? AND status = 'completed'
+            ORDER BY scheduled_date DESC`
+        )
+        .all(habitId) as Array<{ scheduled_date: string }>
+    ).map((row) => row.scheduled_date)
+  }
+
+  listMetrics(projectId: string | null): MetricRow[] {
+    const condition = projectId === null ? 'm.project_id IS NULL' : 'm.project_id = ?'
+    return this.database()
+      .prepare(
+        `SELECT m.id, m.project_id, m.name, m.target_value, m.unit, m.direction, m.period,
+                CASE
+                  WHEN m.period = 'total' THEN COALESCE(SUM(me.value), 0)
+                  ELSE (
+                    SELECT latest.value FROM metric_entries latest
+                     WHERE latest.metric_id = m.id
+                     ORDER BY latest.recorded_at DESC LIMIT 1
+                  )
+                END AS current_value,
+                MAX(me.recorded_at) AS last_recorded_at,
+                COUNT(me.id) AS entry_count,
+                m.created_at, m.updated_at
+           FROM metrics m
+           LEFT JOIN metric_entries me ON me.metric_id = m.id
+          WHERE ${condition} AND m.deleted_at IS NULL AND m.archived_at IS NULL
+          GROUP BY m.id
+          ORDER BY m.created_at`
+      )
+      .all(...(projectId === null ? [] : [projectId])) as MetricRow[]
+  }
+
+  getMetric(id: string): MetricRow | null {
+    return (
+      (this.database()
+        .prepare(
+          `SELECT m.id, m.project_id, m.name, m.target_value, m.unit, m.direction, m.period,
+                  CASE
+                    WHEN m.period = 'total' THEN COALESCE(SUM(me.value), 0)
+                    ELSE (
+                      SELECT latest.value FROM metric_entries latest
+                       WHERE latest.metric_id = m.id
+                       ORDER BY latest.recorded_at DESC LIMIT 1
+                    )
+                  END AS current_value,
+                  MAX(me.recorded_at) AS last_recorded_at,
+                  COUNT(me.id) AS entry_count,
+                  m.created_at, m.updated_at
+             FROM metrics m
+             LEFT JOIN metric_entries me ON me.metric_id = m.id
+            WHERE m.id = ? AND m.deleted_at IS NULL
+            GROUP BY m.id`
+        )
+        .get(id) as MetricRow | undefined) ?? null
+    )
+  }
+
+  insertMetric(id: string, input: CreateMetricInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO metrics(
+           id, project_id, name, target_value, unit, direction, period, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.name,
+        input.targetValue,
+        input.unit,
+        input.direction,
+        input.period,
+        now,
+        now
+      )
+    this.insertAudit(database, 'metric', id, 'created', null, input, now)
+  }
+
+  recordMetric(id: string, input: RecordMetricInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO metric_entries(id, metric_id, value, recorded_at, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(id, input.metricId, input.value, input.recordedAt, input.note, now)
+    this.insertAudit(database, 'metric', input.metricId, 'value_recorded', null, input, now)
+  }
+
+  listCourses(): CourseRow[] {
+    return this.database()
+      .prepare(
+        `SELECT c.id, c.project_id, c.course_name, c.exam_date,
+                t.id AS textbook_id, t.title AS textbook_title, t.author, t.edition,
+                t.isbn, t.publisher,
+                (SELECT COUNT(*) FROM knowledge_items k
+                  WHERE k.project_id = c.project_id AND k.deleted_at IS NULL) AS knowledge_count,
+                (SELECT COUNT(*) FROM mistakes m
+                  WHERE m.project_id = c.project_id AND m.deleted_at IS NULL) AS mistake_count,
+                (SELECT COUNT(*) FROM review_queue r
+                  WHERE r.status = 'pending'
+                    AND ((r.entity_type = 'knowledge' AND r.entity_id IN (
+                      SELECT id FROM knowledge_items WHERE project_id = c.project_id
+                    )) OR (r.entity_type = 'mistake' AND r.entity_id IN (
+                      SELECT id FROM mistakes WHERE project_id = c.project_id
+                    )))) AS pending_review_count,
+                c.created_at, c.updated_at
+           FROM course_profiles c
+           LEFT JOIN textbooks t ON t.course_profile_id = c.id
+          ORDER BY c.created_at`
+      )
+      .all() as CourseRow[]
+  }
+
+  getCourse(id: string): CourseRow | null {
+    return this.listCourses().find((course) => course.id === id) ?? null
+  }
+
+  insertCourse(
+    id: string,
+    textbookId: string,
+    input: CreateCourseInput,
+    now: string
+  ): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO course_profiles(
+             id, project_id, course_name, exam_date, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .run(id, input.projectId, input.courseName, input.examDate, now, now)
+      database
+        .prepare(
+          `INSERT INTO textbooks(
+             id, course_profile_id, title, author, edition, isbn, publisher, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          textbookId,
+          id,
+          input.textbook.title,
+          input.textbook.author,
+          input.textbook.edition,
+          input.textbook.isbn,
+          input.textbook.publisher,
+          now,
+          now
+        )
+      this.insertAudit(database, 'course', id, 'created', null, input, now)
+    })
+    transaction()
+  }
+
+  listKnowledge(projectId: string): KnowledgeItem[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT id, project_id, milestone_id, title, content, mastery,
+                last_reviewed_at, next_review_date, created_at, updated_at
+           FROM knowledge_items
+          WHERE project_id = ? AND deleted_at IS NULL AND archived_at IS NULL
+          ORDER BY COALESCE(next_review_date, '9999-12-31'), created_at DESC`
+      )
+      .all(projectId) as KnowledgeRow[]
+    return rows.map(mapKnowledge)
+  }
+
+  getKnowledge(id: string): KnowledgeItem | null {
+    const row = this.database()
+      .prepare(
+        `SELECT id, project_id, milestone_id, title, content, mastery,
+                last_reviewed_at, next_review_date, created_at, updated_at
+           FROM knowledge_items WHERE id = ? AND deleted_at IS NULL`
+      )
+      .get(id) as KnowledgeRow | undefined
+    return row ? mapKnowledge(row) : null
+  }
+
+  insertKnowledge(id: string, input: CreateKnowledgeInput, now: string): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO knowledge_items(
+             id, project_id, milestone_id, title, content, mastery, next_review_date,
+             created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          id,
+          input.projectId,
+          input.milestoneId,
+          input.title,
+          input.content,
+          input.mastery,
+          input.nextReviewDate,
+          now,
+          now
+        )
+      if (input.nextReviewDate) {
+        database
+          .prepare(
+            `INSERT INTO review_queue(
+               id, entity_type, entity_id, scheduled_date, created_at, updated_at
+             ) VALUES (?, 'knowledge', ?, ?, ?, ?)`
+          )
+          .run(crypto.randomUUID(), id, input.nextReviewDate, now, now)
+      }
+      this.upsertSearch(database, 'knowledge', id, input.title, input.content)
+      this.insertAudit(database, 'knowledge', id, 'created', null, input, now)
+    })
+    transaction()
+  }
+
+  listMistakes(projectId: string): Mistake[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT id, project_id, knowledge_item_id, question, wrong_answer,
+                correct_answer, analysis, mastery, next_review_date, created_at, updated_at
+           FROM mistakes
+          WHERE project_id = ? AND deleted_at IS NULL AND archived_at IS NULL
+          ORDER BY COALESCE(next_review_date, '9999-12-31'), created_at DESC`
+      )
+      .all(projectId) as MistakeRow[]
+    return rows.map(mapMistake)
+  }
+
+  getMistake(id: string): Mistake | null {
+    const row = this.database()
+      .prepare(
+        `SELECT id, project_id, knowledge_item_id, question, wrong_answer,
+                correct_answer, analysis, mastery, next_review_date, created_at, updated_at
+           FROM mistakes WHERE id = ? AND deleted_at IS NULL`
+      )
+      .get(id) as MistakeRow | undefined
+    return row ? mapMistake(row) : null
+  }
+
+  insertMistake(id: string, input: CreateMistakeInput, now: string): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO mistakes(
+             id, project_id, knowledge_item_id, question, wrong_answer, correct_answer,
+             analysis, mastery, next_review_date, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          id,
+          input.projectId,
+          input.knowledgeItemId,
+          input.question,
+          input.wrongAnswer,
+          input.correctAnswer,
+          input.analysis,
+          input.mastery,
+          input.nextReviewDate,
+          now,
+          now
+        )
+      if (input.nextReviewDate) {
+        database
+          .prepare(
+            `INSERT INTO review_queue(
+               id, entity_type, entity_id, scheduled_date, created_at, updated_at
+             ) VALUES (?, 'mistake', ?, ?, ?, ?)`
+          )
+          .run(crypto.randomUUID(), id, input.nextReviewDate, now, now)
+      }
+      this.upsertSearch(database, 'mistake', id, input.question.slice(0, 160), input.analysis)
+      this.insertAudit(database, 'mistake', id, 'created', null, input, now)
+    })
+    transaction()
+  }
+
+  private upsertSearch(
+    database: Database.Database,
+    entityType: string,
+    entityId: string,
+    title: string,
+    body: string
+  ): void {
+    database
+      .prepare('DELETE FROM searchable_content WHERE entity_type = ? AND entity_id = ?')
+      .run(entityType, entityId)
+    database
+      .prepare(
+        'INSERT INTO searchable_content(entity_type, entity_id, title, body) VALUES (?, ?, ?, ?)'
+      )
+      .run(entityType, entityId, title, body)
+  }
+
+  private insertAudit(
+    database: Database.Database,
+    entityType: string,
+    entityId: string,
+    action: string,
+    before: unknown,
+    after: unknown,
+    now: string
+  ): void {
+    database
+      .prepare(
+        `INSERT INTO audit_events(
+           id, entity_type, entity_id, action, before_json, after_json, occurred_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        crypto.randomUUID(),
+        entityType,
+        entityId,
+        action,
+        before === null ? null : JSON.stringify(before),
+        after === null ? null : JSON.stringify(after),
+        now
+      )
+  }
+}
+
+export function mapHabit(row: HabitRow, currentStreak: number): Habit {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    description: row.description,
+    frequency: row.frequency,
+    targetCount: row.target_count,
+    weekdays: JSON.parse(row.weekdays_json) as number[],
+    reminderTime: row.reminder_time,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    todayStatus: row.today_status,
+    totalCompleted: row.total_completed,
+    currentStreak,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export function mapMetric(row: MetricRow): Metric {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    targetValue: row.target_value,
+    unit: row.unit,
+    direction: row.direction,
+    period: row.period,
+    currentValue: row.current_value ?? 0,
+    lastRecordedAt: row.last_recorded_at,
+    entryCount: row.entry_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export function mapCourse(row: CourseRow): Course {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    courseName: row.course_name,
+    examDate: row.exam_date,
+    textbook: row.textbook_id
+      ? {
+          id: row.textbook_id,
+          title: row.textbook_title ?? '',
+          author: row.author ?? '',
+          edition: row.edition ?? '',
+          isbn: row.isbn ?? '',
+          publisher: row.publisher ?? ''
+        }
+      : null,
+    knowledgeCount: row.knowledge_count,
+    mistakeCount: row.mistake_count,
+    pendingReviewCount: row.pending_review_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapKnowledge(row: KnowledgeRow): KnowledgeItem {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    milestoneId: row.milestone_id,
+    title: row.title,
+    content: row.content,
+    mastery: row.mastery,
+    lastReviewedAt: row.last_reviewed_at,
+    nextReviewDate: row.next_review_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapMistake(row: MistakeRow): Mistake {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    knowledgeItemId: row.knowledge_item_id,
+    question: row.question,
+    wrongAnswer: row.wrong_answer,
+    correctAnswer: row.correct_answer,
+    analysis: row.analysis,
+    mastery: row.mastery,
+    nextReviewDate: row.next_review_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}

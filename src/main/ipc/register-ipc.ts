@@ -10,12 +10,19 @@ import {
   createManualEffortInputSchema,
   createMemoInputSchema,
   createMilestoneInputSchema,
+  createCourseInputSchema,
+  createHabitInputSchema,
+  createKnowledgeInputSchema,
+  createMetricInputSchema,
+  createMistakeInputSchema,
   createProjectInputSchema,
   createTagInputSchema,
   createTaskInputSchema,
   createWorkspaceInputSchema,
   effortListInputSchema,
   openWorkspaceInputSchema,
+  recordHabitInputSchema,
+  recordMetricInputSchema,
   searchInputSchema,
   startEffortInputSchema,
   stopEffortInputSchema,
@@ -33,12 +40,14 @@ import { toAppError, YouTraceError } from '../../shared/errors'
 import type { WorkspaceManager } from '../workspace/workspace-manager'
 import type { PlanningService } from '../modules/planning/planning-service'
 import type { ExecutionService } from '../modules/execution/execution-service'
+import type { PracticeService } from '../modules/practice/practice-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
   workspaceManager: WorkspaceManager
   planningService: PlanningService
   executionService: ExecutionService
+  practiceService: PracticeService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
@@ -49,6 +58,7 @@ export function registerIpc(options: RegisterIpcOptions): void {
     workspaceManager,
     planningService,
     executionService,
+    practiceService,
     getBootstrapState,
     setBootstrapState
   } = options
@@ -352,6 +362,92 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return executionService.convertMemoToTask(convertMemoToTaskInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-habits', (event, rawProjectId, rawDate) =>
+    wrap(() => {
+      trusted(event)
+      const projectId = z.string().uuid().nullable().parse(rawProjectId)
+      const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(rawDate)
+      return practiceService.listHabits(projectId, date)
+    })
+  )
+
+  ipcMain.handle('practice:create-habit', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createHabit(createHabitInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:record-habit', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.recordHabit(recordHabitInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-metrics', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listMetrics(z.string().uuid().nullable().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('practice:create-metric', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createMetric(createMetricInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:record-metric', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.recordMetric(recordMetricInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-courses', (event) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listCourses()
+    })
+  )
+
+  ipcMain.handle('practice:create-course', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createCourse(createCourseInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-knowledge', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listKnowledge(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('practice:create-knowledge', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createKnowledge(createKnowledgeInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-mistakes', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listMistakes(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('practice:create-mistake', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createMistake(createMistakeInputSchema.parse(rawInput))
     })
   )
 

@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -157,6 +157,58 @@ export const INITIAL_SCHEMA_SQL = `
     deleted_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS habit_rules (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id),
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    frequency TEXT NOT NULL,
+    target_count INTEGER NOT NULL DEFAULT 1,
+    weekdays_json TEXT NOT NULL DEFAULT '[]',
+    reminder_time TEXT,
+    start_date TEXT NOT NULL,
+    end_date TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS habit_instances (
+    id TEXT PRIMARY KEY,
+    habit_rule_id TEXT NOT NULL REFERENCES habit_rules(id),
+    scheduled_date TEXT NOT NULL,
+    status TEXT NOT NULL,
+    completed_at TEXT,
+    skip_reason TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(habit_rule_id, scheduled_date)
+  );
+
+  CREATE TABLE IF NOT EXISTS metrics (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES projects(id),
+    name TEXT NOT NULL,
+    target_value REAL NOT NULL,
+    unit TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    period TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS metric_entries (
+    id TEXT PRIMARY KEY,
+    metric_id TEXT NOT NULL REFERENCES metrics(id),
+    value REAL NOT NULL,
+    recorded_at TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS evidence (
     id TEXT PRIMARY KEY,
     kind TEXT NOT NULL,
@@ -233,6 +285,84 @@ export const INITIAL_SCHEMA_SQL = `
     updated_at TEXT NOT NULL,
     archived_at TEXT,
     deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS course_profiles (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL UNIQUE REFERENCES projects(id),
+    course_name TEXT NOT NULL,
+    exam_date TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS textbooks (
+    id TEXT PRIMARY KEY,
+    course_profile_id TEXT NOT NULL REFERENCES course_profiles(id),
+    title TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT '',
+    edition TEXT NOT NULL DEFAULT '',
+    isbn TEXT NOT NULL DEFAULT '',
+    publisher TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS knowledge_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    milestone_id TEXT REFERENCES milestones(id),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    mastery INTEGER CHECK (mastery IS NULL OR (mastery BETWEEN 0 AND 100)),
+    last_reviewed_at TEXT,
+    next_review_date TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS mistakes (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    knowledge_item_id TEXT REFERENCES knowledge_items(id),
+    question TEXT NOT NULL,
+    wrong_answer TEXT NOT NULL DEFAULT '',
+    correct_answer TEXT NOT NULL DEFAULT '',
+    analysis TEXT NOT NULL DEFAULT '',
+    mastery INTEGER CHECK (mastery IS NULL OR (mastery BETWEEN 0 AND 100)),
+    next_review_date TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS learning_tests (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    milestone_id TEXT REFERENCES milestones(id),
+    title TEXT NOT NULL,
+    score REAL,
+    max_score REAL,
+    tested_at TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS review_queue (
+    id TEXT PRIMARY KEY,
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    scheduled_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(entity_type, entity_id, scheduled_date)
   );
 
   CREATE TABLE IF NOT EXISTS audit_events (

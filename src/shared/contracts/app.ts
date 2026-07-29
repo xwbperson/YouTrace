@@ -34,6 +34,20 @@ import type {
   StopEffortInput,
   UpdateEvidenceStatusInput
 } from './execution'
+import type {
+  Course,
+  CreateCourseInput,
+  CreateHabitInput,
+  CreateKnowledgeInput,
+  CreateMetricInput,
+  CreateMistakeInput,
+  Habit,
+  KnowledgeItem,
+  Metric,
+  Mistake,
+  RecordHabitInput,
+  RecordMetricInput
+} from './practice'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -138,6 +152,20 @@ export interface YouTraceApi {
     createMemo(input: CreateMemoInput): Promise<IpcResult<Memo>>
     listMemos(inboxOnly: boolean): Promise<IpcResult<Memo[]>>
     convertMemoToTask(input: ConvertMemoToTaskInput): Promise<IpcResult<Task>>
+  }
+  practice: {
+    listHabits(projectId: string | null, date: string): Promise<IpcResult<Habit[]>>
+    createHabit(input: CreateHabitInput): Promise<IpcResult<Habit>>
+    recordHabit(input: RecordHabitInput): Promise<IpcResult<Habit>>
+    listMetrics(projectId: string | null): Promise<IpcResult<Metric[]>>
+    createMetric(input: CreateMetricInput): Promise<IpcResult<Metric>>
+    recordMetric(input: RecordMetricInput): Promise<IpcResult<Metric>>
+    listCourses(): Promise<IpcResult<Course[]>>
+    createCourse(input: CreateCourseInput): Promise<IpcResult<Course>>
+    listKnowledge(projectId: string): Promise<IpcResult<KnowledgeItem[]>>
+    createKnowledge(input: CreateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
+    listMistakes(projectId: string): Promise<IpcResult<Mistake[]>>
+    createMistake(input: CreateMistakeInput): Promise<IpcResult<Mistake>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

@@ -63,6 +63,21 @@ const api: YouTraceApi = {
     listMemos: (inboxOnly) => ipcRenderer.invoke('execution:list-memos', inboxOnly),
     convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input)
   },
+  practice: {
+    listHabits: (projectId, date) =>
+      ipcRenderer.invoke('practice:list-habits', projectId, date),
+    createHabit: (input) => ipcRenderer.invoke('practice:create-habit', input),
+    recordHabit: (input) => ipcRenderer.invoke('practice:record-habit', input),
+    listMetrics: (projectId) => ipcRenderer.invoke('practice:list-metrics', projectId),
+    createMetric: (input) => ipcRenderer.invoke('practice:create-metric', input),
+    recordMetric: (input) => ipcRenderer.invoke('practice:record-metric', input),
+    listCourses: () => ipcRenderer.invoke('practice:list-courses'),
+    createCourse: (input) => ipcRenderer.invoke('practice:create-course', input),
+    listKnowledge: (projectId) => ipcRenderer.invoke('practice:list-knowledge', projectId),
+    createKnowledge: (input) => ipcRenderer.invoke('practice:create-knowledge', input),
+    listMistakes: (projectId) => ipcRenderer.invoke('practice:list-mistakes', projectId),
+    createMistake: (input) => ipcRenderer.invoke('practice:create-mistake', input)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,
     toggleMaximize: () =>

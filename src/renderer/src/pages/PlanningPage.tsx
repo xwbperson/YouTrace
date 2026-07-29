@@ -22,6 +22,7 @@ import type {
   Project,
   Task
 } from '../../../shared/contracts'
+import { PracticePage } from './PracticePage'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -56,6 +57,7 @@ const priorityLabels: Record<Task['priority'], string> = {
 
 export function PlanningPage(): React.JSX.Element {
   const queryClient = useQueryClient()
+  const [section, setSection] = useState<'projects' | 'practice'>('projects')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
@@ -140,7 +142,18 @@ export function PlanningPage(): React.JSX.Element {
         </div>
       </header>
 
-      <div className="planning-layout">
+      <div className="planning-section-tabs" role="tablist" aria-label="计划模块">
+        <button type="button" role="tab" aria-selected={section === 'projects'} className={section === 'projects' ? 'active' : ''} onClick={() => setSection('projects')}>
+          <ListChecks size={15} />
+          项目任务
+        </button>
+        <button type="button" role="tab" aria-selected={section === 'practice'} className={section === 'practice' ? 'active' : ''} onClick={() => setSection('practice')}>
+          <Gauge size={15} />
+          实践与学习
+        </button>
+      </div>
+
+      {section === 'practice' ? <PracticePage /> : <div className="planning-layout">
         <aside className="project-rail panel">
           <div className="rail-heading">
             <span>项目</span>
@@ -366,7 +379,7 @@ export function PlanningPage(): React.JSX.Element {
             </>
           )}
         </main>
-      </div>
+      </div>}
 
       <ProjectDialog
         open={projectDialogOpen}

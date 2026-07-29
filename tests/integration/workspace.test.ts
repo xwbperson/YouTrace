@@ -53,7 +53,7 @@ describe('workspace lifecycle', () => {
       .get() as { name: string } | undefined
     database.close()
 
-    expect(migration.version).toBe(2)
+    expect(migration.version).toBe(3)
     expect(searchTable?.name).toBe('searchable_content')
 
     const bootstrapContents = await readFile(join(userDataRoot, 'bootstrap.json'), 'utf8')

@@ -3015,3 +3015,431 @@ kbd {
     transform: translate(-50%, -6px);
   }
 }
+
+.planning-section-tabs,
+.practice-tabs {
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--surface) 84%, var(--canvas));
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.planning-section-tabs {
+  margin: 0 34px 15px;
+}
+
+.planning-section-tabs button,
+.practice-tabs button {
+  display: inline-flex;
+  min-height: 31px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.planning-section-tabs button.active,
+.practice-tabs button.active {
+  color: var(--trace);
+  background: var(--surface);
+  box-shadow: 0 1px 5px rgb(31 47 44 / 8%);
+}
+
+.practice-page {
+  min-height: 0;
+  padding: 0 34px 38px;
+}
+
+.practice-tabs {
+  margin-bottom: 14px;
+}
+
+.practice-section {
+  min-height: 480px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-shadow: var(--shadow-panel);
+}
+
+.practice-section > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.practice-section > header h2 {
+  margin: 5px 0 3px;
+  font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
+  font-size: 21px;
+  font-weight: 650;
+}
+
+.practice-section > header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.practice-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.practice-scope {
+  display: grid;
+  gap: 4px;
+}
+
+.practice-scope span {
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.practice-scope select {
+  min-width: 130px;
+  height: 34px;
+  padding: 0 28px 0 9px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 9px;
+}
+
+.practice-empty {
+  display: grid;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.practice-empty > span {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 13px;
+  place-items: center;
+  color: var(--trace);
+  background: var(--trace-soft);
+  border-radius: 50%;
+}
+
+.practice-empty > strong {
+  font-size: 12px;
+}
+
+.practice-empty > p {
+  max-width: 330px;
+  margin: 7px 0 17px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.habit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  padding-top: 18px;
+}
+
+.habit-card {
+  display: grid;
+  min-height: 78px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  background: var(--canvas);
+  border: 1px solid transparent;
+  border-radius: 9px;
+}
+
+.habit-card.completed {
+  background: var(--trace-soft);
+  border-color: color-mix(in srgb, var(--trace) 17%, transparent);
+}
+
+.habit-card.skipped {
+  opacity: 0.64;
+}
+
+.habit-check {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--trace);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.habit-card > div:nth-child(2) strong,
+.habit-card > div:nth-child(2) span {
+  display: block;
+}
+
+.habit-card > div:nth-child(2) strong {
+  margin-bottom: 5px;
+  font-size: 11px;
+}
+
+.habit-card > div:nth-child(2) span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.habit-streak {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 2px 5px;
+  color: var(--time);
+}
+
+.habit-streak strong {
+  font-size: 13px;
+}
+
+.habit-streak span {
+  grid-column: 1 / -1;
+  color: var(--faint);
+  font-size: 7px;
+  text-align: right;
+}
+
+.quiet-action {
+  padding: 5px;
+  color: var(--faint);
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 18px;
+}
+
+.metric-card {
+  padding: 15px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.metric-card > header,
+.metric-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.metric-card > header {
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.metric-card > strong {
+  display: block;
+  margin-top: 19px;
+  font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
+  font-size: 27px;
+  font-weight: 650;
+}
+
+.metric-card > strong small {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.metric-card > p {
+  margin: 3px 0 13px;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.metric-track {
+  height: 4px;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.metric-track span {
+  display: block;
+  height: 100%;
+  background: var(--trace);
+  border-radius: inherit;
+}
+
+.metric-card > footer {
+  margin-top: 11px;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.metric-card > footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--trace);
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.learning-layout {
+  display: grid;
+  min-height: 390px;
+  grid-template-columns: 205px minmax(0, 1fr);
+}
+
+.course-rail {
+  padding: 14px 13px 0 0;
+  border-right: 1px solid var(--border);
+}
+
+.course-rail button {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 11px;
+  text-align: left;
+  background: transparent;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.course-rail button.active {
+  color: var(--trace);
+  background: var(--trace-soft);
+}
+
+.course-rail strong {
+  font-size: 10px;
+}
+
+.course-rail span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.course-rail em {
+  width: max-content;
+  padding: 3px 5px;
+  color: var(--time);
+  background: var(--time-soft);
+  border-radius: 4px;
+  font-size: 7px;
+  font-style: normal;
+}
+
+.course-workspace {
+  padding: 17px 0 0 19px;
+}
+
+.course-workspace > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.course-workspace > header span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.course-workspace > header h3 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.course-workspace > header > div:last-child {
+  display: flex;
+  gap: 7px;
+}
+
+.learning-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 17px;
+}
+
+.learning-columns > section {
+  min-height: 250px;
+  padding: 12px;
+  background: var(--canvas);
+  border-radius: 8px;
+}
+
+.learning-heading {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 9px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-size: 9px;
+}
+
+.learning-columns article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 2px;
+  color: var(--trace);
+  border-bottom: 1px solid var(--border);
+}
+
+.learning-columns article strong,
+.learning-columns article span {
+  display: block;
+}
+
+.learning-columns article strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-columns article span,
+.learning-columns > section > p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+@media (max-width: 1180px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .habit-grid {
+    grid-template-columns: 1fr;
+  }
+}

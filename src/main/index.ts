@@ -16,6 +16,8 @@ import { PlanningRepository } from './modules/planning/planning-repository'
 import { PlanningService } from './modules/planning/planning-service'
 import { ExecutionRepository } from './modules/execution/execution-repository'
 import { ExecutionService } from './modules/execution/execution-service'
+import { PracticeRepository } from './modules/practice/practice-repository'
+import { PracticeService } from './modules/practice/practice-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -55,6 +57,10 @@ app.whenReady().then(async () => {
     planningRepository,
     planningService
   )
+  const practiceService = new PracticeService(
+    new PracticeRepository(() => workspaceManager.getDatabase()),
+    planningRepository
+  )
 
   registerApplicationProtocol()
   registerIpc({
@@ -62,6 +68,7 @@ app.whenReady().then(async () => {
     workspaceManager,
     planningService,
     executionService,
+    practiceService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state
