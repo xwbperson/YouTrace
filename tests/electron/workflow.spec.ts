@@ -98,7 +98,7 @@ test('previews a template and keeps a review snapshot after rescheduling', async
     nextWeek.setDate(nextWeek.getDate() + 7)
     await page.getByLabel('新日期').fill(localDate(nextWeek))
     await page.getByLabel('调整原因').fill('容量不足，顺延到下周')
-    await page.getByRole('button', { name: '顺延' }).click()
+    await page.getByRole('button', { name: '批量顺延' }).click()
     await expect(page.getByText('已执行 1 次调整')).toBeVisible()
     await expect(page.getByText(/原计划未完成 · 无截止日期/)).toBeVisible()
     await page.screenshot({ path: 'test-results/review-snapshot.png' })

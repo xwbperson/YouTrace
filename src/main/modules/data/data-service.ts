@@ -28,7 +28,7 @@ import type { WorkspaceManager } from '../../workspace/workspace-manager'
 import { DataRepository } from './data-repository'
 import { PackageService, type PackageManifest } from './package-service'
 
-const APPLICATION_VERSION = '0.1.0'
+const APPLICATION_VERSION = '1.0.0'
 const REQUIRED_DIRECTORIES = [
   'database',
   'attachments',
@@ -57,6 +57,39 @@ export class DataService {
 
   rebuildSearchIndex(): { indexedCount: number } {
     return { indexedCount: this.repository.rebuildSearchIndex() }
+  }
+
+  getEvidenceOpenTarget(id: string): { type: 'external' | 'file'; target: string } {
+    const source = this.repository.getEvidenceOpenTarget(id)
+    if (!source) throw notFound('成果证据')
+    if (source.relativePath) {
+      return {
+        type: 'file',
+        target: resolveWithin(this.workspaceManager.getCurrentPath(), source.relativePath)
+      }
+    }
+    if (source.kind === 'link' && source.source) {
+      let url: URL
+      try {
+        url = new URL(source.source)
+      } catch {
+        throw new YouTraceError({
+          code: 'EVIDENCE_LINK_INVALID',
+          message: '成果来源不是有效链接。'
+        })
+      }
+      if (!['https:', 'http:', 'mailto:'].includes(url.protocol)) {
+        throw new YouTraceError({
+          code: 'EVIDENCE_LINK_PROTOCOL_BLOCKED',
+          message: '这个链接协议不在允许列表中。'
+        })
+      }
+      return { type: 'external', target: url.toString() }
+    }
+    throw new YouTraceError({
+      code: 'EVIDENCE_SOURCE_NOT_OPENABLE',
+      message: '这项成果没有可打开的文件或链接。'
+    })
   }
 
   async maybeCreateAutomaticBackup(

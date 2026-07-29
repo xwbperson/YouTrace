@@ -888,6 +888,25 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('data:open-evidence', (event, rawId) =>
+    wrap(async () => {
+      trusted(event)
+      const target = dataService.getEvidenceOpenTarget(z.string().uuid().parse(rawId))
+      if (target.type === 'external') {
+        await shell.openExternal(target.target)
+        return
+      }
+      const error = await shell.openPath(target.target)
+      if (error) {
+        throw new YouTraceError({
+          code: 'EVIDENCE_OPEN_FAILED',
+          message: '无法打开成果文件。',
+          details: { reason: error }
+        })
+      }
+    })
+  )
+
   ipcMain.handle('data:list-backups', (event) =>
     wrap(() => {
       trusted(event)

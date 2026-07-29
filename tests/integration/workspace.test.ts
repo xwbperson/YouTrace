@@ -75,4 +75,23 @@ describe('workspace lifecycle', () => {
       workspace: created
     })
   })
+
+  it('rejects a second writer while allowing an explicit read-only connection', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-lock-test-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const first = new WorkspaceManager(join(fixtureRoot, 'first-app-data'))
+    managers.push(first)
+    await first.create(workspaceRoot, '锁测试工作区')
+
+    const second = new WorkspaceManager(join(fixtureRoot, 'second-app-data'))
+    managers.push(second)
+    await expect(second.open(workspaceRoot, false)).rejects.toMatchObject({
+      code: 'WORKSPACE_LOCKED'
+    })
+    const readOnly = await second.open(workspaceRoot, true)
+    expect(readOnly).toMatchObject({
+      path: workspaceRoot,
+      readOnly: true
+    })
+  })
 })

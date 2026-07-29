@@ -2333,6 +2333,29 @@ kbd {
   padding-top: 11px;
 }
 
+.review-task-selection {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 7px;
+  max-height: 150px;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.review-task-selection legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.review-task-selection label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .adjustment-form label {
   display: grid;
   gap: 4px;
@@ -5052,6 +5075,15 @@ kbd {
   color: var(--faint);
   border-top: 1px solid var(--border);
   font-size: 8px;
+}
+
+.evidence-card footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
 }
 
 .evidence-card footer span {

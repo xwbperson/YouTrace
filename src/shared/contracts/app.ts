@@ -298,6 +298,7 @@ export interface YouTraceApi {
   data: {
     checkWorkspace(): Promise<IpcResult<WorkspaceCheck>>
     rebuildSearchIndex(): Promise<IpcResult<{ indexedCount: number }>>
+    openEvidence(id: string): Promise<IpcResult<void>>
     listBackups(): Promise<IpcResult<BackupInfo[]>>
     createBackup(label: string): Promise<IpcResult<BackupInfo>>
     verifyBackup(id: string): Promise<IpcResult<BackupVerification>>

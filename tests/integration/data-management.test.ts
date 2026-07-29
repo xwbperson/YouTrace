@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataRepository } from '../../src/main/modules/data/data-repository'
 import { DataService } from '../../src/main/modules/data/data-service'
+import { PackageService } from '../../src/main/modules/data/package-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
@@ -30,6 +31,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await workspaceManager.close()
 })
 
@@ -92,6 +94,22 @@ describe('workspace backup, restore and portable files', () => {
       id: imported.attachment.id,
       reused: true
     })
+    expect(data.getEvidenceOpenTarget(imported.evidence.id)).toMatchObject({
+      type: 'file',
+      target: join(sourceRoot, imported.attachment.relativePath)
+    })
+    workspaceManager
+      .getDatabase()
+      .prepare(
+        `INSERT INTO evidence(
+           id, kind, title, note, source, verification_status, created_at, updated_at
+         ) VALUES ('77000000-0000-4000-8000-000000000001', 'link', '危险链接', '',
+                   'javascript:alert(1)', 'prepared', ?, ?)`
+      )
+      .run(new Date().toISOString(), new Date().toISOString())
+    expect(() =>
+      data.getEvidenceOpenTarget('77000000-0000-4000-8000-000000000001')
+    ).toThrow(/协议/)
 
     const backup = await data.createBackup('往返测试')
     const verification = await data.verifyBackup(backup.id)
@@ -184,5 +202,55 @@ describe('workspace backup, restore and portable files', () => {
     expect(data.listTrash()).toHaveLength(0)
     expect(workspaceManager.getDatabase().prepare('SELECT COUNT(*) AS count FROM tasks').get())
       .toEqual({ count: 0 })
+  })
+
+  it('migrates by verified copy and preserves the active source when a later target is invalid', async () => {
+    createProjectAndTask('迁移保留任务')
+    const originalRoot = workspaceManager.getCurrentPath()
+    const migratedRoot = join(fixtureRoot, 'migrated-workspace')
+    const migrated = await data.migrateWorkspace(migratedRoot)
+
+    expect(migrated.workspace.path).toBe(migratedRoot)
+    expect(workspaceManager.getCurrentPath()).toBe(migratedRoot)
+    expect((await stat(originalRoot)).isDirectory()).toBe(true)
+    expect(
+      JSON.parse(await readFile(join(originalRoot, '.youtrace-migrated.json'), 'utf8'))
+    ).toMatchObject({
+      targetPath: migratedRoot,
+      sourcePreserved: true
+    })
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT title FROM tasks WHERE title = '迁移保留任务'")
+        .get()
+    ).toEqual({ title: '迁移保留任务' })
+
+    const invalidTarget = join(fixtureRoot, 'non-empty-target')
+    await mkdir(invalidTarget, { recursive: true })
+    await writeFile(join(invalidTarget, 'occupied.txt'), 'do not overwrite', 'utf8')
+    await expect(data.migrateWorkspace(invalidTarget)).rejects.toThrow()
+    expect(workspaceManager.getCurrentPath()).toBe(migratedRoot)
+    expect(await readFile(join(invalidTarget, 'occupied.txt'), 'utf8')).toBe('do not overwrite')
+  })
+
+  it('keeps using the source workspace when restore extraction is interrupted', async () => {
+    createProjectAndTask('恢复中断保护任务')
+    const source = workspaceManager.getCurrentPath()
+    const backup = await data.createBackup('恢复中断测试')
+    vi.spyOn(PackageService.prototype, 'extractVerified').mockRejectedValueOnce(
+      new Error('simulated extraction interruption')
+    )
+
+    await expect(
+      data.restoreBackup(backup.id, join(fixtureRoot, 'interrupted-restore'))
+    ).rejects.toThrow(/simulated extraction interruption/)
+    expect(workspaceManager.getCurrentPath()).toBe(source)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT title FROM tasks WHERE title = '恢复中断保护任务'")
+        .get()
+    ).toEqual({ title: '恢复中断保护任务' })
   })
 })

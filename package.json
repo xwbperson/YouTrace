@@ -1,6 +1,6 @@
 {
   "name": "youtrace",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "有迹（YouTrace）— 本地优先的个人执行与努力记录桌面应用",
   "main": "./out/main/index.js",
   "author": "YouTrace",
@@ -11,12 +11,14 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build": "npm run typecheck && electron-vite build",
+    "build:icon": "python scripts/build_icon.py",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:electron": "playwright test",
     "test:performance": "vitest run --config vitest.performance.config.ts",
+    "test:docs": "node scripts/validate-doc-links.mjs",
     "dist:win": "npm run build && electron-builder --win nsis portable",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -69,6 +71,7 @@
       "node_modules/better-sqlite3/**/*"
     ],
     "win": {
+      "icon": "resources/icon.ico",
       "target": [
         "nsis",
         "portable"

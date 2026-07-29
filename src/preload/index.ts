@@ -149,6 +149,7 @@ const api: YouTraceApi = {
   data: {
     checkWorkspace: () => ipcRenderer.invoke('data:check-workspace'),
     rebuildSearchIndex: () => ipcRenderer.invoke('data:rebuild-search-index'),
+    openEvidence: (id) => ipcRenderer.invoke('data:open-evidence', id),
     listBackups: () => ipcRenderer.invoke('data:list-backups'),
     createBackup: (label) => ipcRenderer.invoke('data:create-backup', label),
     verifyBackup: (id) => ipcRenderer.invoke('data:verify-backup', id),

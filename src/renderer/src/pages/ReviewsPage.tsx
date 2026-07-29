@@ -115,7 +115,11 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
   const [blockers, setBlockers] = useState(review.blockers)
   const [nextFirstStep, setNextFirstStep] = useState(review.nextFirstStep)
   const [nextCommitments, setNextCommitments] = useState(review.nextCommitments)
-  const [selectedTaskId, setSelectedTaskId] = useState(review.snapshot.tasks.find((task) => task.status !== 'completed')?.id ?? '')
+  const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>(
+    review.snapshot.tasks
+      .filter((task) => task.status !== 'completed' && task.status !== 'cancelled')
+      .map((task) => task.id)
+  )
   const [reason, setReason] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
   const [splitTitle, setSplitTitle] = useState('')
@@ -135,17 +139,28 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
   }
 
   const adjust = async (action: 'reschedule' | 'cancel' | 'split'): Promise<void> => {
-    if (!selectedTaskId || !reason.trim()) return
-    const adjustment =
-      action === 'reschedule'
-        ? { taskId: selectedTaskId, action, newDueAt: new Date(`${newDueDate}T12:00:00`).toISOString() } as const
+    if (selectedTaskIds.length === 0 || !reason.trim()) return
+    const adjustments = selectedTaskIds.map((taskId) => {
+      const task = incomplete.find((candidate) => candidate.id === taskId)!
+      return action === 'reschedule'
+        ? { taskId, action, newDueAt: new Date(`${newDueDate}T12:00:00`).toISOString() } as const
         : action === 'cancel'
-          ? { taskId: selectedTaskId, action } as const
-          : { taskId: selectedTaskId, action, newTitle: splitTitle, estimatedMinutes: null, newDueAt: newDueDate ? new Date(`${newDueDate}T12:00:00`).toISOString() : null } as const
+          ? { taskId, action } as const
+          : {
+              taskId,
+              action,
+              newTitle:
+                selectedTaskIds.length > 1 ? `${splitTitle}：${task.title}` : splitTitle,
+              estimatedMinutes: null,
+              newDueAt: newDueDate
+                ? new Date(`${newDueDate}T12:00:00`).toISOString()
+                : null
+            } as const
+    })
     const result = await window.youtrace.workflow.applyReviewAdjustments({
       reviewId: review.id,
       reason,
-      adjustments: [adjustment]
+      adjustments
     })
     if (result.ok) {
       setReason('')
@@ -197,15 +212,15 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
         <section className="adjustment-panel">
           <div className="review-section-heading"><span>调整未来计划</span><small>已执行 {review.adjustmentCount} 次调整</small></div>
           <div className="adjustment-form">
-            <label><span>选择原任务</span><select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)}>{incomplete.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
+            <fieldset className="review-task-selection"><legend>选择原任务（可多选）</legend>{incomplete.map((task) => <label key={task.id}><input type="checkbox" checked={selectedTaskIds.includes(task.id)} onChange={(event) => setSelectedTaskIds((current) => event.target.checked ? [...current, task.id] : current.filter((id) => id !== task.id))} /><span>{task.title}</span></label>)}</fieldset>
             <label><span>新日期</span><input type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>
             <label><span>拆分出的新任务</span><input value={splitTitle} onChange={(event) => setSplitTitle(event.target.value)} placeholder="仅拆分时填写" /></label>
             <label className="adjustment-reason"><span>调整原因</span><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填：为什么改变计划？" /></label>
           </div>
           <div className="adjustment-actions">
-            <button type="button" disabled={!reason.trim() || !newDueDate} onClick={() => void adjust('reschedule')}><CalendarClock size={14} />顺延</button>
-            <button type="button" disabled={!reason.trim() || !splitTitle.trim()} onClick={() => void adjust('split')}><GitBranch size={14} />拆分</button>
-            <button type="button" disabled={!reason.trim()} onClick={() => void adjust('cancel')}><X size={14} />取消任务</button>
+            <button type="button" disabled={selectedTaskIds.length === 0 || !reason.trim() || !newDueDate} onClick={() => void adjust('reschedule')}><CalendarClock size={14} />批量顺延</button>
+            <button type="button" disabled={selectedTaskIds.length === 0 || !reason.trim() || !splitTitle.trim()} onClick={() => void adjust('split')}><GitBranch size={14} />批量拆分</button>
+            <button type="button" disabled={selectedTaskIds.length === 0 || !reason.trim()} onClick={() => void adjust('cancel')}><X size={14} />批量取消</button>
           </div>
         </section>
       )}

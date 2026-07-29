@@ -287,10 +287,10 @@ function EvidenceCard({ evidence }: { evidence: Evidence }): React.JSX.Element {
       <footer>
         <span>{formatDate(evidence.createdAt)}</span>
         {evidence.source && (
-          <span>
+          <button type="button" onClick={() => void window.youtrace.data.openEvidence(evidence.id)}>
             查看来源
             <ExternalLink size={11} />
-          </span>
+          </button>
         )}
       </footer>
     </article>

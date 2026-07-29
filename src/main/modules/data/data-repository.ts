@@ -113,6 +113,29 @@ export class DataRepository {
     )
   }
 
+  getEvidenceOpenTarget(id: string): {
+    kind: Evidence['kind']
+    source: string | null
+    relativePath: string | null
+  } | null {
+    const row = this.database()
+      .prepare(
+        `SELECT e.kind, e.source, a.relative_path
+           FROM evidence e
+           LEFT JOIN entity_attachments ea
+             ON ea.entity_type = 'evidence' AND ea.entity_id = e.id
+           LEFT JOIN attachments a ON a.id = ea.attachment_id
+          WHERE e.id = ? AND e.deleted_at IS NULL
+          LIMIT 1`
+      )
+      .get(id) as
+      | { kind: Evidence['kind']; source: string | null; relative_path: string | null }
+      | undefined
+    return row
+      ? { kind: row.kind, source: row.source, relativePath: row.relative_path }
+      : null
+  }
+
   rebuildSearchIndex(): number {
     const database = this.database()
     return database.transaction(() => {
