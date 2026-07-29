@@ -1,4 +1,18 @@
 import { z } from 'zod'
+import type {
+  AssignTagInput,
+  CreateProjectInput,
+  CreateTagInput,
+  CreateTaskInput,
+  Project,
+  SearchInput,
+  SearchResult,
+  Tag,
+  Task,
+  TaskListInput,
+  UpdateProjectInput,
+  UpdateTaskInput
+} from './planning'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -68,6 +82,20 @@ export interface YouTraceApi {
     create(input: CreateWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     open(input: OpenWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     reveal(): Promise<IpcResult<void>>
+  }
+  planning: {
+    listProjects(): Promise<IpcResult<Project[]>>
+    createProject(input: CreateProjectInput): Promise<IpcResult<Project>>
+    updateProject(input: UpdateProjectInput): Promise<IpcResult<Project>>
+    trashProject(id: string): Promise<IpcResult<void>>
+    listTasks(input: TaskListInput): Promise<IpcResult<Task[]>>
+    createTask(input: CreateTaskInput): Promise<IpcResult<Task>>
+    updateTask(input: UpdateTaskInput): Promise<IpcResult<Task>>
+    trashTask(id: string): Promise<IpcResult<void>>
+    listTags(): Promise<IpcResult<Tag[]>>
+    createTag(input: CreateTagInput): Promise<IpcResult<Tag>>
+    assignTag(input: AssignTagInput): Promise<IpcResult<void>>
+    search(input: SearchInput): Promise<IpcResult<SearchResult[]>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

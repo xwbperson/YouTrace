@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../../shared/contracts'
+import { PlanningPage } from '../pages/PlanningPage'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
@@ -105,7 +106,11 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       </aside>
 
       <section className="workspace-content">
-        <header className="global-toolbar">
+        {active === 'plan' ? (
+          <PlanningPage />
+        ) : (
+          <>
+            <header className="global-toolbar">
           <div>
             <span className="page-kicker">{today}</span>
             <h1>今天，从一件真正重要的事开始。</h1>
@@ -121,9 +126,9 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
               新建
             </button>
           </div>
-        </header>
+            </header>
 
-        <main className="dashboard">
+            <main className="dashboard">
           <section className="today-focus panel">
             <div className="panel-heading">
               <div>
@@ -253,7 +258,9 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             </button>
             <p>可以稍后转换为任务、知识点或错题，原始内容会保留。</p>
           </section>
-        </main>
+            </main>
+          </>
+        )}
       </section>
     </div>
   )

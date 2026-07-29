@@ -15,6 +15,7 @@ import { z } from 'zod'
 import type { AppBootstrapState, WorkspaceSummary } from '../../shared/contracts'
 import { YouTraceError } from '../../shared/errors'
 import { DatabaseManager } from '../database/database-manager'
+import type Database from 'better-sqlite3'
 
 const WORKSPACE_FORMAT_VERSION = 1
 const MARKER_FILE = '.youtrace-workspace.json'
@@ -105,6 +106,17 @@ export class WorkspaceManager {
       })
     }
     return workspace.path
+  }
+
+  getDatabase(): Database.Database {
+    if (!this.current) {
+      throw new YouTraceError({
+        code: 'WORKSPACE_NOT_OPEN',
+        message: '当前没有打开的工作区。',
+        recovery: '请先创建或打开工作区。'
+      })
+    }
+    return this.current.database.get()
   }
 
   async create(rootPath: string, name: string): Promise<WorkspaceSummary> {

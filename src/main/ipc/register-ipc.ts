@@ -2,24 +2,35 @@ import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import {
+  assignTagInputSchema,
+  createProjectInputSchema,
+  createTagInputSchema,
+  createTaskInputSchema,
   createWorkspaceInputSchema,
   openWorkspaceInputSchema,
+  searchInputSchema,
+  taskListInputSchema,
+  updateProjectInputSchema,
+  updateTaskInputSchema,
   type AppBootstrapState,
   type IpcResult,
   type WindowState
 } from '../../shared/contracts'
 import { toAppError, YouTraceError } from '../../shared/errors'
 import type { WorkspaceManager } from '../workspace/workspace-manager'
+import type { PlanningService } from '../modules/planning/planning-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
   workspaceManager: WorkspaceManager
+  planningService: PlanningService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
 
 export function registerIpc(options: RegisterIpcOptions): void {
-  const { getWindow, workspaceManager, getBootstrapState, setBootstrapState } = options
+  const { getWindow, workspaceManager, planningService, getBootstrapState, setBootstrapState } =
+    options
 
   const trusted = (event: IpcMainInvokeEvent): BrowserWindow => {
     const window = getWindow()
@@ -100,6 +111,90 @@ export function registerIpc(options: RegisterIpcOptions): void {
           details: { reason: error }
         })
       }
+    })
+  )
+
+  ipcMain.handle('planning:list-projects', (event) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listProjects()
+    })
+  )
+
+  ipcMain.handle('planning:create-project', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createProject(createProjectInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-project', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateProject(updateProjectInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:trash-project', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashProject(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('planning:list-tasks', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listTasks(taskListInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:create-task', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createTask(createTaskInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-task', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateTask(updateTaskInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:trash-task', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashTask(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('planning:list-tags', (event) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listTags()
+    })
+  )
+
+  ipcMain.handle('planning:create-tag', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createTag(createTagInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:assign-tag', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      planningService.assignTag(assignTagInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:search', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.search(searchInputSchema.parse(rawInput))
     })
   )
 

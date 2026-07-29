@@ -25,6 +25,20 @@ const api: YouTraceApi = {
       ipcRenderer.invoke('workspace:open', input) as Promise<IpcResult<WorkspaceSummary>>,
     reveal: () => ipcRenderer.invoke('workspace:reveal') as Promise<IpcResult<void>>
   },
+  planning: {
+    listProjects: () => ipcRenderer.invoke('planning:list-projects'),
+    createProject: (input) => ipcRenderer.invoke('planning:create-project', input),
+    updateProject: (input) => ipcRenderer.invoke('planning:update-project', input),
+    trashProject: (id) => ipcRenderer.invoke('planning:trash-project', id),
+    listTasks: (input) => ipcRenderer.invoke('planning:list-tasks', input),
+    createTask: (input) => ipcRenderer.invoke('planning:create-task', input),
+    updateTask: (input) => ipcRenderer.invoke('planning:update-task', input),
+    trashTask: (id) => ipcRenderer.invoke('planning:trash-task', id),
+    listTags: () => ipcRenderer.invoke('planning:list-tags'),
+    createTag: (input) => ipcRenderer.invoke('planning:create-tag', input),
+    assignTag: (input) => ipcRenderer.invoke('planning:assign-tag', input),
+    search: (input) => ipcRenderer.invoke('planning:search', input)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,
     toggleMaximize: () =>
