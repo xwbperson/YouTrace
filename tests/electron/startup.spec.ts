@@ -37,6 +37,29 @@ test('starts the production Electron shell with the isolated preload API', async
       requireType: 'undefined',
       apiKeys: ['app', 'dialog', 'workspace', 'planning', 'execution', 'practice', 'temporal', 'workflow', 'reminders', 'data', 'settings', 'window']
     })
+    const beforeResize = await electronApp.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]!.getBounds()
+    )
+    await page.evaluate(() => {
+      const api = (globalThis as unknown as {
+        youtrace: {
+          window: {
+            startResize(edge: string, x: number, y: number): void
+            moveResize(x: number, y: number): void
+            endResize(): void
+          }
+        }
+      }).youtrace
+      api.window.startResize('south-east', 100, 100)
+      api.window.moveResize(180, 140)
+      api.window.endResize()
+    })
+    await expect.poll(async () =>
+      electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.getBounds())
+    ).toMatchObject({
+      width: beforeResize.width + 80,
+      height: beforeResize.height + 40
+    })
     expect(rendererErrors).toEqual([])
     await page.screenshot({ path: 'test-results/onboarding.png' })
   } finally {

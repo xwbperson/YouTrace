@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bell,
+  BellOff,
   CalendarDays,
   Check,
   Clock3,
@@ -10,7 +11,9 @@ import {
   MoonStar,
   Palette,
   Save,
-  ShieldCheck
+  ShieldCheck,
+  TimerReset,
+  X
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type {
@@ -42,6 +45,10 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
   const preferencesQuery = useQuery({
     queryKey: ['user-preferences'],
     queryFn: async () => unwrap(await window.youtrace.settings.getPreferences())
+  })
+  const tagsQuery = useQuery({
+    queryKey: ['tags'],
+    queryFn: async () => unwrap(await window.youtrace.planning.listTags())
   })
   useEffect(() => {
     if (settingsQuery.data) setSettings(settingsQuery.data)
@@ -133,13 +140,35 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
               <label><span>结束</span><input aria-label="静默结束" type="time" value={settings.quietEnd} onChange={(event) => setSettings({ ...settings, quietEnd: event.target.value })} /></label>
               <p>静默期间到期的提醒保留为待处理；恢复后会去重汇总。</p>
             </div>
+            <div className="muted-tags-setting">
+              <span><BellOff size={14} />按标签关闭提醒</span>
+              <div>
+                {(tagsQuery.data ?? []).map((tag) => (
+                  <button
+                    type="button"
+                    key={tag.id}
+                    className={settings.mutedTagIds.includes(tag.id) ? 'active' : ''}
+                    onClick={() =>
+                      setSettings({
+                        ...settings,
+                        mutedTagIds: settings.mutedTagIds.includes(tag.id)
+                          ? settings.mutedTagIds.filter((id) => id !== tag.id)
+                          : [...settings.mutedTagIds, tag.id]
+                      })
+                    }
+                  >
+                    <i style={{ background: tag.color ?? '#64736e' }} />{tag.name}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="settings-actions"><button className="button button-primary" type="button" onClick={() => void save()}>{saved ? <Check size={14} /> : <Save size={14} />}{saved ? '已保存' : '保存通知设置'}</button></div>
           </>
         )}
         {(upcomingQuery.data ?? []).length > 0 && (
           <div className="upcoming-reminders">
             <h3>待处理提醒</h3>
-            {(upcomingQuery.data ?? []).slice(0, 5).map((reminder) => <article key={reminder.id}><Clock3 size={13} /><strong>{reminder.title}</strong><span>{new Date(reminder.scheduledAt).toLocaleString('zh-CN')}</span></article>)}
+            {(upcomingQuery.data ?? []).slice(0, 5).map((reminder) => <article key={reminder.id}><Clock3 size={13} /><strong>{reminder.title}</strong><span>{new Date(reminder.scheduledAt).toLocaleString('zh-CN')}</span><button aria-label={`延后提醒：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.snooze(reminder.id, 30); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><TimerReset size={12} />30 分钟</button><button aria-label={`关闭单项提醒：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.dismiss(reminder.id); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><X size={12} /></button><button aria-label={`不再提醒此对象：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.muteSource(reminder.sourceType, reminder.sourceId); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><BellOff size={12} /></button></article>)}
           </div>
         )}
       </section>
@@ -149,6 +178,7 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.checkWorkspace(); setMaintenanceMessage(result.ok ? `检查通过：${result.data.fileCount} 个文件` : result.error.message) }}><ShieldCheck size={14} />完整性检查</button>
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.createBackup('设置页手动备份'); setMaintenanceMessage(result.ok ? '已创建并校验备份' : result.error.message) }}><Database size={14} />立即备份</button>
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.exportReadable(); setMaintenanceMessage(result.ok ? '已导出 Markdown / CSV' : result.error.message) }}><Save size={14} />可读导出</button>
+          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.rebuildSearchIndex(); setMaintenanceMessage(result.ok ? `已从业务表重建 ${result.data.indexedCount} 条搜索索引` : result.error.message) }}><TimerReset size={14} />重建搜索索引</button>
         </div>
         {maintenanceMessage && <div className="settings-note"><Check size={14} /><span>{maintenanceMessage}</span></div>}
       </section>

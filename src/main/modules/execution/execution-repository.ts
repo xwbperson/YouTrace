@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import type {
   CorrectEffortInput,
@@ -6,6 +7,7 @@ import type {
   CreateMemoInput,
   EffortEntry,
   EffortRevision,
+  EffortSummary,
   EffortListInput,
   Evidence,
   Memo,
@@ -22,6 +24,8 @@ interface EffortRow {
   started_at: string
   ended_at: string | null
   effective_minutes: number
+  suspended_at: string | null
+  paused_minutes: number
   energy: number | null
   perceived_difficulty: number | null
   result: string
@@ -54,6 +58,11 @@ interface MemoRow {
   body: string
   inbox: number
   processed_at: string | null
+  project_id: string | null
+  converted_type: string | null
+  converted_id: string | null
+  evidence_count: number
+  archived_at: string | null
   tag_ids: string | null
   created_at: string
   updated_at: string
@@ -131,6 +140,58 @@ export class ExecutionRepository {
     return transaction()
   }
 
+  suspendEffort(id: string, now: string): boolean {
+    const database = this.database()
+    const active = database
+      .prepare(
+        `SELECT id FROM effort_entries
+          WHERE id = ? AND ended_at IS NULL AND voided_at IS NULL AND deleted_at IS NULL`
+      )
+      .get(id)
+    if (!active) return false
+    const result = database
+      .prepare(
+        `INSERT OR IGNORE INTO effort_suspensions(
+           id, effort_id, suspended_at, resumed_at, created_at
+         ) VALUES (?, ?, ?, NULL, ?)`
+      )
+      .run(randomUUID(), id, now, now)
+    if (result.changes > 0) {
+      this.insertAudit(database, 'effort', id, 'suspended', null, { suspendedAt: now }, now)
+    }
+    return result.changes > 0
+  }
+
+  resumeEffort(id: string, now: string): boolean {
+    const database = this.database()
+    const result = database
+      .prepare(
+        `UPDATE effort_suspensions SET resumed_at = ?
+          WHERE effort_id = ? AND resumed_at IS NULL`
+      )
+      .run(now, id)
+    if (result.changes > 0) {
+      this.insertAudit(database, 'effort', id, 'resumed', null, { resumedAt: now }, now)
+    }
+    return result.changes > 0
+  }
+
+  pausedMilliseconds(id: string, through: string): number {
+    const rows = this.database()
+      .prepare(
+        `SELECT suspended_at, resumed_at
+           FROM effort_suspensions
+          WHERE effort_id = ?`
+      )
+      .all(id) as Array<{ suspended_at: string; resumed_at: string | null }>
+    return rows.reduce(
+      (total, row) =>
+        total +
+        Math.max(0, Date.parse(row.resumed_at ?? through) - Date.parse(row.suspended_at)),
+      0
+    )
+  }
+
   insertManualEffort(
     id: string,
     input: CreateManualEffortInput,
@@ -193,6 +254,40 @@ export class ExecutionRepository {
     }
     parameters.push(input.limit, input.offset)
     return this.queryEfforts(conditions.join(' AND '), parameters, 'LIMIT ? OFFSET ?').map(mapEffort)
+  }
+
+  summarizeEfforts(from: string | null, to: string | null): EffortSummary {
+    const conditions = ['voided_at IS NULL', 'deleted_at IS NULL', 'ended_at IS NOT NULL']
+    const parameters: unknown[] = []
+    if (from) {
+      conditions.push('started_at >= ?')
+      parameters.push(from)
+    }
+    if (to) {
+      conditions.push('started_at < ?')
+      parameters.push(to)
+    }
+    const row = this.database()
+      .prepare(
+        `SELECT COUNT(*) AS entry_count,
+                COALESCE(SUM(effective_minutes), 0) AS total_minutes,
+                MIN(started_at) AS first_started_at,
+                MAX(started_at) AS last_started_at
+           FROM effort_entries
+          WHERE ${conditions.join(' AND ')}`
+      )
+      .get(...parameters) as {
+      entry_count: number
+      total_minutes: number
+      first_started_at: string | null
+      last_started_at: string | null
+    }
+    return {
+      entryCount: row.entry_count,
+      totalMinutes: row.total_minutes,
+      firstStartedAt: row.first_started_at,
+      lastStartedAt: row.last_started_at
+    }
   }
 
   correctEffort(
@@ -347,6 +442,15 @@ export class ExecutionRepository {
         )
         .run(id, input.kind, input.title, input.body, now, now)
       this.replaceTags(database, 'memo', id, input.tagIds, now)
+      if (input.projectId) {
+        database
+          .prepare(
+            `INSERT INTO entity_relations(
+               source_type, source_id, target_type, target_id, relation_type, created_at
+             ) VALUES ('memo', ?, 'project', ?, 'RELATED_TO', ?)`
+          )
+          .run(id, input.projectId, now)
+      }
       this.upsertSearch(database, 'memo', id, input.title || input.body.slice(0, 80), input.body)
       this.insertAudit(database, 'memo', id, 'created', null, input, now)
     })
@@ -358,14 +462,19 @@ export class ExecutionRepository {
     return rows[0] ? mapMemo(rows[0]) : null
   }
 
-  listMemos(inboxOnly: boolean): Memo[] {
+  listMemos(inboxOnly: boolean, includeArchived: boolean): Memo[] {
     const condition = inboxOnly
       ? 'm.deleted_at IS NULL AND m.archived_at IS NULL AND m.inbox = 1'
-      : 'm.deleted_at IS NULL AND m.archived_at IS NULL'
+      : `m.deleted_at IS NULL ${includeArchived ? '' : 'AND m.archived_at IS NULL'}`
     return this.queryMemos(condition, []).map(mapMemo)
   }
 
-  markMemoConverted(memoId: string, taskId: string, now: string): void {
+  markMemoConverted(
+    memoId: string,
+    targetType: 'task' | 'knowledge' | 'mistake',
+    targetId: string,
+    now: string
+  ): void {
     const database = this.database()
     const transaction = database.transaction(() => {
       database
@@ -375,12 +484,41 @@ export class ExecutionRepository {
         .prepare(
           `INSERT INTO entity_relations(
              source_type, source_id, target_type, target_id, relation_type, created_at
-           ) VALUES ('memo', ?, 'task', ?, 'CONVERTED_TO', ?)`
+           ) VALUES ('memo', ?, ?, ?, 'CONVERTED_TO', ?)`
         )
-        .run(memoId, taskId, now)
-      this.insertAudit(database, 'memo', memoId, 'converted_to_task', null, { taskId }, now)
+        .run(memoId, targetType, targetId, now)
+      this.insertAudit(
+        database,
+        'memo',
+        memoId,
+        `converted_to_${targetType}`,
+        null,
+        { targetId },
+        now
+      )
     })
     transaction()
+  }
+
+  archiveMemo(id: string, archived: boolean, now: string): boolean {
+    const before = this.getMemo(id)
+    const result = this.database()
+      .prepare(
+        'UPDATE memos SET archived_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL'
+      )
+      .run(archived ? now : null, now, id)
+    if (result.changes > 0) {
+      this.insertAudit(
+        this.database(),
+        'memo',
+        id,
+        archived ? 'archived' : 'restored_from_archive',
+        before,
+        null,
+        now
+      )
+    }
+    return result.changes > 0
   }
 
   private queryEfforts(condition: string, parameters: unknown[], suffix = ''): EffortRow[] {
@@ -390,6 +528,18 @@ export class ExecutionRepository {
                 e.started_at, e.ended_at, e.effective_minutes, e.energy,
                 e.perceived_difficulty, e.result, e.interruptions, e.obstacles,
                 e.next_step, e.created_at, e.updated_at,
+                (
+                  SELECT suspended_at FROM effort_suspensions
+                   WHERE effort_id = e.id AND resumed_at IS NULL
+                   LIMIT 1
+                ) AS suspended_at,
+                COALESCE((
+                  SELECT SUM(
+                    (julianday(COALESCE(resumed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))) -
+                     julianday(suspended_at)) * 1440
+                  )
+                    FROM effort_suspensions WHERE effort_id = e.id
+                ), 0) AS paused_minutes,
                 GROUP_CONCAT(DISTINCT ta.tag_id) AS tag_ids
            FROM effort_entries e
            LEFT JOIN tag_assignments ta
@@ -422,8 +572,30 @@ export class ExecutionRepository {
   private queryMemos(condition: string, parameters: unknown[]): MemoRow[] {
     return this.database()
       .prepare(
-        `SELECT m.id, m.kind, m.title, m.body, m.inbox, m.processed_at,
+        `SELECT m.id, m.kind, m.title, m.body, m.inbox, m.processed_at, m.archived_at,
                 m.created_at, m.updated_at,
+                (
+                  SELECT target_id FROM entity_relations
+                   WHERE source_type = 'memo' AND source_id = m.id
+                     AND target_type = 'project' AND relation_type = 'RELATED_TO'
+                   LIMIT 1
+                ) AS project_id,
+                (
+                  SELECT target_type FROM entity_relations
+                   WHERE source_type = 'memo' AND source_id = m.id
+                     AND relation_type = 'CONVERTED_TO'
+                   ORDER BY created_at DESC LIMIT 1
+                ) AS converted_type,
+                (
+                  SELECT target_id FROM entity_relations
+                   WHERE source_type = 'memo' AND source_id = m.id
+                     AND relation_type = 'CONVERTED_TO'
+                   ORDER BY created_at DESC LIMIT 1
+                ) AS converted_id,
+                (
+                  SELECT COUNT(*) FROM entity_evidence
+                   WHERE entity_type = 'memo' AND entity_id = m.id
+                ) AS evidence_count,
                 GROUP_CONCAT(DISTINCT ta.tag_id) AS tag_ids
            FROM memos m
            LEFT JOIN tag_assignments ta
@@ -508,6 +680,8 @@ function mapEffort(row: EffortRow): EffortEntry {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     effectiveMinutes: row.effective_minutes,
+    suspendedAt: row.suspended_at,
+    pausedMinutes: Math.max(0, Math.round(row.paused_minutes)),
     energy: row.energy,
     perceivedDifficulty: row.perceived_difficulty,
     result: row.result,
@@ -544,6 +718,13 @@ function mapMemo(row: MemoRow): Memo {
     body: row.body,
     inbox: row.inbox === 1,
     processedAt: row.processed_at,
+    projectId: row.project_id,
+    convertedTo:
+      row.converted_type && row.converted_id
+        ? { entityType: row.converted_type, entityId: row.converted_id }
+        : null,
+    evidenceCount: row.evidence_count,
+    archived: row.archived_at !== null,
     tagIds: row.tag_ids ? row.tag_ids.split(',') : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at

@@ -1,6 +1,6 @@
 import { Copy, Maximize2, Minus, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { WindowState } from '../../../shared/contracts'
+import type { WindowResizeEdge, WindowState } from '../../../shared/contracts'
 
 interface TitleBarProps {
   workspaceName?: string
@@ -20,6 +20,7 @@ export function TitleBar({ workspaceName }: TitleBarProps): React.JSX.Element {
   }, [])
 
   return (
+    <>
     <header className={`titlebar${windowState.focused ? '' : ' titlebar-unfocused'}`}>
       <div className="titlebar-drag">
         <div className="app-glyph" aria-hidden="true">
@@ -68,5 +69,37 @@ export function TitleBar({ workspaceName }: TitleBarProps): React.JSX.Element {
         </button>
       </div>
     </header>
+    {!windowState.maximized &&
+      ([
+        'north',
+        'south',
+        'east',
+        'west',
+        'north-east',
+        'north-west',
+        'south-east',
+        'south-west'
+      ] as WindowResizeEdge[]).map((edge) => (
+        <div
+          key={edge}
+          className={`window-resize-handle resize-${edge}`}
+          aria-hidden="true"
+          onPointerDown={(event) => {
+            event.currentTarget.setPointerCapture(event.pointerId)
+            window.youtrace.window.startResize(edge, event.screenX, event.screenY)
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              window.youtrace.window.moveResize(event.screenX, event.screenY)
+            }
+          }}
+          onPointerUp={(event) => {
+            event.currentTarget.releasePointerCapture(event.pointerId)
+            window.youtrace.window.endResize()
+          }}
+          onPointerCancel={() => window.youtrace.window.endResize()}
+        />
+      ))}
+    </>
   )
 }

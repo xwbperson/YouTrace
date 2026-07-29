@@ -36,12 +36,14 @@ import type {
 } from './planning'
 import type {
   ConvertMemoToTaskInput,
+  ConvertMemoToLearningInput,
   CorrectEffortInput,
   CreateEvidenceInput,
   CreateManualEffortInput,
   CreateMemoInput,
   EffortEntry,
   EffortRevision,
+  EffortSummary,
   EffortListInput,
   Evidence,
   Memo,
@@ -91,6 +93,7 @@ import type {
 import type {
   NotificationSettings,
   ReminderNotice,
+  ReminderNavigation,
   UpcomingReminder
 } from './reminders'
 import type {
@@ -165,6 +168,16 @@ export interface WindowState {
   focused: boolean
 }
 
+export type WindowResizeEdge =
+  | 'north'
+  | 'south'
+  | 'east'
+  | 'west'
+  | 'north-east'
+  | 'north-west'
+  | 'south-east'
+  | 'south-west'
+
 export interface YouTraceApi {
   app: {
     getBootstrapState(): Promise<IpcResult<AppBootstrapState>>
@@ -217,17 +230,22 @@ export interface YouTraceApi {
   execution: {
     getActiveEffort(): Promise<IpcResult<EffortEntry | null>>
     startEffort(input: StartEffortInput): Promise<IpcResult<EffortEntry>>
+    suspendEffort(id: string): Promise<IpcResult<EffortEntry>>
+    resumeEffort(id: string): Promise<IpcResult<EffortEntry>>
     stopEffort(input: StopEffortInput): Promise<IpcResult<EffortEntry>>
     createManualEffort(input: CreateManualEffortInput): Promise<IpcResult<EffortEntry>>
     listEfforts(input: EffortListInput): Promise<IpcResult<EffortEntry[]>>
+    summarizeEfforts(from: string | null, to: string | null): Promise<IpcResult<EffortSummary>>
     correctEffort(input: CorrectEffortInput): Promise<IpcResult<EffortEntry>>
     listEffortHistory(id: string): Promise<IpcResult<EffortRevision[]>>
     createEvidence(input: CreateEvidenceInput): Promise<IpcResult<Evidence>>
     listEvidence(entityType: string | null, entityId: string | null): Promise<IpcResult<Evidence[]>>
     updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<IpcResult<Evidence>>
     createMemo(input: CreateMemoInput): Promise<IpcResult<Memo>>
-    listMemos(inboxOnly: boolean): Promise<IpcResult<Memo[]>>
+    listMemos(inboxOnly: boolean, includeArchived?: boolean): Promise<IpcResult<Memo[]>>
     convertMemoToTask(input: ConvertMemoToTaskInput): Promise<IpcResult<Task>>
+    convertMemoToLearning(input: ConvertMemoToLearningInput): Promise<IpcResult<KnowledgeItem | Mistake>>
+    archiveMemo(id: string, archived: boolean): Promise<IpcResult<Memo>>
   }
   practice: {
     listHabits(projectId: string | null, date: string): Promise<IpcResult<Habit[]>>
@@ -272,9 +290,14 @@ export interface YouTraceApi {
     updateSettings(input: NotificationSettings): Promise<IpcResult<NotificationSettings>>
     listUpcoming(): Promise<IpcResult<UpcomingReminder[]>>
     refresh(now: string): Promise<IpcResult<ReminderNotice[]>>
+    snooze(id: string, minutes: number): Promise<IpcResult<UpcomingReminder>>
+    dismiss(id: string): Promise<IpcResult<void>>
+    muteSource(sourceType: string, sourceId: string): Promise<IpcResult<void>>
+    onNavigate(callback: (navigation: ReminderNavigation) => void): () => void
   }
   data: {
     checkWorkspace(): Promise<IpcResult<WorkspaceCheck>>
+    rebuildSearchIndex(): Promise<IpcResult<{ indexedCount: number }>>
     listBackups(): Promise<IpcResult<BackupInfo[]>>
     createBackup(label: string): Promise<IpcResult<BackupInfo>>
     verifyBackup(id: string): Promise<IpcResult<BackupVerification>>
@@ -297,6 +320,9 @@ export interface YouTraceApi {
     toggleMaximize(): Promise<IpcResult<WindowState>>
     close(): Promise<IpcResult<void>>
     getState(): Promise<IpcResult<WindowState>>
+    startResize(edge: WindowResizeEdge, screenX: number, screenY: number): void
+    moveResize(screenX: number, screenY: number): void
+    endResize(): void
     onStateChanged(callback: (state: WindowState) => void): () => void
   }
 }

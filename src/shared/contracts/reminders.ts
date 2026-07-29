@@ -9,7 +9,8 @@ export const notificationSettingsSchema = z.object({
   countdowns: z.boolean().default(true),
   reviews: z.boolean().default(true),
   stagnation: z.boolean().default(true),
-  overload: z.boolean().default(true)
+  overload: z.boolean().default(true),
+  mutedTagIds: z.array(z.string().uuid()).max(100).default([])
 })
 
 export interface ReminderNotice {
@@ -29,6 +30,11 @@ export interface UpcomingReminder {
   title: string
   scheduledAt: string
   status: 'pending' | 'fired' | 'dismissed'
+}
+
+export interface ReminderNavigation {
+  sourceType: string
+  sourceId: string
 }
 
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>

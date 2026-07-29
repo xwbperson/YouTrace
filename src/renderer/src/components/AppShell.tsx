@@ -16,7 +16,7 @@ import {
   Tags,
   TimerReset
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../../shared/contracts'
 import { PlanningPage } from '../pages/PlanningPage'
@@ -34,6 +34,7 @@ import { DataPage } from '../pages/DataPage'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
+  onWorkspaceChange: (workspace: WorkspaceSummary) => void
 }
 
 const navigation = [
@@ -46,7 +47,8 @@ const navigation = [
   { id: 'reviews', label: '复盘', icon: Archive }
 ] as const
 
-export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
+export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React.JSX.Element {
+  const queryClient = useQueryClient()
   const [active, setActive] = useState<string>('home')
   const [searchOpen, setSearchOpen] = useState(false)
   const today = useMemo(
@@ -66,6 +68,67 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       return result.data
     }
   })
+  const dashboardTasksQuery = useQuery({
+    queryKey: ['dashboard-tasks'],
+    queryFn: async () => {
+      const result = await window.youtrace.planning.listTasks({
+        projectId: null,
+        statuses: ['ready', 'scheduled', 'in_progress', 'blocked'],
+        tagIds: [],
+        includeDeleted: false,
+        limit: 100,
+        offset: 0
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    }
+  })
+  const weekRange = useMemo(() => {
+    const start = new Date()
+    start.setHours(0, 0, 0, 0)
+    start.setDate(start.getDate() - (start.getDay() === 0 ? 6 : start.getDay() - 1))
+    const end = new Date(start)
+    end.setDate(end.getDate() + 7)
+    return { start: start.toISOString(), end: end.toISOString() }
+  }, [])
+  const dashboardEffortsQuery = useQuery({
+    queryKey: ['dashboard-efforts', weekRange.start, weekRange.end],
+    queryFn: async () => {
+      const result = await window.youtrace.execution.listEfforts({
+        entityType: null,
+        entityId: null,
+        from: weekRange.start,
+        to: weekRange.end,
+        limit: 500,
+        offset: 0
+      })
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    }
+  })
+  const dashboardMemosQuery = useQuery({
+    queryKey: ['memos', 'inbox'],
+    queryFn: async () => {
+      const result = await window.youtrace.execution.listMemos(true)
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    }
+  })
+  const dashboardTasks = dashboardTasksQuery.data ?? []
+  const dashboardFocus = dashboardTasks.slice(0, 3)
+  const dashboardEfforts = dashboardEffortsQuery.data ?? []
+  const weeklyMinutes = dashboardEfforts.reduce((sum, effort) => sum + effort.effectiveMinutes, 0)
+  const dailyMinutes = [1, 2, 3, 4, 5, 6, 0].map((day) =>
+    dashboardEfforts
+      .filter((effort) => new Date(effort.startedAt).getDay() === day)
+      .reduce((sum, effort) => sum + effort.effectiveMinutes, 0)
+  )
+  const maxDailyMinutes = Math.max(1, ...dailyMinutes)
+  const plannedMinutes = dashboardFocus.reduce(
+    (sum, task) => sum + (task.estimatedMinutes ?? preferencesQuery.data?.defaultTaskMinutes ?? 30),
+    0
+  )
+  const capacityMinutes = preferencesQuery.data?.dailyCapacityMinutes ?? 480
 
   useEffect(() => {
     const preferences = preferencesQuery.data
@@ -80,16 +143,56 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
         setSearchOpen(true)
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
+        event.preventDefault()
+        setActive('memos')
       }
     }
     window.addEventListener('keydown', listener)
     return () => window.removeEventListener('keydown', listener)
   }, [])
 
+  useEffect(
+    () =>
+      window.youtrace.reminders.onNavigate(({ sourceType }) => {
+        if (sourceType === 'time_block' || sourceType === 'countdown') setActive('calendar')
+        else if (sourceType === 'review') setActive('plan')
+        else if (sourceType === 'overload') setActive('calendar')
+        else if (sourceType === 'stagnation') setActive('plan')
+        else setActive('today')
+      }),
+    []
+  )
+
+  const switchWorkspace = async (): Promise<void> => {
+    const selection = await window.youtrace.dialog.selectDirectory()
+    if (!selection.ok || !selection.data) return
+    let result = await window.youtrace.workspace.open({
+      rootPath: selection.data,
+      readOnly: false
+    })
+    if (
+      !result.ok &&
+      result.error.code === 'WORKSPACE_LOCKED' &&
+      window.confirm(`${result.error.message}\n\n是否改为只读打开？`)
+    ) {
+      result = await window.youtrace.workspace.open({
+        rootPath: selection.data,
+        readOnly: true
+      })
+    }
+    if (!result.ok) {
+      window.alert(result.error.recovery ? `${result.error.message}\n${result.error.recovery}` : result.error.message)
+      return
+    }
+    queryClient.clear()
+    onWorkspaceChange(result.data)
+  }
+
   return (
     <div className="workspace-shell">
       <aside className="sidebar">
-        <button className="workspace-switcher" type="button" aria-label="当前工作区">
+        <button className="workspace-switcher" type="button" aria-label="切换工作区" onClick={() => void switchWorkspace()}>
           <span className="workspace-monogram">{workspace.name.slice(0, 1)}</span>
           <span>
             <strong>{workspace.name}</strong>
@@ -111,7 +214,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
               >
                 <Icon size={18} strokeWidth={1.8} />
                 <span>{item.label}</span>
-                {item.id === 'memos' && <small>0</small>}
+                {item.id === 'memos' && <small>{dashboardMemosQuery.data?.length ?? 0}</small>}
               </button>
             )
           })}
@@ -183,7 +286,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
               <span>搜索目标、任务和记录</span>
               <kbd>Ctrl K</kbd>
             </button>
-            <button className="button button-primary quick-create" type="button">
+            <button className="button button-primary quick-create" type="button" onClick={() => setActive('plan')}>
               <Plus size={17} />
               新建
             </button>
@@ -197,7 +300,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                 <span className="section-label">今日重点</span>
                 <h2>把下一步放到轨迹上</h2>
               </div>
-              <button type="button" className="text-action">
+              <button type="button" className="text-action" onClick={() => setActive('today')}>
                 安排今天
                 <ChevronRight size={15} />
               </button>
@@ -208,12 +311,12 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                 <span />
               </div>
               <div>
-                <strong>还没有选定今日重点</strong>
-                <p>从一个目标中挑选下一步，或先快速记录脑中的事情。</p>
+                <strong>{dashboardFocus[0]?.title ?? '还没有选定今日重点'}</strong>
+                <p>{dashboardFocus.length ? `当前候选 ${dashboardFocus.length} 项；在今日执行台可开始计时或快速调整。` : '从一个目标中挑选下一步，或先快速记录脑中的事情。'}</p>
               </div>
-              <button className="button button-secondary" type="button">
+              <button className="button button-secondary" type="button" onClick={() => setActive(dashboardFocus.length ? 'today' : 'plan')}>
                 <Plus size={16} />
-                创建第一项任务
+                {dashboardFocus.length ? '进入今日执行台' : '创建第一项任务'}
               </button>
             </div>
 
@@ -223,9 +326,9 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                 今日容量
               </span>
               <div className="capacity-track">
-                <span style={{ width: '0%' }} />
+                <span style={{ width: `${Math.min(100, Math.round((plannedMinutes / capacityMinutes) * 100))}%` }} />
               </div>
-              <strong>0 / 8 小时</strong>
+              <strong>{formatDashboardMinutes(plannedMinutes)} / {formatDashboardMinutes(capacityMinutes)}</strong>
             </div>
           </section>
 
@@ -237,7 +340,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                 <span className="section-label">努力轨迹</span>
                 <h2>计划只是起点，事实从投入开始</h2>
               </div>
-              <button type="button" className="text-action">
+              <button type="button" className="text-action" onClick={() => setActive('records')}>
                 查看记录
                 <ChevronRight size={15} />
               </button>
@@ -252,8 +355,8 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
               <div className="trace-copy">
                 <article>
                   <small>此刻</small>
-                  <strong>开始第一段专注</strong>
-                  <p>计时结束后，投入、结果、困难和下一步会一起留在这里。</p>
+                  <strong>{dashboardEfforts[0]?.entityTitle ?? '开始第一段专注'}</strong>
+                  <p>{dashboardEfforts[0]?.result || '计时结束后，投入、结果、困难和下一步会一起留在这里。'}</p>
                 </article>
                 <article className="muted">
                   <small>随后</small>
@@ -264,12 +367,12 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                   <strong>根据事实调整计划</strong>
                 </article>
               </div>
-              <button type="button" className="timer-button">
+              <button type="button" className="timer-button" onClick={() => setActive('today')}>
                 <span>
                   <Clock3 size={21} />
                 </span>
                 <strong>开始计时</strong>
-                <small>先选择一项任务</small>
+                <small>{dashboardFocus[0]?.title ?? '先选择一项任务'}</small>
               </button>
             </div>
           </section>
@@ -280,12 +383,12 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
                 <span className="section-label">本周事实</span>
                 <h2>真实投入</h2>
               </div>
-              <strong className="weekly-total">0h</strong>
+              <strong className="weekly-total">{formatDashboardMinutes(weeklyMinutes)}</strong>
             </div>
             <div className="weekly-bars" aria-label="本周暂无投入记录">
-              {['一', '二', '三', '四', '五', '六', '日'].map((day) => (
+              {['一', '二', '三', '四', '五', '六', '日'].map((day, index) => (
                 <div key={day}>
-                  <span style={{ height: '4px' }} />
+                  <span style={{ height: `${Math.max(4, Math.round((dailyMinutes[index]! / maxDailyMinutes) * 64))}px` }} />
                   <small>{day}</small>
                 </div>
               ))}
@@ -300,7 +403,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
               </div>
               <Inbox size={18} />
             </div>
-            <button type="button" className="memo-entry">
+            <button type="button" className="memo-entry" onClick={() => setActive('memos')}>
               写下突然想到的事情…
               <kbd>Ctrl N</kbd>
             </button>
@@ -321,6 +424,13 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       />
     </div>
   )
+}
+
+function formatDashboardMinutes(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest ? `${hours}h ${rest}m` : `${hours}h`
 }
 
 function SectionPlaceholder({ section }: { section: string }): React.JSX.Element {

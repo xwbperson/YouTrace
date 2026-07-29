@@ -61,7 +61,10 @@ export function App(): React.JSX.Element {
   return (
     <div className="app-frame">
       <TitleBar workspaceName={state.workspace.name} />
-      <AppShell workspace={state.workspace} />
+      <AppShell
+        workspace={state.workspace}
+        onWorkspaceChange={(workspace) => setLocalState({ status: 'ready', workspace })}
+      />
     </div>
   )
 }

@@ -6,6 +6,8 @@ import { ExecutionRepository } from '../../src/main/modules/execution/execution-
 import { ExecutionService } from '../../src/main/modules/execution/execution-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
+import { PracticeRepository } from '../../src/main/modules/practice/practice-repository'
+import { PracticeService } from '../../src/main/modules/practice/practice-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 
 let workspaceManager: WorkspaceManager
@@ -18,10 +20,15 @@ beforeEach(async () => {
   await workspaceManager.create(join(fixtureRoot, 'workspace'), '执行测试')
   const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
   planning = new PlanningService(planningRepository)
+  const practice = new PracticeService(
+    new PracticeRepository(() => workspaceManager.getDatabase()),
+    planningRepository
+  )
   execution = new ExecutionService(
     new ExecutionRepository(() => workspaceManager.getDatabase()),
     planningRepository,
-    planning
+    planning,
+    practice
   )
 })
 
@@ -117,6 +124,10 @@ describe('execution and evidence application service', () => {
     expect(
       planning.listTasks({ projectId: project.id, statuses: [], tagIds: [], includeDeleted: false, limit: 100, offset: 0 })[0]?.actualMinutes
     ).toBeGreaterThanOrEqual(60)
+    expect(execution.summarizeEfforts(null, null)).toMatchObject({
+      entryCount: 2,
+      totalMinutes: 85
+    })
 
     const evidence = execution.createEvidence({
       kind: 'note',
@@ -135,6 +146,8 @@ describe('execution and evidence application service', () => {
       kind: 'idea',
       title: '',
       body: '把失败环境整理成可复用检查表',
+      projectId: project.id,
+      sourceLink: null,
       tagIds: []
     })
     const converted = execution.convertMemoToTask({
@@ -154,6 +167,37 @@ describe('execution and evidence application service', () => {
       )
       .get(memo.id, converted.id) as { relation_type: string }
     expect(relation.relation_type).toBe('CONVERTED_TO')
+
+    const knowledgeMemo = execution.createMemo({
+      kind: 'knowledge',
+      title: '认证状态机',
+      body: '记录认证失败分支和状态跳转。',
+      projectId: project.id,
+      sourceLink: 'https://example.com/reference',
+      tagIds: []
+    })
+    const knowledge = execution.convertMemoToLearning({
+      memoId: knowledgeMemo.id,
+      projectId: project.id,
+      target: 'knowledge',
+      title: '认证状态机'
+    })
+    expect(knowledge).toMatchObject({
+      title: '认证状态机',
+      content: knowledgeMemo.body
+    })
+    expect(execution.listEvidence('memo', knowledgeMemo.id)).toHaveLength(1)
+    expect(execution.archiveMemo(knowledgeMemo.id, true).archived).toBe(true)
+    expect(execution.listMemos(false)).not.toContainEqual(
+      expect.objectContaining({ id: knowledgeMemo.id })
+    )
+    expect(execution.listMemos(false, true)).toContainEqual(
+      expect.objectContaining({
+        id: knowledgeMemo.id,
+        archived: true,
+        convertedTo: { entityType: 'knowledge', entityId: knowledge.id }
+      })
+    )
   })
 
   it('requires an auditable reason to start through an incomplete dependency', () => {
@@ -217,5 +261,58 @@ describe('execution and evidence application service', () => {
     expect(JSON.parse(audit.after_json)).toMatchObject({
       reason: '先验证无环境依赖的子步骤'
     })
+  })
+
+  it('suspends and resumes an unfinished timer without creating a second effort', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '暂停计时',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '离线前暂停',
+      description: '',
+      status: 'ready',
+      difficulty: null,
+      priority: 'medium',
+      estimatedMinutes: 30,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    const started = execution.startEffort({
+      entityType: 'task',
+      entityId: task.id,
+      tagIds: []
+    })
+
+    expect(execution.suspendEffort(started.id).suspendedAt).not.toBeNull()
+    expect(execution.suspendEffort(started.id).id).toBe(started.id)
+    expect(execution.resumeEffort(started.id)).toMatchObject({
+      id: started.id,
+      suspendedAt: null
+    })
+    expect(
+      execution.listEfforts({
+        entityType: null,
+        entityId: null,
+        from: null,
+        to: null,
+        limit: 100,
+        offset: 0
+      })
+    ).toHaveLength(1)
   })
 })

@@ -1,4 +1,4 @@
-import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
+import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import { dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import {
@@ -8,6 +8,7 @@ import {
   createAreaInputSchema,
   createChecklistItemInputSchema,
   convertMemoToTaskInputSchema,
+  convertMemoToLearningInputSchema,
   correctEffortInputSchema,
   createGoalInputSchema,
   createEvidenceInputSchema,
@@ -105,7 +106,7 @@ export function registerIpc(options: RegisterIpcOptions): void {
     setBootstrapState
   } = options
 
-  const trusted = (event: IpcMainInvokeEvent): BrowserWindow => {
+  const trusted = (event: IpcMainInvokeEvent | IpcMainEvent): BrowserWindow => {
     const window = getWindow()
     if (!window || event.sender.id !== window.webContents.id) {
       throw new YouTraceError({
@@ -115,6 +116,22 @@ export function registerIpc(options: RegisterIpcOptions): void {
     }
     return window
   }
+  const resizeEdgeSchema = z.enum([
+    'north',
+    'south',
+    'east',
+    'west',
+    'north-east',
+    'north-west',
+    'south-east',
+    'south-west'
+  ])
+  let resizeSession: {
+    edge: z.infer<typeof resizeEdgeSchema>
+    screenX: number
+    screenY: number
+    bounds: Electron.Rectangle
+  } | null = null
 
   const wrap = async <T>(operation: () => T | Promise<T>): Promise<IpcResult<T>> => {
     try {
@@ -449,6 +466,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('execution:suspend-effort', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.suspendEffort(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('execution:resume-effort', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.resumeEffort(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('execution:stop-effort', (event, rawInput) =>
     wrap(() => {
       trusted(event)
@@ -467,6 +498,15 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return executionService.listEfforts(effortListInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:summarize-efforts', (event, rawFrom, rawTo) =>
+    wrap(() => {
+      trusted(event)
+      const from = z.string().datetime().nullable().parse(rawFrom)
+      const to = z.string().datetime().nullable().parse(rawTo)
+      return executionService.summarizeEfforts(from, to)
     })
   )
 
@@ -514,10 +554,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
-  ipcMain.handle('execution:list-memos', (event, rawInboxOnly) =>
+  ipcMain.handle('execution:list-memos', (event, rawInboxOnly, rawIncludeArchived) =>
     wrap(() => {
       trusted(event)
-      return executionService.listMemos(z.boolean().parse(rawInboxOnly))
+      return executionService.listMemos(
+        z.boolean().parse(rawInboxOnly),
+        z.boolean().optional().default(false).parse(rawIncludeArchived)
+      )
     })
   )
 
@@ -525,6 +568,25 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return executionService.convertMemoToTask(convertMemoToTaskInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:convert-memo-to-learning', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.convertMemoToLearning(
+        convertMemoToLearningInputSchema.parse(rawInput)
+      )
+    })
+  )
+
+  ipcMain.handle('execution:archive-memo', (event, rawId, rawArchived) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.archiveMemo(
+        z.string().uuid().parse(rawId),
+        z.boolean().parse(rawArchived)
+      )
     })
   )
 
@@ -785,10 +847,44 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('reminders:snooze', (event, rawId, rawMinutes) =>
+    wrap(() => {
+      trusted(event)
+      return reminderService.snooze(
+        z.string().uuid().parse(rawId),
+        z.number().int().min(5).max(10_080).parse(rawMinutes)
+      )
+    })
+  )
+
+  ipcMain.handle('reminders:dismiss', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      reminderService.dismiss(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('reminders:mute-source', (event, rawSourceType, rawSourceId) =>
+    wrap(() => {
+      trusted(event)
+      reminderService.muteSource(
+        z.string().min(1).max(60).parse(rawSourceType),
+        z.string().uuid().parse(rawSourceId)
+      )
+    })
+  )
+
   ipcMain.handle('data:check-workspace', (event) =>
     wrap(async () => {
       trusted(event)
       return dataService.checkWorkspace()
+    })
+  )
+
+  ipcMain.handle('data:rebuild-search-index', (event) =>
+    wrap(() => {
+      trusted(event)
+      return dataService.rebuildSearchIndex()
     })
   )
 
@@ -939,6 +1035,64 @@ export function registerIpc(options: RegisterIpcOptions): void {
       return windowState(trusted(event))
     })
   )
+
+  ipcMain.on('window:resize-start', (event, rawEdge, rawScreenX, rawScreenY) => {
+    try {
+      const window = trusted(event)
+      if (window.isMaximized()) return
+      resizeSession = {
+        edge: resizeEdgeSchema.parse(rawEdge),
+        screenX: z.number().finite().parse(rawScreenX),
+        screenY: z.number().finite().parse(rawScreenY),
+        bounds: window.getBounds()
+      }
+    } catch {
+      resizeSession = null
+    }
+  })
+
+  ipcMain.on('window:resize-move', (event, rawScreenX, rawScreenY) => {
+    try {
+      const window = trusted(event)
+      if (!resizeSession || window.isMaximized()) return
+      const screenX = z.number().finite().parse(rawScreenX)
+      const screenY = z.number().finite().parse(rawScreenY)
+      const deltaX = screenX - resizeSession.screenX
+      const deltaY = screenY - resizeSession.screenY
+      const initial = resizeSession.bounds
+      const edge = resizeSession.edge
+      let x = initial.x
+      let y = initial.y
+      let width = initial.width
+      let height = initial.height
+      if (edge.includes('east')) width = Math.max(1080, initial.width + deltaX)
+      if (edge.includes('south')) height = Math.max(720, initial.height + deltaY)
+      if (edge.includes('west')) {
+        width = Math.max(1080, initial.width - deltaX)
+        x = initial.x + initial.width - width
+      }
+      if (edge.includes('north')) {
+        height = Math.max(720, initial.height - deltaY)
+        y = initial.y + initial.height - height
+      }
+      window.setBounds({
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.round(width),
+        height: Math.round(height)
+      })
+    } catch {
+      resizeSession = null
+    }
+  })
+
+  ipcMain.on('window:resize-end', (event) => {
+    try {
+      trusted(event)
+    } finally {
+      resizeSession = null
+    }
+  })
 }
 
 export function windowState(window: BrowserWindow): WindowState {

@@ -129,7 +129,7 @@ export class ReminderRepository {
            id, source_type, source_id, trigger_at, timezone, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_type, source_id, trigger_at) DO UPDATE SET
-           timezone = excluded.timezone, enabled = 1, updated_at = excluded.updated_at`
+           timezone = excluded.timezone, updated_at = excluded.updated_at`
       )
       .run(
         ruleId,
@@ -203,6 +203,104 @@ export class ReminderRepository {
       )
       .all() as EventRow[]
     return rows.map(mapEvent)
+  }
+
+  getUpcoming(id: string): UpcomingReminder | null {
+    const row = this.database()
+      .prepare(
+        `SELECT e.id, r.source_type, r.source_id,
+                COALESCE(p.title, r.source_type) AS title,
+                e.scheduled_at, e.status
+           FROM reminder_events e
+           JOIN reminder_rules r ON r.id = e.rule_id
+           LEFT JOIN reminder_event_payloads p ON p.event_id = e.id
+          WHERE e.id = ?`
+      )
+      .get(id) as EventRow | undefined
+    return row ? mapEvent(row) : null
+  }
+
+  snooze(id: string, scheduledAt: string, now: string): boolean {
+    const result = this.database()
+      .prepare(
+        `UPDATE reminder_events
+            SET scheduled_at = ?, status = 'pending', fired_at = NULL, updated_at = ?
+          WHERE id = ? AND status IN ('pending', 'fired')`
+      )
+      .run(scheduledAt, now, id)
+    return result.changes > 0
+  }
+
+  dismiss(id: string, now: string): boolean {
+    const result = this.database()
+      .prepare(
+        `UPDATE reminder_events SET status = 'dismissed', updated_at = ?
+          WHERE id = ? AND status IN ('pending', 'fired')`
+      )
+      .run(now, id)
+    return result.changes > 0
+  }
+
+  muteSource(sourceType: string, sourceId: string, now: string): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO reminder_source_preferences(source_type, source_id, muted_at)
+           VALUES (?, ?, ?)
+           ON CONFLICT(source_type, source_id) DO UPDATE SET muted_at = excluded.muted_at`
+        )
+        .run(sourceType, sourceId, now)
+      database
+        .prepare(
+          `UPDATE reminder_rules SET enabled = 0, updated_at = ?
+            WHERE source_type = ? AND source_id = ?`
+        )
+        .run(now, sourceType, sourceId)
+      database
+        .prepare(
+          `UPDATE reminder_events SET status = 'dismissed', updated_at = ?
+            WHERE rule_id IN (
+              SELECT id FROM reminder_rules WHERE source_type = ? AND source_id = ?
+            ) AND status = 'pending'`
+        )
+        .run(now, sourceType, sourceId)
+    })
+    transaction()
+  }
+
+  isSourceMuted(sourceType: string, sourceId: string): boolean {
+    return Boolean(
+      this.database()
+        .prepare(
+          `SELECT 1 FROM reminder_source_preferences
+            WHERE source_type = ? AND source_id = ?`
+        )
+        .get(sourceType, sourceId)
+    )
+  }
+
+  sourceHasAnyTag(sourceType: string, sourceId: string, tagIds: readonly string[]): boolean {
+    if (tagIds.length === 0) return false
+    const entityType =
+      sourceType === 'task_due'
+        ? 'task'
+        : sourceType === 'countdown'
+          ? 'countdown'
+          : sourceType === 'stagnation'
+            ? 'project'
+            : null
+    if (!entityType) return false
+    return Boolean(
+      this.database()
+        .prepare(
+          `SELECT 1 FROM tag_assignments
+            WHERE entity_type = ? AND entity_id = ?
+              AND tag_id IN (${tagIds.map(() => '?').join(', ')})
+            LIMIT 1`
+        )
+        .get(entityType, sourceId, ...tagIds)
+    )
   }
 
   markFired(ids: string[], now: string): void {

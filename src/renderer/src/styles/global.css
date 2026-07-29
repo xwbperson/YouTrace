@@ -161,6 +161,66 @@ button:disabled {
   color: var(--muted);
 }
 
+.window-resize-handle {
+  position: fixed;
+  z-index: 300;
+  -webkit-app-region: no-drag;
+  touch-action: none;
+}
+
+.resize-north,
+.resize-south {
+  right: 7px;
+  left: 7px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.resize-east,
+.resize-west {
+  top: 7px;
+  bottom: 7px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.resize-north { top: 0; }
+.resize-south { bottom: 0; }
+.resize-east { right: 0; }
+.resize-west { left: 0; }
+
+.resize-north-east,
+.resize-north-west,
+.resize-south-east,
+.resize-south-west {
+  width: 10px;
+  height: 10px;
+}
+
+.resize-north-east {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.resize-north-west {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.resize-south-east {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.resize-south-west {
+  bottom: 0;
+  left: 0;
+  cursor: nesw-resize;
+}
+
 .titlebar-drag {
   -webkit-app-region: drag;
   display: flex;
@@ -635,6 +695,28 @@ button:disabled {
   gap: 22px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.readonly-workspace-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text);
+}
+
+.readonly-workspace-option input {
+  margin-top: 3px;
+}
+
+.readonly-workspace-option span,
+.readonly-workspace-option small {
+  display: block;
+}
+
+.readonly-workspace-option small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .workspace-promises div {
@@ -1500,6 +1582,62 @@ kbd {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.muted-tags-setting {
+  display: grid;
+  gap: 9px;
+  padding: 14px 0;
+}
+
+.muted-tags-setting > span,
+.muted-tags-setting > div,
+.muted-tags-setting button {
+  display: flex;
+  align-items: center;
+}
+
+.muted-tags-setting > span {
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.muted-tags-setting > div {
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.muted-tags-setting button {
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.muted-tags-setting button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.muted-tags-setting i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.upcoming-reminders article button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--muted);
 }
 
 .upcoming-reminders h3 {
@@ -4303,6 +4441,12 @@ kbd {
   gap: 10px;
 }
 
+.active-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .session-time > strong {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
   font-size: 30px;
@@ -4966,6 +5110,68 @@ kbd {
   gap: 8px;
 }
 
+.memo-source-link {
+  display: flex;
+  align-items: center;
+  min-width: 220px;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.memo-source-link input {
+  min-width: 0;
+  border: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.memo-capture-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.memo-capture-tags > button:not(.button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.memo-capture-tags > button:not(.button).active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.memo-capture-tags > button span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.memo-capture-spacer {
+  flex: 1;
+}
+
+.archive-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .capture-actions select {
   height: 32px;
   padding: 0 8px;
@@ -5071,6 +5277,36 @@ kbd {
   background: transparent;
   font-size: 9px;
   cursor: pointer;
+}
+
+.memo-card footer .memo-evidence-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.memo-convert-targets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.memo-convert-targets button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.memo-convert-targets button.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .source-memo {

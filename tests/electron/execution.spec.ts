@@ -92,9 +92,9 @@ test('records a timed effort and converts a memo through the Electron UI', async
     await page.getByLabel('备忘类型').selectOption('idea')
     await page.getByRole('button', { name: '保存到收件箱' }).click()
     await expect(page.getByText('把依赖排查步骤整理成检查表')).toBeVisible()
-    await page.getByRole('button', { name: '转为任务' }).click()
+    await page.getByRole('button', { name: '整理' }).click()
     await page.getByRole('button', { name: '创建任务并保留来源' }).click()
-    await expect(page.getByText('已处理')).toBeVisible()
+    await expect(page.getByText('已转为任务')).toBeVisible()
     await page.screenshot({ path: 'test-results/execution-memo.png' })
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)

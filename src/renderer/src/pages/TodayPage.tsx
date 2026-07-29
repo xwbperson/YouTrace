@@ -99,7 +99,15 @@ export function TodayPage(): React.JSX.Element {
     0
   )
   const elapsedSeconds = active
-    ? Math.max(0, Math.floor((now - Date.parse(active.startedAt)) / 1_000))
+    ? Math.max(
+        0,
+        Math.floor(
+          ((active.suspendedAt ? Date.parse(active.suspendedAt) : now) -
+            Date.parse(active.startedAt) -
+            active.pausedMinutes * 60_000) /
+            1_000
+        )
+      )
     : 0
 
   const startMutation = useMutation({
@@ -180,10 +188,12 @@ export function TodayPage(): React.JSX.Element {
           {active ? <Pause size={23} /> : <Play size={23} />}
         </div>
         <div className="session-copy">
-          <span>{active ? '正在投入' : '当前没有计时'}</span>
+          <span>{active ? (active.suspendedAt ? '会话已暂停' : '正在投入') : '当前没有计时'}</span>
           <h2>{active?.entityTitle ?? '选择一项任务开始'}</h2>
           <p>
-            {active
+            {active?.suspendedAt
+              ? '暂停期间和程序退出后的离线时间不会计入努力；准备好后可继续。'
+              : active
               ? '时间、结果、困难和下一步会作为独立努力记录保存。'
               : '计时会让任务进入“进行中”，但不会替你判断它是否完成。'}
           </p>
@@ -191,10 +201,24 @@ export function TodayPage(): React.JSX.Element {
         <div className="session-time">
           <strong>{formatClock(elapsedSeconds)}</strong>
           {active ? (
-            <button className="button stop-button" onClick={() => setStopDialogOpen(true)}>
-              <Square size={15} fill="currentColor" />
-              停止并记录
-            </button>
+            <div className="active-session-actions">
+              {active.suspendedAt && (
+                <button
+                  className="button button-secondary"
+                  onClick={async () => {
+                    await window.youtrace.execution.resumeEffort(active.id)
+                    setNow(Date.now())
+                    await queryClient.invalidateQueries({ queryKey: ['active-effort'] })
+                  }}
+                >
+                  <Play size={14} fill="currentColor" />继续计时
+                </button>
+              )}
+              <button className="button stop-button" onClick={() => setStopDialogOpen(true)}>
+                <Square size={15} fill="currentColor" />
+                停止并记录
+              </button>
+            </div>
           ) : (
             <span>等待开始</span>
           )}

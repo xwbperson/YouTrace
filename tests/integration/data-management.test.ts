@@ -98,7 +98,7 @@ describe('workspace backup, restore and portable files', () => {
     expect(verification).toMatchObject({
       valid: true,
       workspaceId: workspaceManager.getCurrent()!.id,
-      schemaVersion: 7
+      schemaVersion: 9
     })
     planning.createTask({
       parentTaskId: null,
@@ -147,6 +147,14 @@ describe('workspace backup, restore and portable files', () => {
 
   it('exports readable files and restores or purges soft-deleted tasks behind a backup gate', async () => {
     const { taskId } = createProjectAndTask('回收站任务')
+    workspaceManager.getDatabase().prepare('DELETE FROM searchable_content').run()
+    expect(data.rebuildSearchIndex().indexedCount).toBeGreaterThanOrEqual(2)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT COUNT(*) AS count FROM searchable_content WHERE entity_type = 'task'")
+        .get()
+    ).toEqual({ count: 1 })
     const exported = await data.exportReadable()
     expect(exported.files).toEqual(['README.md', 'projects.csv', 'tasks.csv', 'efforts.csv'])
     expect(await readFile(join(exported.directory, 'tasks.csv'), 'utf8')).toContain('回收站任务')

@@ -1,15 +1,19 @@
 import { randomUUID } from 'node:crypto'
 import type {
   ConvertMemoToTaskInput,
+  ConvertMemoToLearningInput,
   CorrectEffortInput,
   CreateEvidenceInput,
   CreateManualEffortInput,
   CreateMemoInput,
   EffortEntry,
   EffortRevision,
+  EffortSummary,
   EffortListInput,
   Evidence,
   Memo,
+  KnowledgeItem,
+  Mistake,
   StartEffortInput,
   StopEffortInput,
   Task,
@@ -18,17 +22,23 @@ import type {
 import { YouTraceError } from '../../../shared/errors'
 import type { PlanningRepository } from '../planning/planning-repository'
 import type { PlanningService } from '../planning/planning-service'
+import type { PracticeService } from '../practice/practice-service'
 import { ExecutionRepository } from './execution-repository'
 
 export class ExecutionService {
   constructor(
     private readonly repository: ExecutionRepository,
     private readonly planningRepository: PlanningRepository,
-    private readonly planningService: PlanningService
+    private readonly planningService: PlanningService,
+    private readonly practiceService?: PracticeService
   ) {}
 
   getActiveEffort(): EffortEntry | null {
     return this.repository.getActiveEffort()
+  }
+
+  summarizeEfforts(from: string | null, to: string | null): EffortSummary {
+    return this.repository.summarizeEfforts(from, to)
   }
 
   startEffort(input: StartEffortInput): EffortEntry {
@@ -87,6 +97,34 @@ export class ExecutionService {
     return this.requireEffort(id)
   }
 
+  suspendEffort(id: string): EffortEntry {
+    const current = this.repository.getEffort(id)
+    if (!current || current.endedAt) {
+      throw new YouTraceError({
+        code: 'EFFORT_NOT_ACTIVE',
+        message: '这段计时已经停止或不存在。'
+      })
+    }
+    if (!current.suspendedAt) {
+      this.repository.suspendEffort(id, new Date().toISOString())
+    }
+    return this.requireEffort(id)
+  }
+
+  resumeEffort(id: string): EffortEntry {
+    const current = this.repository.getEffort(id)
+    if (!current || current.endedAt) {
+      throw new YouTraceError({
+        code: 'EFFORT_NOT_ACTIVE',
+        message: '这段计时已经停止或不存在。'
+      })
+    }
+    if (current.suspendedAt) {
+      this.repository.resumeEffort(id, new Date().toISOString())
+    }
+    return this.requireEffort(id)
+  }
+
   stopEffort(input: StopEffortInput): EffortEntry {
     const current = this.repository.getEffort(input.id)
     if (!current || current.endedAt) {
@@ -96,9 +134,12 @@ export class ExecutionService {
       })
     }
     const endedAt = new Date().toISOString()
+    const pausedMilliseconds = this.repository.pausedMilliseconds(input.id, endedAt)
     const effectiveMinutes = Math.max(
       0,
-      Math.round((Date.parse(endedAt) - Date.parse(current.startedAt)) / 60_000)
+      Math.round(
+        (Date.parse(endedAt) - Date.parse(current.startedAt) - pausedMilliseconds) / 60_000
+      )
     )
     if (!this.repository.stopEffort(input.id, input, endedAt, effectiveMinutes)) {
       throw new YouTraceError({
@@ -190,13 +231,28 @@ export class ExecutionService {
   }
 
   createMemo(input: CreateMemoInput): Memo {
+    if (input.projectId && !this.planningRepository.getProject(input.projectId)) {
+      throw entityNotFound('关联项目')
+    }
     const id = randomUUID()
     this.repository.insertMemo(id, input, new Date().toISOString())
+    if (input.sourceLink) {
+      this.createEvidence({
+        kind: 'link',
+        title: input.title || input.body.slice(0, 80),
+        note: '由备忘保存的来源链接',
+        source: input.sourceLink,
+        verificationStatus: 'prepared',
+        entityType: 'memo',
+        entityId: id,
+        tagIds: input.tagIds
+      })
+    }
     return this.requireMemo(id)
   }
 
-  listMemos(inboxOnly: boolean): Memo[] {
-    return this.repository.listMemos(inboxOnly)
+  listMemos(inboxOnly: boolean, includeArchived = false): Memo[] {
+    return this.repository.listMemos(inboxOnly, includeArchived)
   }
 
   convertMemoToTask(input: ConvertMemoToTaskInput): Task {
@@ -220,8 +276,50 @@ export class ExecutionService {
       includeInProgress: true,
       tagIds: memo.tagIds
     })
-    this.repository.markMemoConverted(memo.id, task.id, new Date().toISOString())
+    this.repository.markMemoConverted(memo.id, 'task', task.id, new Date().toISOString())
     return task
+  }
+
+  convertMemoToLearning(input: ConvertMemoToLearningInput): KnowledgeItem | Mistake {
+    const memo = this.repository.getMemo(input.memoId)
+    if (!memo) throw entityNotFound('备忘')
+    if (!this.practiceService) {
+      throw new YouTraceError({
+        code: 'LEARNING_SERVICE_UNAVAILABLE',
+        message: '学习模块当前不可用。'
+      })
+    }
+    if (input.target === 'knowledge') {
+      const item = this.practiceService.createKnowledge({
+        projectId: input.projectId,
+        milestoneId: null,
+        title: input.title,
+        content: memo.body,
+        mastery: null,
+        nextReviewDate: null
+      })
+      this.repository.markMemoConverted(memo.id, 'knowledge', item.id, new Date().toISOString())
+      return item
+    }
+    const item = this.practiceService.createMistake({
+      projectId: input.projectId,
+      knowledgeItemId: null,
+      question: input.title,
+      wrongAnswer: '',
+      correctAnswer: '',
+      analysis: memo.body,
+      mastery: null,
+      nextReviewDate: null
+    })
+    this.repository.markMemoConverted(memo.id, 'mistake', item.id, new Date().toISOString())
+    return item
+  }
+
+  archiveMemo(id: string, archived: boolean): Memo {
+    if (!this.repository.archiveMemo(id, archived, new Date().toISOString())) {
+      throw entityNotFound('备忘')
+    }
+    return this.requireMemo(id)
   }
 
   private requireEffort(id: string): EffortEntry {

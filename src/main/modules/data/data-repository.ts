@@ -113,6 +113,43 @@ export class DataRepository {
     )
   }
 
+  rebuildSearchIndex(): number {
+    const database = this.database()
+    return database.transaction(() => {
+      database.prepare('DELETE FROM searchable_content').run()
+      const inserts = [
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'project', id, name, description FROM projects
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'goal', id, title, success_criteria FROM goals
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'milestone', id, title, description FROM milestones
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'task', id, title, description FROM tasks
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'memo', id, COALESCE(NULLIF(title, ''), SUBSTR(body, 1, 80)), body FROM memos
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'evidence', id, title, note FROM evidence WHERE deleted_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'knowledge', id, title, content FROM knowledge_items
+          WHERE deleted_at IS NULL AND archived_at IS NULL`,
+        `INSERT INTO searchable_content(entity_type, entity_id, title, body)
+         SELECT 'mistake', id, SUBSTR(question, 1, 160), analysis FROM mistakes
+          WHERE deleted_at IS NULL AND archived_at IS NULL`
+      ]
+      for (const statement of inserts) database.prepare(statement).run()
+      const row = database
+        .prepare('SELECT COUNT(*) AS count FROM searchable_content')
+        .get() as { count: number }
+      return row.count
+    })()
+  }
+
   listTrash(): TrashItem[] {
     const rows = this.database()
       .prepare(

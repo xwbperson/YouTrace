@@ -1,6 +1,19 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, Inbox, Lightbulb, Plus, Tag, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  Archive,
+  ArrowRight,
+  BookOpen,
+  Inbox,
+  Lightbulb,
+  Link2,
+  Paperclip,
+  Plus,
+  RotateCcw,
+  Tag,
+  X
+} from 'lucide-react'
 import { useState } from 'react'
 import type { IpcResult, Memo, Project } from '../../../shared/contracts'
 
@@ -22,29 +35,56 @@ export function MemosPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [body, setBody] = useState('')
   const [kind, setKind] = useState<Memo['kind']>('memo')
+  const [projectId, setProjectId] = useState('')
+  const [sourceLink, setSourceLink] = useState('')
+  const [tagIds, setTagIds] = useState<string[]>([])
+  const [showArchived, setShowArchived] = useState(false)
   const [convertMemo, setConvertMemo] = useState<Memo | null>(null)
 
   const memosQuery = useQuery({
-    queryKey: ['memos'],
-    queryFn: async () => unwrap(await window.youtrace.execution.listMemos(false))
+    queryKey: ['memos', showArchived],
+    queryFn: async () => unwrap(await window.youtrace.execution.listMemos(false, showArchived))
   })
   const projectsQuery = useQuery({
     queryKey: ['projects'],
     queryFn: async () => unwrap(await window.youtrace.planning.listProjects())
   })
+  const tagsQuery = useQuery({
+    queryKey: ['tags'],
+    queryFn: async () => unwrap(await window.youtrace.planning.listTags())
+  })
 
   const createMutation = useMutation({
-    mutationFn: async () =>
-      unwrap(
+    mutationFn: async (attachFile: boolean) => {
+      const memo = unwrap(
         await window.youtrace.execution.createMemo({
           kind,
           title: '',
           body,
-          tagIds: []
+          projectId: projectId || null,
+          sourceLink: sourceLink || null,
+          tagIds
         })
-      ),
+      )
+      if (attachFile) {
+        unwrap(
+          await window.youtrace.data.importEvidenceFile({
+            kind: 'file',
+            title: body.slice(0, 80),
+            note: '备忘附件',
+            verificationStatus: 'prepared',
+            entityType: 'memo',
+            entityId: memo.id,
+            tagIds
+          })
+        )
+      }
+      return memo
+    },
     onSuccess: async () => {
       setBody('')
+      setSourceLink('')
+      setTagIds([])
       await queryClient.invalidateQueries({ queryKey: ['memos'] })
     }
   })
@@ -69,6 +109,7 @@ export function MemosPage(): React.JSX.Element {
         <div className="capture-icon"><Lightbulb size={20} /></div>
         <textarea
           aria-label="快速记录"
+          autoFocus
           value={body}
           onChange={(event) => setBody(event.target.value)}
           placeholder="写下突然想到的事情、问题或下一步…"
@@ -77,10 +118,31 @@ export function MemosPage(): React.JSX.Element {
           <select aria-label="备忘类型" value={kind} onChange={(event) => setKind(event.target.value as Memo['kind'])}>
             {Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
+          <select aria-label="关联项目" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+            <option value="">不关联项目</option>
+            {(projectsQuery.data ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </select>
+          <label className="memo-source-link"><Link2 size={14} /><input aria-label="来源链接" type="url" value={sourceLink} onChange={(event) => setSourceLink(event.target.value)} placeholder="可选来源链接" /></label>
+        </div>
+        <div className="memo-capture-tags" aria-label="备忘标签">
+          <Tag size={14} />
+          {(tagsQuery.data ?? []).map((tag) => (
+            <button type="button" key={tag.id} className={tagIds.includes(tag.id) ? 'active' : ''} onClick={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])}>
+              <span style={{ background: tag.color ?? '#64736e' }} />{tag.name}
+            </button>
+          ))}
+          <span className="memo-capture-spacer" />
+          <button
+            className="button button-secondary"
+            disabled={!body.trim() || createMutation.isPending}
+            onClick={() => createMutation.mutate(true)}
+          >
+            <Paperclip size={15} />保存并添加附件
+          </button>
           <button
             className="button button-primary"
             disabled={!body.trim() || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
+            onClick={() => createMutation.mutate(false)}
           >
             <Plus size={16} />
             保存到收件箱
@@ -94,7 +156,7 @@ export function MemosPage(): React.JSX.Element {
             <span className="section-label">收件箱与笔记</span>
             <h2>最近记录</h2>
           </div>
-          <span>{memos.length} 条</span>
+          <label className="archive-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />显示已归档</label>
         </div>
 
         {memos.length === 0 ? (
@@ -114,15 +176,18 @@ export function MemosPage(): React.JSX.Element {
                 {memo.title && <strong>{memo.title}</strong>}
                 <p>{memo.body}</p>
                 <footer>
-                  <span className={memo.inbox ? 'inbox' : 'processed'}>
-                    {memo.inbox ? '待处理' : '已处理'}
-                  </span>
+                  <span className={memo.archived ? 'processed' : memo.inbox ? 'inbox' : 'processed'}>{memo.archived ? '已归档' : memo.inbox ? '待处理' : `已转为${convertedLabel(memo)}`}</span>
+                  {memo.evidenceCount > 0 && <span className="memo-evidence-count"><Paperclip size={11} />{memo.evidenceCount}</span>}
+                  {memo.projectId && <span>{(projectsQuery.data ?? []).find((project) => project.id === memo.projectId)?.name ?? '关联项目'}</span>}
                   {memo.inbox && (
                     <button onClick={() => setConvertMemo(memo)}>
-                      转为任务
+                      整理
                       <ArrowRight size={13} />
                     </button>
                   )}
+                  <button aria-label={memo.archived ? '恢复备忘' : '归档备忘'} onClick={async () => { await window.youtrace.execution.archiveMemo(memo.id, !memo.archived); await queryClient.invalidateQueries({ queryKey: ['memos'] }) }}>
+                    {memo.archived ? <RotateCcw size={13} /> : <Archive size={13} />}
+                  </button>
                 </footer>
               </article>
             ))}
@@ -165,6 +230,7 @@ function ConvertMemoDialog({
 }): React.JSX.Element {
   const [title, setTitle] = useState(memo.title || memo.body.slice(0, 80))
   const [projectId, setProjectId] = useState('')
+  const [target, setTarget] = useState<'task' | 'knowledge' | 'mistake'>('task')
   const [minutes, setMinutes] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -172,12 +238,20 @@ function ConvertMemoDialog({
   const convert = async (): Promise<void> => {
     setBusy(true)
     setError('')
-    const result = await window.youtrace.execution.convertMemoToTask({
-      memoId: memo.id,
-      projectId: projectId || null,
-      title,
-      estimatedMinutes: minutes ? Number(minutes) : null
-    })
+    const result =
+      target === 'task'
+        ? await window.youtrace.execution.convertMemoToTask({
+            memoId: memo.id,
+            projectId: projectId || null,
+            title,
+            estimatedMinutes: minutes ? Number(minutes) : null
+          })
+        : await window.youtrace.execution.convertMemoToLearning({
+            memoId: memo.id,
+            projectId,
+            target,
+            title
+          })
     setBusy(false)
     if (!result.ok) {
       setError(result.error.message)
@@ -195,12 +269,17 @@ function ConvertMemoDialog({
           <div className="dialog-heading">
             <div>
               <span className="section-label">保留原始备忘</span>
-              <Dialog.Title>转换为任务</Dialog.Title>
-              <Dialog.Description>新任务会保存与原备忘的来源关系。</Dialog.Description>
+              <Dialog.Title>整理备忘</Dialog.Title>
+              <Dialog.Description>新对象会保存与原备忘的来源关系，原文不会被移动或删除。</Dialog.Description>
             </div>
             <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
           </div>
           <div className="source-memo">{memo.body}</div>
+          <div className="memo-convert-targets" aria-label="转换类型">
+            <button type="button" className={target === 'task' ? 'active' : ''} onClick={() => setTarget('task')}><ArrowRight size={14} />任务</button>
+            <button type="button" className={target === 'knowledge' ? 'active' : ''} onClick={() => setTarget('knowledge')}><BookOpen size={14} />知识点</button>
+            <button type="button" className={target === 'mistake' ? 'active' : ''} onClick={() => setTarget('mistake')}><AlertTriangle size={14} />错题</button>
+          </div>
           <div className="dialog-form">
             <label><span>任务标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
             <div className="form-row">
@@ -211,20 +290,27 @@ function ConvertMemoDialog({
                   {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                 </select>
               </label>
-              <label><span>预计分钟</span><input type="number" min="1" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></label>
+              {target === 'task' && <label><span>预计分钟</span><input type="number" min="1" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></label>}
             </div>
             {error && <div className="inline-error">{error}</div>}
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
-            <button className="button button-primary" disabled={!title.trim() || busy} onClick={() => void convert()}>
-              {busy ? '正在转换…' : '创建任务并保留来源'}
+            <button className="button button-primary" disabled={!title.trim() || busy || (target !== 'task' && !projectId)} onClick={() => void convert()}>
+              {busy ? '正在转换…' : `创建${target === 'task' ? '任务' : target === 'knowledge' ? '知识点' : '错题'}并保留来源`}
             </button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   )
+}
+
+function convertedLabel(memo: Memo): string {
+  if (memo.convertedTo?.entityType === 'knowledge') return '知识点'
+  if (memo.convertedTo?.entityType === 'mistake') return '错题'
+  if (memo.convertedTo?.entityType === 'task') return '任务'
+  return '已处理'
 }
 
 function formatDate(value: string): string {

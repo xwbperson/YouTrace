@@ -55,6 +55,10 @@ export class DataService {
     return this.repository.listBackups()
   }
 
+  rebuildSearchIndex(): { indexedCount: number } {
+    return { indexedCount: this.repository.rebuildSearchIndex() }
+  }
+
   async maybeCreateAutomaticBackup(
     intervalHours: number,
     retentionCount: number

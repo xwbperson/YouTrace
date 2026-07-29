@@ -66,9 +66,12 @@ const api: YouTraceApi = {
   execution: {
     getActiveEffort: () => ipcRenderer.invoke('execution:get-active-effort'),
     startEffort: (input) => ipcRenderer.invoke('execution:start-effort', input),
+    suspendEffort: (id) => ipcRenderer.invoke('execution:suspend-effort', id),
+    resumeEffort: (id) => ipcRenderer.invoke('execution:resume-effort', id),
     stopEffort: (input) => ipcRenderer.invoke('execution:stop-effort', input),
     createManualEffort: (input) => ipcRenderer.invoke('execution:create-manual-effort', input),
     listEfforts: (input) => ipcRenderer.invoke('execution:list-efforts', input),
+    summarizeEfforts: (from, to) => ipcRenderer.invoke('execution:summarize-efforts', from, to),
     correctEffort: (input) => ipcRenderer.invoke('execution:correct-effort', input),
     listEffortHistory: (id) => ipcRenderer.invoke('execution:list-effort-history', id),
     createEvidence: (input) => ipcRenderer.invoke('execution:create-evidence', input),
@@ -77,8 +80,12 @@ const api: YouTraceApi = {
     updateEvidenceStatus: (input) =>
       ipcRenderer.invoke('execution:update-evidence-status', input),
     createMemo: (input) => ipcRenderer.invoke('execution:create-memo', input),
-    listMemos: (inboxOnly) => ipcRenderer.invoke('execution:list-memos', inboxOnly),
-    convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input)
+    listMemos: (inboxOnly, includeArchived) =>
+      ipcRenderer.invoke('execution:list-memos', inboxOnly, includeArchived),
+    convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input),
+    convertMemoToLearning: (input) =>
+      ipcRenderer.invoke('execution:convert-memo-to-learning', input),
+    archiveMemo: (id, archived) => ipcRenderer.invoke('execution:archive-memo', id, archived)
   },
   practice: {
     listHabits: (projectId, date) =>
@@ -125,10 +132,23 @@ const api: YouTraceApi = {
     getSettings: () => ipcRenderer.invoke('reminders:get-settings'),
     updateSettings: (input) => ipcRenderer.invoke('reminders:update-settings', input),
     listUpcoming: () => ipcRenderer.invoke('reminders:list-upcoming'),
-    refresh: (now) => ipcRenderer.invoke('reminders:refresh', now)
+    refresh: (now) => ipcRenderer.invoke('reminders:refresh', now),
+    snooze: (id, minutes) => ipcRenderer.invoke('reminders:snooze', id, minutes),
+    dismiss: (id) => ipcRenderer.invoke('reminders:dismiss', id),
+    muteSource: (sourceType, sourceId) =>
+      ipcRenderer.invoke('reminders:mute-source', sourceType, sourceId),
+    onNavigate: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        navigation: Parameters<typeof callback>[0]
+      ): void => callback(navigation)
+      ipcRenderer.on('reminder:navigate', listener)
+      return () => ipcRenderer.removeListener('reminder:navigate', listener)
+    }
   },
   data: {
     checkWorkspace: () => ipcRenderer.invoke('data:check-workspace'),
+    rebuildSearchIndex: () => ipcRenderer.invoke('data:rebuild-search-index'),
     listBackups: () => ipcRenderer.invoke('data:list-backups'),
     createBackup: (label) => ipcRenderer.invoke('data:create-backup', label),
     verifyBackup: (id) => ipcRenderer.invoke('data:verify-backup', id),
@@ -152,6 +172,11 @@ const api: YouTraceApi = {
       ipcRenderer.invoke('window:toggle-maximize') as Promise<IpcResult<WindowState>>,
     close: () => ipcRenderer.invoke('window:close') as Promise<IpcResult<void>>,
     getState: () => ipcRenderer.invoke('window:get-state') as Promise<IpcResult<WindowState>>,
+    startResize: (edge, screenX, screenY) =>
+      ipcRenderer.send('window:resize-start', edge, screenX, screenY),
+    moveResize: (screenX, screenY) =>
+      ipcRenderer.send('window:resize-move', screenX, screenY),
+    endResize: () => ipcRenderer.send('window:resize-end'),
     onStateChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, state: WindowState): void => {
         callback(state)

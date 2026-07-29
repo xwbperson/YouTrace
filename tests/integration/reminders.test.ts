@@ -84,7 +84,8 @@ describe('background reminders', () => {
       countdowns: false,
       reviews: false,
       stagnation: false,
-      overload: false
+      overload: false,
+      mutedTagIds: []
     })
 
     const notices = reminders.refreshAndProcess(now.toISOString())
@@ -142,9 +143,15 @@ describe('background reminders', () => {
       countdowns: false,
       reviews: false,
       stagnation: false,
-      overload: false
+      overload: false,
+      mutedTagIds: []
     })
     expect(reminders.refreshAndProcess(now.toISOString())).toEqual([])
-    expect(reminders.listUpcoming()).toHaveLength(1)
+    const pending = reminders.listUpcoming()
+    expect(pending).toHaveLength(1)
+    const snoozed = reminders.snooze(pending[0]!.id, 30)
+    expect(Date.parse(snoozed.scheduledAt)).toBeGreaterThan(now.getTime())
+    reminders.dismiss(snoozed.id)
+    expect(reminders.listUpcoming()).toHaveLength(0)
   })
 })

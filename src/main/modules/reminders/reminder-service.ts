@@ -4,6 +4,7 @@ import type {
   UpcomingReminder
 } from '../../../shared/contracts'
 import { notificationSettingsSchema } from '../../../shared/contracts'
+import { YouTraceError } from '../../../shared/errors'
 import { ReminderRepository, type ReminderCandidate } from './reminder-repository'
 
 const defaultSettings: NotificationSettings = notificationSettingsSchema.parse({})
@@ -23,6 +24,38 @@ export class ReminderService {
 
   listUpcoming(): UpcomingReminder[] {
     return this.repository.listUpcoming()
+  }
+
+  snooze(id: string, minutes: number): UpcomingReminder {
+    const now = new Date()
+    const scheduledAt = new Date(now.getTime() + minutes * 60_000).toISOString()
+    if (!this.repository.snooze(id, scheduledAt, now.toISOString())) {
+      throw new YouTraceError({
+        code: 'REMINDER_NOT_FOUND',
+        message: '这项提醒已处理或不存在。'
+      })
+    }
+    const reminder = this.repository.getUpcoming(id)
+    if (!reminder) {
+      throw new YouTraceError({
+        code: 'REMINDER_NOT_FOUND',
+        message: '无法读取延后的提醒。'
+      })
+    }
+    return reminder
+  }
+
+  dismiss(id: string): void {
+    if (!this.repository.dismiss(id, new Date().toISOString())) {
+      throw new YouTraceError({
+        code: 'REMINDER_NOT_FOUND',
+        message: '这项提醒已处理或不存在。'
+      })
+    }
+  }
+
+  muteSource(sourceType: string, sourceId: string): void {
+    this.repository.muteSource(sourceType, sourceId, new Date().toISOString())
   }
 
   refreshAndProcess(nowInput: string): ReminderNotice[] {
@@ -126,7 +159,19 @@ export class ReminderService {
         })
       }
     }
-    for (const candidate of candidates) this.repository.upsertCandidate(candidate, nowIso)
+    for (const candidate of candidates) {
+      if (this.repository.isSourceMuted(candidate.sourceType, candidate.sourceId)) continue
+      if (
+        this.repository.sourceHasAnyTag(
+          candidate.sourceType,
+          candidate.sourceId,
+          settings.mutedTagIds
+        )
+      ) {
+        continue
+      }
+      this.repository.upsertCandidate(candidate, nowIso)
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 7
+export const CURRENT_SCHEMA_VERSION = 9
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -173,6 +173,15 @@ export const INITIAL_SCHEMA_SQL = `
     ON tags(name)
     WHERE archived_at IS NULL AND deleted_at IS NULL;
 
+  INSERT OR IGNORE INTO tags(
+    id, name, color, icon, description, sort_order, favorite, created_at, updated_at
+  ) VALUES
+    ('22000000-0000-4000-8000-000000000001', '学习', '#216E65', 'book-open', '课程、考试与知识积累', 10, 1, datetime('now'), datetime('now')),
+    ('22000000-0000-4000-8000-000000000002', '健身', '#B95D1B', 'dumbbell', '训练与身体状态', 20, 1, datetime('now'), datetime('now')),
+    ('22000000-0000-4000-8000-000000000003', '编程', '#3D6FA8', 'code-2', '开发、测试与发布', 30, 1, datetime('now'), datetime('now')),
+    ('22000000-0000-4000-8000-000000000004', '读书', '#7D5A9E', 'library', '阅读与读书笔记', 40, 1, datetime('now'), datetime('now')),
+    ('22000000-0000-4000-8000-000000000005', '重要', '#A04848', 'flag', '需要优先关注的事项', 50, 1, datetime('now'), datetime('now'));
+
   CREATE TABLE IF NOT EXISTS tag_assignments (
     tag_id TEXT NOT NULL REFERENCES tags(id),
     entity_type TEXT NOT NULL,
@@ -202,6 +211,26 @@ export const INITIAL_SCHEMA_SQL = `
     updated_at TEXT NOT NULL,
     deleted_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS effort_suspensions (
+    id TEXT PRIMARY KEY,
+    effort_id TEXT NOT NULL REFERENCES effort_entries(id),
+    suspended_at TEXT NOT NULL,
+    resumed_at TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS effort_open_suspension_unique
+    ON effort_suspensions(effort_id)
+    WHERE resumed_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS effort_entity_started_index
+    ON effort_entries(entity_type, entity_id, started_at)
+    WHERE voided_at IS NULL AND deleted_at IS NULL;
+
+  CREATE INDEX IF NOT EXISTS effort_started_index
+    ON effort_entries(started_at)
+    WHERE voided_at IS NULL AND deleted_at IS NULL;
 
   CREATE TABLE IF NOT EXISTS habit_rules (
     id TEXT PRIMARY KEY,
@@ -408,6 +437,13 @@ export const INITIAL_SCHEMA_SQL = `
     error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reminder_source_preferences (
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    muted_at TEXT NOT NULL,
+    PRIMARY KEY (source_type, source_id)
   );
 
   CREATE TABLE IF NOT EXISTS reminder_event_payloads (

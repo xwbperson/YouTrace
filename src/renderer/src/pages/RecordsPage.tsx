@@ -43,6 +43,10 @@ export function RecordsPage(): React.JSX.Element {
         })
       )
   })
+  const summaryQuery = useQuery({
+    queryKey: ['effort-summary'],
+    queryFn: async () => unwrap(await window.youtrace.execution.summarizeEfforts(null, null))
+  })
   const evidenceQuery = useQuery({
     queryKey: ['evidence'],
     queryFn: async () => unwrap(await window.youtrace.execution.listEvidence(null, null))
@@ -62,10 +66,7 @@ export function RecordsPage(): React.JSX.Element {
       )
   })
 
-  const totalMinutes = useMemo(
-    () => (effortsQuery.data ?? []).reduce((sum, effort) => sum + effort.effectiveMinutes, 0),
-    [effortsQuery.data]
-  )
+  const totalMinutes = summaryQuery.data?.totalMinutes ?? 0
   const verified = (evidenceQuery.data ?? []).filter((item) =>
     ['verified', 'accepted'].includes(item.verificationStatus)
   ).length
@@ -101,7 +102,7 @@ export function RecordsPage(): React.JSX.Element {
         <article>
           <TimerReset size={18} />
           <span>
-            <strong>{effortsQuery.data?.length ?? 0}</strong>
+            <strong>{summaryQuery.data?.entryCount ?? 0}</strong>
             努力记录
           </span>
         </article>

@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
+  dialog,
   Menu,
   nativeImage,
   net,
@@ -12,6 +13,7 @@ import {
   Tray
 } from 'electron'
 import type { AppBootstrapState } from '../shared/contracts'
+import type { MessageBoxOptions } from 'electron'
 import { registerIpc, windowState } from './ipc/register-ipc'
 import { WorkspaceManager } from './workspace/workspace-manager'
 import { PlanningRepository } from './modules/planning/planning-repository'
@@ -53,6 +55,7 @@ let reminderTimer: NodeJS.Timeout | null = null
 let maintenanceTimer: NodeJS.Timeout | null = null
 let dataService: DataService | null = null
 let settingsService: SettingsService | null = null
+let executionService: ExecutionService | null = null
 
 const singleInstanceLock = app.requestSingleInstanceLock()
 if (!singleInstanceLock) {
@@ -69,14 +72,16 @@ app.whenReady().then(async () => {
   bootstrapState = await workspaceManager.bootstrap()
   const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
   const planningService = new PlanningService(planningRepository)
-  const executionService = new ExecutionService(
+  const practiceRepository = new PracticeRepository(() => workspaceManager.getDatabase())
+  const practiceService = new PracticeService(
+    practiceRepository,
+    planningRepository
+  )
+  executionService = new ExecutionService(
     new ExecutionRepository(() => workspaceManager.getDatabase()),
     planningRepository,
-    planningService
-  )
-  const practiceService = new PracticeService(
-    new PracticeRepository(() => workspaceManager.getDatabase()),
-    planningRepository
+    planningService,
+    practiceService
   )
   const temporalService = new TemporalService(
     new TemporalRepository(() => workspaceManager.getDatabase()),
@@ -184,7 +189,8 @@ function createMainWindow(): void {
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
       if (settingsService?.getPreferences().closeBehavior === 'quit') {
-        isQuitting = true
+        event.preventDefault()
+        void requestApplicationQuit()
         return
       }
       event.preventDefault()
@@ -247,14 +253,63 @@ function createTray(): void {
       { type: 'separator' },
       {
         label: '退出',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        }
+        click: () => void requestApplicationQuit()
       }
     ])
   )
   tray.on('double-click', showMainWindow)
+}
+
+async function requestApplicationQuit(): Promise<void> {
+  if (isQuitting) return
+  const active = executionService?.getActiveEffort() ?? null
+  if (active) {
+    const options: MessageBoxOptions = {
+      type: 'question',
+      title: '退出有迹',
+      message: `“${active.entityTitle ?? '当前事项'}”仍有一段未结束计时`,
+      detail:
+        '保存并停止会记录到当前时刻；保留未结束会暂停计时，重新打开后由你继续。退出后的离线时间不会计入努力。',
+      buttons: ['保存到当前时刻并停止', '保留未结束会话', '取消退出'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true
+    }
+    const choice = mainWindow
+      ? await dialog.showMessageBox(mainWindow, options)
+      : await dialog.showMessageBox(options)
+    if (choice.response === 2) return
+    if (choice.response === 0) {
+      executionService?.stopEffort({
+        id: active.id,
+        result: '退出程序时保存',
+        interruptions: '',
+        obstacles: '',
+        nextStep: '',
+        energy: null,
+        perceivedDifficulty: null
+      })
+    } else {
+      executionService?.suspendEffort(active.id)
+    }
+  } else {
+    const options: MessageBoxOptions = {
+      type: 'question',
+      title: '退出有迹',
+      message: '确定退出有迹吗？',
+      detail: '退出后后台提醒会停止；下次启动时会重新计算并汇总错过的提醒。',
+      buttons: ['退出', '取消'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    }
+    const choice = mainWindow
+      ? await dialog.showMessageBox(mainWindow, options)
+      : await dialog.showMessageBox(options)
+    if (choice.response !== 0) return
+  }
+  isQuitting = true
+  app.quit()
 }
 
 function showMainWindow(): void {
@@ -278,7 +333,13 @@ function dispatchReminders(): void {
         body: notice.body,
         silent: false
       })
-      notification.on('click', showMainWindow)
+      notification.on('click', () => {
+        showMainWindow()
+        mainWindow?.webContents.send('reminder:navigate', {
+          sourceType: notice.sourceType,
+          sourceId: notice.sourceId
+        })
+      })
       notification.show()
     }
   } catch {

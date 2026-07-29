@@ -92,7 +92,7 @@ test('creates a verified backup and restores a trashed task from the data center
     await expect(page.getByRole('heading', { name: '数据中心' })).toBeVisible()
 
     await page.getByText('运行完整性检查').click()
-    await expect(page.getByText(/数据库 ok · schema v7/)).toBeVisible()
+    await expect(page.getByText(/数据库 ok · schema v9/)).toBeVisible()
 
     await page.getByText('创建已验证备份').click()
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()

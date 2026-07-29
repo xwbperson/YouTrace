@@ -15,6 +15,7 @@ export function Onboarding({ initialState, onReady }: OnboardingProps): React.JS
   const [selectedPath, setSelectedPath] = useState(
     initialState.status === 'workspace-unavailable' ? initialState.lastPath : ''
   )
+  const [readOnly, setReadOnly] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(
     initialState.status === 'workspace-unavailable' ? initialState.reason : ''
@@ -41,7 +42,7 @@ export function Onboarding({ initialState, onReady }: OnboardingProps): React.JS
     const result =
       mode === 'create'
         ? await window.youtrace.workspace.create({ rootPath: selectedPath, name })
-        : await window.youtrace.workspace.open({ rootPath: selectedPath, readOnly: false })
+        : await window.youtrace.workspace.open({ rootPath: selectedPath, readOnly })
 
     setBusy(false)
     if (result.ok) {
@@ -127,6 +128,13 @@ export function Onboarding({ initialState, onReady }: OnboardingProps): React.JS
             </span>
             <MoveRight size={18} />
           </button>
+
+          {mode === 'open' && (
+            <label className="readonly-workspace-option">
+              <input type="checkbox" checked={readOnly} onChange={(event) => setReadOnly(event.target.checked)} />
+              <span><strong>只读打开</strong><small>适合检查被其他进程占用的工作区，不会写入任何业务数据。</small></span>
+            </label>
+          )}
 
           {error && (
             <div className="inline-error" role="alert">

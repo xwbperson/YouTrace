@@ -16,6 +16,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:electron": "playwright test",
+    "test:performance": "vitest run --config vitest.performance.config.ts",
     "dist:win": "npm run build && electron-builder --win nsis portable",
     "postinstall": "electron-builder install-app-deps"
   },
