@@ -78,6 +78,17 @@ const api: YouTraceApi = {
     listMistakes: (projectId) => ipcRenderer.invoke('practice:list-mistakes', projectId),
     createMistake: (input) => ipcRenderer.invoke('practice:create-mistake', input)
   },
+  temporal: {
+    listPlans: (startDate, endDate) =>
+      ipcRenderer.invoke('temporal:list-plans', startDate, endDate),
+    createPlan: (input) => ipcRenderer.invoke('temporal:create-plan', input),
+    listTimeBlocks: (input) => ipcRenderer.invoke('temporal:list-time-blocks', input),
+    createTimeBlock: (input) => ipcRenderer.invoke('temporal:create-time-block', input),
+    moveTimeBlock: (input) => ipcRenderer.invoke('temporal:move-time-block', input),
+    trashTimeBlock: (id) => ipcRenderer.invoke('temporal:trash-time-block', id),
+    listCountdowns: (now) => ipcRenderer.invoke('temporal:list-countdowns', now),
+    createCountdown: (input) => ipcRenderer.invoke('temporal:create-countdown', input)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,
     toggleMaximize: () =>

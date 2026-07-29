@@ -1206,6 +1206,552 @@ kbd {
   }
 }
 
+.calendar-page {
+  max-width: 1460px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 30px 34px 38px;
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.calendar-toolbar h1 {
+  margin: 5px 0 3px;
+  font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
+  font-size: 27px;
+  font-weight: 650;
+}
+
+.calendar-toolbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.calendar-tabs {
+  display: flex;
+  width: max-content;
+  gap: 3px;
+  margin-bottom: 13px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.calendar-tabs button {
+  min-height: 30px;
+  padding: 0 13px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.calendar-tabs button.active {
+  color: var(--trace);
+  background: var(--trace-soft);
+}
+
+.week-calendar {
+  overflow: hidden;
+  padding: 0;
+}
+
+.week-calendar > header {
+  display: flex;
+  min-height: 55px;
+  align-items: center;
+  justify-content: center;
+  gap: 17px;
+  border-bottom: 1px solid var(--border);
+}
+
+.week-calendar > header button {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  color: var(--muted);
+  background: var(--canvas);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.week-calendar > header > div {
+  min-width: 210px;
+  text-align: center;
+}
+
+.week-calendar > header strong,
+.week-calendar > header span {
+  display: block;
+}
+
+.week-calendar > header strong {
+  font-size: 10px;
+}
+
+.week-calendar > header span {
+  margin-top: 3px;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.week-grid {
+  display: grid;
+  min-height: 530px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-day {
+  min-width: 0;
+  padding: 0 7px 11px;
+  border-right: 1px solid var(--border);
+}
+
+.calendar-day:last-child {
+  border-right: 0;
+}
+
+.calendar-day > header {
+  display: grid;
+  min-height: 69px;
+  place-content: center;
+  justify-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-day > header span,
+.calendar-day > header small {
+  color: var(--faint);
+  font-size: 7px;
+}
+
+.calendar-day > header strong {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 50%;
+  font-family: Bahnschrift, "Segoe UI", sans-serif;
+  font-size: 11px;
+}
+
+.calendar-day.today > header strong {
+  color: white;
+  background: var(--trace);
+}
+
+.calendar-day > header small.overloaded {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.day-blocks {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 450px;
+  padding-top: 8px;
+}
+
+.day-blocks article {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 9px;
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+  border-left: 3px solid var(--trace);
+  border-radius: 5px;
+  cursor: grab;
+}
+
+.day-blocks article.conflict {
+  color: var(--time);
+  background: var(--time-soft);
+  border-left-color: var(--time);
+}
+
+.day-blocks article > span,
+.day-blocks article > small {
+  font-family: Bahnschrift, "Segoe UI", sans-serif;
+  font-size: 7px;
+}
+
+.day-blocks article > strong {
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day-blocks article > svg {
+  position: absolute;
+  top: 7px;
+  right: 6px;
+}
+
+.day-empty {
+  display: grid;
+  min-height: 54px;
+  place-items: center;
+  color: var(--faint);
+  border: 1px dashed var(--border);
+  border-radius: 5px;
+  font-size: 7px;
+}
+
+.calendar-warning {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  color: var(--time);
+  background: var(--time-soft);
+  border-top: 1px solid color-mix(in srgb, var(--time) 20%, transparent);
+  font-size: 8px;
+}
+
+.plan-board,
+.countdown-board {
+  display: grid;
+  gap: 11px;
+}
+
+.plan-card {
+  padding: 19px;
+}
+
+.plan-card > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.plan-card > header span {
+  color: var(--trace);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.plan-card h2 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
+.plan-card > header > strong {
+  color: var(--faint);
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.plan-card > p {
+  margin: 13px 0 10px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.plan-capacity {
+  height: 5px;
+  overflow: hidden;
+  background: var(--border);
+  border-radius: 999px;
+}
+
+.plan-capacity > span {
+  display: block;
+  height: 100%;
+  background: var(--trace);
+}
+
+.plan-card.overloaded .plan-capacity > span {
+  background: var(--danger);
+}
+
+.plan-card > footer {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 8px;
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.plan-card > footer strong {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.plan-card > footer em {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--danger);
+  font-style: normal;
+}
+
+.plan-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.plan-items span {
+  padding: 5px 7px;
+  background: var(--canvas);
+  border-radius: 5px;
+  font-size: 8px;
+}
+
+.plan-task-picker {
+  display: grid;
+  max-height: 190px;
+  gap: 5px;
+  overflow: auto;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.plan-task-picker legend {
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.plan-task-picker button {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 9px;
+  text-align: left;
+  background: var(--canvas);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.plan-task-picker button.active {
+  color: var(--trace);
+  background: var(--trace-soft);
+  border-color: color-mix(in srgb, var(--trace) 20%, transparent);
+}
+
+.plan-task-picker button span {
+  color: var(--faint);
+  font-size: 7px;
+}
+
+.countdown-board {
+  padding: 21px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-panel);
+}
+
+.countdown-board > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 17px;
+  border-bottom: 1px solid var(--border);
+}
+
+.countdown-board > header h2 {
+  margin: 5px 0 0;
+  font-size: 20px;
+}
+
+.countdown-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 17px;
+}
+
+.countdown-card {
+  padding: 14px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--trace);
+  border-radius: 8px;
+}
+
+.countdown-card.countdown-attention {
+  border-top-color: var(--time);
+}
+
+.countdown-card.countdown-danger,
+.countdown-card.countdown-overdue {
+  border-top-color: var(--danger);
+}
+
+.countdown-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--trace);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.countdown-attention > header {
+  color: var(--time);
+}
+
+.countdown-danger > header,
+.countdown-overdue > header {
+  color: var(--danger);
+}
+
+.countdown-days {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 15px;
+}
+
+.countdown-days strong {
+  font-family: Bahnschrift, "Segoe UI", sans-serif;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.countdown-days span {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.countdown-card h3 {
+  margin: 7px 0 13px;
+  font-size: 11px;
+}
+
+.countdown-facts {
+  display: grid;
+  gap: 6px;
+}
+
+.countdown-facts span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.countdown-card > p {
+  margin: 11px 0 0;
+  padding-top: 9px;
+  color: var(--faint);
+  border-top: 1px solid var(--border);
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.calendar-empty {
+  display: grid;
+  min-height: 410px;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.calendar-empty > svg {
+  margin-bottom: 12px;
+  color: var(--trace);
+}
+
+.calendar-empty > strong {
+  font-size: 12px;
+}
+
+.calendar-empty > p {
+  max-width: 370px;
+  margin: 7px 0 16px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.home-countdown-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.home-countdown-list .countdown-card.compact {
+  display: grid;
+  min-height: 63px;
+  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 9px;
+  padding: 8px 10px;
+  border-top-width: 1px;
+  border-left: 3px solid var(--trace);
+}
+
+.home-countdown-list .countdown-card.compact > header {
+  grid-column: 2;
+}
+
+.home-countdown-list .countdown-card.compact .countdown-days {
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+
+.home-countdown-list .countdown-card.compact .countdown-days strong {
+  font-size: 22px;
+}
+
+.home-countdown-list .countdown-card.compact .countdown-days span {
+  display: none;
+}
+
+.home-countdown-list .countdown-card.compact h3 {
+  grid-column: 2;
+  margin: 1px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.countdown-empty {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .countdown-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .week-grid {
+    overflow-x: auto;
+    grid-template-columns: repeat(7, minmax(125px, 1fr));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

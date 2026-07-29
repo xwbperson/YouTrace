@@ -35,7 +35,7 @@ test('starts the production Electron shell with the isolated preload API', async
     expect(securityBoundary).toEqual({
       processType: 'undefined',
       requireType: 'undefined',
-      apiKeys: ['app', 'dialog', 'workspace', 'planning', 'execution', 'practice', 'window']
+      apiKeys: ['app', 'dialog', 'workspace', 'planning', 'execution', 'practice', 'temporal', 'window']
     })
     expect(rendererErrors).toEqual([])
     await page.screenshot({ path: 'test-results/onboarding.png' })

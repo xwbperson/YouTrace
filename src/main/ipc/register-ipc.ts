@@ -18,15 +18,20 @@ import {
   createProjectInputSchema,
   createTagInputSchema,
   createTaskInputSchema,
+  createCountdownInputSchema,
+  createPlanInputSchema,
+  createTimeBlockInputSchema,
   createWorkspaceInputSchema,
   effortListInputSchema,
   openWorkspaceInputSchema,
+  moveTimeBlockInputSchema,
   recordHabitInputSchema,
   recordMetricInputSchema,
   searchInputSchema,
   startEffortInputSchema,
   stopEffortInputSchema,
   taskListInputSchema,
+  timeRangeInputSchema,
   updateEvidenceStatusInputSchema,
   updateGoalInputSchema,
   updateMilestoneInputSchema,
@@ -41,6 +46,7 @@ import type { WorkspaceManager } from '../workspace/workspace-manager'
 import type { PlanningService } from '../modules/planning/planning-service'
 import type { ExecutionService } from '../modules/execution/execution-service'
 import type { PracticeService } from '../modules/practice/practice-service'
+import type { TemporalService } from '../modules/temporal/temporal-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
@@ -48,6 +54,7 @@ interface RegisterIpcOptions {
   planningService: PlanningService
   executionService: ExecutionService
   practiceService: PracticeService
+  temporalService: TemporalService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
@@ -59,6 +66,7 @@ export function registerIpc(options: RegisterIpcOptions): void {
     planningService,
     executionService,
     practiceService,
+    temporalService,
     getBootstrapState,
     setBootstrapState
   } = options
@@ -448,6 +456,63 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return practiceService.createMistake(createMistakeInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:list-plans', (event, rawStartDate, rawEndDate) =>
+    wrap(() => {
+      trusted(event)
+      const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      return temporalService.listPlans(date.parse(rawStartDate), date.parse(rawEndDate))
+    })
+  )
+
+  ipcMain.handle('temporal:create-plan', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.createPlan(createPlanInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:list-time-blocks', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.listTimeBlocks(timeRangeInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:create-time-block', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.createTimeBlock(createTimeBlockInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:move-time-block', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.moveTimeBlock(moveTimeBlockInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:trash-time-block', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      temporalService.trashTimeBlock(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('temporal:list-countdowns', (event, rawNow) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.listCountdowns(z.string().datetime().parse(rawNow))
+    })
+  )
+
+  ipcMain.handle('temporal:create-countdown', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.createCountdown(createCountdownInputSchema.parse(rawInput))
     })
   )
 

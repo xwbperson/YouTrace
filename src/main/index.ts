@@ -18,6 +18,8 @@ import { ExecutionRepository } from './modules/execution/execution-repository'
 import { ExecutionService } from './modules/execution/execution-service'
 import { PracticeRepository } from './modules/practice/practice-repository'
 import { PracticeService } from './modules/practice/practice-service'
+import { TemporalRepository } from './modules/temporal/temporal-repository'
+import { TemporalService } from './modules/temporal/temporal-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -61,6 +63,10 @@ app.whenReady().then(async () => {
     new PracticeRepository(() => workspaceManager.getDatabase()),
     planningRepository
   )
+  const temporalService = new TemporalService(
+    new TemporalRepository(() => workspaceManager.getDatabase()),
+    planningRepository
+  )
 
   registerApplicationProtocol()
   registerIpc({
@@ -69,6 +75,7 @@ app.whenReady().then(async () => {
     planningService,
     executionService,
     practiceService,
+    temporalService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state

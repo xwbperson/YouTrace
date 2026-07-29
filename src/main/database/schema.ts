@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -285,6 +285,83 @@ export const INITIAL_SCHEMA_SQL = `
     updated_at TEXT NOT NULL,
     archived_at TEXT,
     deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS countdown_workload (
+    countdown_id TEXT PRIMARY KEY REFERENCES countdowns(id),
+    remaining_minutes INTEGER,
+    recent_window_days INTEGER NOT NULL DEFAULT 28,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS plan_periods (
+    id TEXT PRIMARY KEY,
+    period_type TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    title TEXT NOT NULL,
+    focus_result TEXT NOT NULL DEFAULT '',
+    capacity_minutes INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS plan_items (
+    id TEXT PRIMARY KEY,
+    plan_id TEXT NOT NULL REFERENCES plan_periods(id),
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    title_snapshot TEXT NOT NULL,
+    committed INTEGER NOT NULL DEFAULT 1,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    UNIQUE(plan_id, entity_type, entity_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS time_blocks (
+    id TEXT PRIMARY KEY,
+    task_id TEXT REFERENCES tasks(id),
+    title TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    timezone TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    CHECK (ends_at > starts_at)
+  );
+
+  CREATE INDEX IF NOT EXISTS time_blocks_range_index
+    ON time_blocks(starts_at, ends_at)
+    WHERE deleted_at IS NULL;
+
+  CREATE TABLE IF NOT EXISTS reminder_rules (
+    id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    trigger_at TEXT NOT NULL,
+    timezone TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    quiet_policy TEXT NOT NULL DEFAULT 'defer',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(source_type, source_id, trigger_at)
+  );
+
+  CREATE TABLE IF NOT EXISTS reminder_events (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT NOT NULL REFERENCES reminder_rules(id),
+    scheduled_at TEXT NOT NULL,
+    fired_at TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    dedupe_key TEXT NOT NULL UNIQUE,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS course_profiles (

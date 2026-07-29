@@ -24,6 +24,8 @@ import { RecordsPage } from '../pages/RecordsPage'
 import { MemosPage } from '../pages/MemosPage'
 import { TagsPage } from '../pages/TagsPage'
 import { GlobalSearch } from './GlobalSearch'
+import { CalendarPage } from '../pages/CalendarPage'
+import { CountdownSummary } from './CountdownSummary'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
@@ -130,6 +132,8 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <TodayPage />
           ) : active === 'records' ? (
             <RecordsPage />
+          ) : active === 'calendar' ? (
+            <CalendarPage />
           ) : active === 'memos' ? (
             <MemosPage />
           ) : active === 'tags' ? (
@@ -196,21 +200,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             </div>
           </section>
 
-          <section className="countdowns panel">
-            <div className="panel-heading compact">
-              <div>
-                <span className="section-label">临近时刻</span>
-                <h2>倒计时</h2>
-              </div>
-              <button className="icon-action" type="button" aria-label="新建倒计时">
-                <Plus size={17} />
-              </button>
-            </div>
-            <div className="countdown-empty">
-              <span className="countdown-number">—</span>
-              <p>建立一个明确期限后，这里会显示剩余时间和所需速度。</p>
-            </div>
-          </section>
+          <CountdownSummary onOpenCalendar={() => setActive('calendar')} />
 
           <section className="trace-panel panel">
             <div className="panel-heading">

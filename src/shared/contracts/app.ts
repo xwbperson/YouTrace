@@ -48,6 +48,16 @@ import type {
   RecordHabitInput,
   RecordMetricInput
 } from './practice'
+import type {
+  Countdown,
+  CreateCountdownInput,
+  CreatePlanInput,
+  CreateTimeBlockInput,
+  MoveTimeBlockInput,
+  PlanPeriod,
+  TimeBlock,
+  TimeRangeInput
+} from './temporal'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -166,6 +176,16 @@ export interface YouTraceApi {
     createKnowledge(input: CreateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
     listMistakes(projectId: string): Promise<IpcResult<Mistake[]>>
     createMistake(input: CreateMistakeInput): Promise<IpcResult<Mistake>>
+  }
+  temporal: {
+    listPlans(startDate: string, endDate: string): Promise<IpcResult<PlanPeriod[]>>
+    createPlan(input: CreatePlanInput): Promise<IpcResult<PlanPeriod>>
+    listTimeBlocks(input: TimeRangeInput): Promise<IpcResult<TimeBlock[]>>
+    createTimeBlock(input: CreateTimeBlockInput): Promise<IpcResult<TimeBlock>>
+    moveTimeBlock(input: MoveTimeBlockInput): Promise<IpcResult<TimeBlock>>
+    trashTimeBlock(id: string): Promise<IpcResult<void>>
+    listCountdowns(now: string): Promise<IpcResult<Countdown[]>>
+    createCountdown(input: CreateCountdownInput): Promise<IpcResult<Countdown>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>
