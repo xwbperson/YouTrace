@@ -16,9 +16,14 @@ import {
   Tags,
   TimerReset
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../../shared/contracts'
 import { PlanningPage } from '../pages/PlanningPage'
+import { TodayPage } from '../pages/TodayPage'
+import { RecordsPage } from '../pages/RecordsPage'
+import { MemosPage } from '../pages/MemosPage'
+import { TagsPage } from '../pages/TagsPage'
+import { GlobalSearch } from './GlobalSearch'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
@@ -35,7 +40,8 @@ const navigation = [
 ] as const
 
 export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
-  const [active, setActive] = useState<(typeof navigation)[number]['id']>('home')
+  const [active, setActive] = useState<string>('home')
+  const [searchOpen, setSearchOpen] = useState(false)
   const today = useMemo(
     () =>
       new Intl.DateTimeFormat('zh-CN', {
@@ -45,6 +51,17 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       }).format(new Date()),
     []
   )
+
+  useEffect(() => {
+    const listener = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', listener)
+    return () => window.removeEventListener('keydown', listener)
+  }, [])
 
   return (
     <div className="workspace-shell">
@@ -79,7 +96,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
 
         <div className="sidebar-section">
           <span className="sidebar-label">整理</span>
-          <button type="button">
+          <button type="button" onClick={() => setActive('tags')}>
             <Tags size={17} />
             <span>标签</span>
           </button>
@@ -106,8 +123,20 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       </aside>
 
       <section className="workspace-content">
-        {active === 'plan' ? (
-          <PlanningPage />
+        {active !== 'home' ? (
+          active === 'plan' ? (
+            <PlanningPage />
+          ) : active === 'today' ? (
+            <TodayPage />
+          ) : active === 'records' ? (
+            <RecordsPage />
+          ) : active === 'memos' ? (
+            <MemosPage />
+          ) : active === 'tags' ? (
+            <TagsPage />
+          ) : (
+            <SectionPlaceholder section={navigation.find((item) => item.id === active)?.label ?? '功能'} />
+          )
         ) : (
           <>
             <header className="global-toolbar">
@@ -116,7 +145,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <h1>今天，从一件真正重要的事开始。</h1>
           </div>
           <div className="toolbar-actions">
-            <button className="search-trigger" type="button">
+            <button className="search-trigger" type="button" onClick={() => setSearchOpen(true)}>
               <Search size={17} />
               <span>搜索目标、任务和记录</span>
               <kbd>Ctrl K</kbd>
@@ -262,6 +291,25 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
           </>
         )}
       </section>
+      <GlobalSearch
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        onNavigate={(entityType) => {
+          if (entityType === 'memo') setActive('memos')
+          else if (entityType === 'effort' || entityType === 'evidence') setActive('records')
+          else setActive('plan')
+        }}
+      />
     </div>
+  )
+}
+
+function SectionPlaceholder({ section }: { section: string }): React.JSX.Element {
+  return (
+    <main className="section-placeholder">
+      <span className="section-label">正在接入完整闭环</span>
+      <h1>{section}</h1>
+      <p>这一模块正在按项目规范连接领域服务与本地工作区数据。</p>
+    </main>
   )
 }

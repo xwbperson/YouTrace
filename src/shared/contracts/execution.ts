@@ -1,0 +1,140 @@
+import { z } from 'zod'
+
+export const effortEntityTypeSchema = z.enum([
+  'task',
+  'habit',
+  'milestone',
+  'project',
+  'goal',
+  'memo'
+])
+
+export const startEffortInputSchema = z.object({
+  entityType: effortEntityTypeSchema,
+  entityId: z.string().uuid(),
+  tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
+export const stopEffortInputSchema = z.object({
+  id: z.string().uuid(),
+  result: z.string().max(10_000).default(''),
+  interruptions: z.string().max(5_000).default(''),
+  obstacles: z.string().max(5_000).default(''),
+  nextStep: z.string().max(5_000).default(''),
+  energy: z.number().int().min(1).max(5).nullable().default(null),
+  perceivedDifficulty: z.number().int().min(1).max(5).nullable().default(null)
+})
+
+export const createManualEffortInputSchema = z.object({
+  entityType: effortEntityTypeSchema,
+  entityId: z.string().uuid(),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime(),
+  effectiveMinutes: z.number().int().min(0).max(525_600),
+  result: z.string().max(10_000).default(''),
+  interruptions: z.string().max(5_000).default(''),
+  obstacles: z.string().max(5_000).default(''),
+  nextStep: z.string().max(5_000).default(''),
+  energy: z.number().int().min(1).max(5).nullable().default(null),
+  perceivedDifficulty: z.number().int().min(1).max(5).nullable().default(null),
+  tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
+export const effortListInputSchema = z.object({
+  entityType: effortEntityTypeSchema.nullable().default(null),
+  entityId: z.string().uuid().nullable().default(null),
+  from: z.string().datetime().nullable().default(null),
+  to: z.string().datetime().nullable().default(null),
+  limit: z.number().int().min(1).max(500).default(100),
+  offset: z.number().int().min(0).default(0)
+})
+
+export const evidenceStatusSchema = z.enum(['prepared', 'completed', 'verified', 'accepted'])
+export const evidenceKindSchema = z.enum(['file', 'image', 'link', 'note', 'score', 'feedback'])
+
+export const createEvidenceInputSchema = z.object({
+  kind: evidenceKindSchema,
+  title: z.string().trim().min(1).max(240),
+  note: z.string().max(20_000).default(''),
+  source: z.string().max(4_000).nullable().default(null),
+  verificationStatus: evidenceStatusSchema.default('prepared'),
+  entityType: z.string().max(60).nullable().default(null),
+  entityId: z.string().uuid().nullable().default(null),
+  tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
+export const updateEvidenceStatusInputSchema = z.object({
+  id: z.string().uuid(),
+  status: evidenceStatusSchema,
+  reason: z.string().max(2_000).default('')
+})
+
+export const memoKindSchema = z.enum(['memo', 'knowledge', 'question', 'mistake', 'idea', 'meeting'])
+export const createMemoInputSchema = z.object({
+  kind: memoKindSchema.default('memo'),
+  title: z.string().max(240).default(''),
+  body: z.string().trim().min(1).max(100_000),
+  tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
+export const convertMemoToTaskInputSchema = z.object({
+  memoId: z.string().uuid(),
+  projectId: z.string().uuid().nullable().default(null),
+  title: z.string().trim().min(1).max(240),
+  estimatedMinutes: z.number().int().positive().nullable().default(null)
+})
+
+export interface EffortEntry {
+  id: string
+  entityType: z.infer<typeof effortEntityTypeSchema>
+  entityId: string | null
+  entityTitle: string | null
+  source: 'timer' | 'manual'
+  startedAt: string
+  endedAt: string | null
+  effectiveMinutes: number
+  energy: number | null
+  perceivedDifficulty: number | null
+  result: string
+  interruptions: string
+  obstacles: string
+  nextStep: string
+  tagIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Evidence {
+  id: string
+  kind: z.infer<typeof evidenceKindSchema>
+  title: string
+  note: string
+  source: string | null
+  verificationStatus: z.infer<typeof evidenceStatusSchema>
+  entityType: string | null
+  entityId: string | null
+  tagIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Memo {
+  id: string
+  kind: z.infer<typeof memoKindSchema>
+  title: string
+  body: string
+  inbox: boolean
+  processedAt: string | null
+  tagIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export type StartEffortInput = z.infer<typeof startEffortInputSchema>
+export type StopEffortInput = z.infer<typeof stopEffortInputSchema>
+export type CreateManualEffortInput = z.infer<typeof createManualEffortInputSchema>
+export type EffortListInput = z.infer<typeof effortListInputSchema>
+export type CreateEvidenceInput = z.infer<typeof createEvidenceInputSchema>
+export type UpdateEvidenceStatusInput = z.infer<typeof updateEvidenceStatusInputSchema>
+export type CreateMemoInput = z.infer<typeof createMemoInputSchema>
+export type ConvertMemoToTaskInput = z.infer<typeof convertMemoToTaskInputSchema>

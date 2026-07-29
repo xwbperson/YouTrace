@@ -19,6 +19,22 @@ export const taskStatusSchema = z.enum([
   'cancelled'
 ])
 export const prioritySchema = z.enum(['low', 'medium', 'high', 'critical'])
+export const goalStatusSchema = z.enum([
+  'planned',
+  'active',
+  'paused',
+  'completed',
+  'cancelled'
+])
+export const milestoneStatusSchema = z.enum([
+  'not_started',
+  'in_progress',
+  'completed',
+  'verified',
+  'accepted',
+  'paused',
+  'cancelled'
+])
 
 const nullableDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable()
 
@@ -62,6 +78,60 @@ export const createTaskInputSchema = z.object({
   verificationCriteria: z.string().max(5_000).default(''),
   includeInProgress: z.boolean().default(true),
   tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
+export const createGoalInputSchema = z.object({
+  projectId: z.string().uuid().nullable().default(null),
+  title: z.string().trim().min(1).max(200),
+  successCriteria: z.string().max(5_000).default(''),
+  targetDate: nullableDateSchema.default(null),
+  measureType: z.enum(['milestone', 'metric', 'workload', 'manual']).default('milestone'),
+  status: goalStatusSchema.default('active')
+})
+
+export const updateGoalInputSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  successCriteria: z.string().max(5_000).optional(),
+  targetDate: nullableDateSchema.optional(),
+  measureType: z.enum(['milestone', 'metric', 'workload', 'manual']).optional(),
+  status: goalStatusSchema.optional()
+})
+
+export const createMilestoneInputSchema = z.object({
+  projectId: z.string().uuid().nullable().default(null),
+  goalId: z.string().uuid().nullable().default(null),
+  title: z.string().trim().min(1).max(200),
+  description: z.string().max(10_000).default(''),
+  plannedDate: nullableDateSchema.default(null),
+  estimatedMinutes: z.number().int().positive().max(525_600).nullable().default(null),
+  manualWeight: z.number().positive().max(1_000_000).nullable().default(null),
+  mastery: z.number().int().min(0).max(100).nullable().default(null),
+  verificationCriteria: z.string().max(5_000).default(''),
+  status: milestoneStatusSchema.default('not_started'),
+  includeInProgress: z.boolean().default(true)
+})
+
+export const updateMilestoneInputSchema = z.object({
+  id: z.string().uuid(),
+  projectId: z.string().uuid().nullable().optional(),
+  goalId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  description: z.string().max(10_000).optional(),
+  plannedDate: nullableDateSchema.optional(),
+  estimatedMinutes: z.number().int().positive().max(525_600).nullable().optional(),
+  manualWeight: z.number().positive().max(1_000_000).nullable().optional(),
+  mastery: z.number().int().min(0).max(100).nullable().optional(),
+  verificationCriteria: z.string().max(5_000).optional(),
+  status: milestoneStatusSchema.optional(),
+  includeInProgress: z.boolean().optional()
+})
+
+export const addTaskDependencyInputSchema = z.object({
+  taskId: z.string().uuid(),
+  prerequisiteTaskId: z.string().uuid(),
+  overrideReason: z.string().max(2_000).nullable().default(null)
 })
 
 export const updateTaskInputSchema = z.object({
@@ -166,6 +236,47 @@ export interface Task {
   updatedAt: string
 }
 
+export interface Goal {
+  id: string
+  projectId: string | null
+  title: string
+  successCriteria: string
+  targetDate: string | null
+  measureType: 'milestone' | 'metric' | 'workload' | 'manual'
+  status: z.infer<typeof goalStatusSchema>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Milestone {
+  id: string
+  projectId: string | null
+  goalId: string | null
+  title: string
+  description: string
+  plannedDate: string | null
+  completedDate: string | null
+  estimatedMinutes: number | null
+  manualWeight: number | null
+  mastery: number | null
+  verificationCriteria: string
+  status: z.infer<typeof milestoneStatusSchema>
+  includeInProgress: boolean
+  progress: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TaskDependency {
+  taskId: string
+  prerequisiteTaskId: string
+  prerequisiteTitle: string
+  prerequisiteStatus: Task['status']
+  prerequisiteProjectId: string | null
+  overrideReason: string | null
+  createdAt: string
+}
+
 export interface Tag {
   id: string
   name: string
@@ -188,6 +299,11 @@ export type CreateProjectInput = z.infer<typeof createProjectInputSchema>
 export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>
 export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>
+export type CreateGoalInput = z.infer<typeof createGoalInputSchema>
+export type UpdateGoalInput = z.infer<typeof updateGoalInputSchema>
+export type CreateMilestoneInput = z.infer<typeof createMilestoneInputSchema>
+export type UpdateMilestoneInput = z.infer<typeof updateMilestoneInputSchema>
+export type AddTaskDependencyInput = z.infer<typeof addTaskDependencyInputSchema>
 export type TaskListInput = z.infer<typeof taskListInputSchema>
 export type CreateTagInput = z.infer<typeof createTagInputSchema>
 export type AssignTagInput = z.infer<typeof assignTagInputSchema>

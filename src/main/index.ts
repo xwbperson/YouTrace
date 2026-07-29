@@ -14,6 +14,8 @@ import { registerIpc, windowState } from './ipc/register-ipc'
 import { WorkspaceManager } from './workspace/workspace-manager'
 import { PlanningRepository } from './modules/planning/planning-repository'
 import { PlanningService } from './modules/planning/planning-service'
+import { ExecutionRepository } from './modules/execution/execution-repository'
+import { ExecutionService } from './modules/execution/execution-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -46,8 +48,12 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('com.youtrace.desktop')
   workspaceManager = new WorkspaceManager(app.getPath('userData'))
   bootstrapState = await workspaceManager.bootstrap()
-  const planningService = new PlanningService(
-    new PlanningRepository(() => workspaceManager.getDatabase())
+  const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
+  const planningService = new PlanningService(planningRepository)
+  const executionService = new ExecutionService(
+    new ExecutionRepository(() => workspaceManager.getDatabase()),
+    planningRepository,
+    planningService
   )
 
   registerApplicationProtocol()
@@ -55,6 +61,7 @@ app.whenReady().then(async () => {
     getWindow: () => mainWindow,
     workspaceManager,
     planningService,
+    executionService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state

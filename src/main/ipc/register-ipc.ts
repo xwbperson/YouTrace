@@ -2,14 +2,27 @@ import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import {
+  addTaskDependencyInputSchema,
   assignTagInputSchema,
+  convertMemoToTaskInputSchema,
+  createGoalInputSchema,
+  createEvidenceInputSchema,
+  createManualEffortInputSchema,
+  createMemoInputSchema,
+  createMilestoneInputSchema,
   createProjectInputSchema,
   createTagInputSchema,
   createTaskInputSchema,
   createWorkspaceInputSchema,
+  effortListInputSchema,
   openWorkspaceInputSchema,
   searchInputSchema,
+  startEffortInputSchema,
+  stopEffortInputSchema,
   taskListInputSchema,
+  updateEvidenceStatusInputSchema,
+  updateGoalInputSchema,
+  updateMilestoneInputSchema,
   updateProjectInputSchema,
   updateTaskInputSchema,
   type AppBootstrapState,
@@ -19,18 +32,26 @@ import {
 import { toAppError, YouTraceError } from '../../shared/errors'
 import type { WorkspaceManager } from '../workspace/workspace-manager'
 import type { PlanningService } from '../modules/planning/planning-service'
+import type { ExecutionService } from '../modules/execution/execution-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
   workspaceManager: WorkspaceManager
   planningService: PlanningService
+  executionService: ExecutionService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
 
 export function registerIpc(options: RegisterIpcOptions): void {
-  const { getWindow, workspaceManager, planningService, getBootstrapState, setBootstrapState } =
-    options
+  const {
+    getWindow,
+    workspaceManager,
+    planningService,
+    executionService,
+    getBootstrapState,
+    setBootstrapState
+  } = options
 
   const trusted = (event: IpcMainInvokeEvent): BrowserWindow => {
     const window = getWindow()
@@ -142,6 +163,49 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:list-goals', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      const projectId = z.string().uuid().nullable().parse(rawProjectId)
+      return planningService.listGoals(projectId)
+    })
+  )
+
+  ipcMain.handle('planning:create-goal', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createGoal(createGoalInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-goal', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateGoal(updateGoalInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:list-milestones', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listMilestones(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('planning:create-milestone', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createMilestone(createMilestoneInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-milestone', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateMilestone(updateMilestoneInputSchema.parse(rawInput))
+    })
+  )
+
   ipcMain.handle('planning:list-tasks', (event, rawInput) =>
     wrap(() => {
       trusted(event)
@@ -170,6 +234,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:add-task-dependency', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      planningService.addTaskDependency(addTaskDependencyInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:list-task-dependencies', (event, rawTaskId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listTaskDependencies(z.string().uuid().parse(rawTaskId))
+    })
+  )
+
   ipcMain.handle('planning:list-tags', (event) =>
     wrap(() => {
       trusted(event)
@@ -195,6 +273,85 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return planningService.search(searchInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:get-active-effort', (event) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.getActiveEffort()
+    })
+  )
+
+  ipcMain.handle('execution:start-effort', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.startEffort(startEffortInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:stop-effort', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.stopEffort(stopEffortInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:create-manual-effort', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.createManualEffort(createManualEffortInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:list-efforts', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.listEfforts(effortListInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:create-evidence', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.createEvidence(createEvidenceInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:list-evidence', (event, rawEntityType, rawEntityId) =>
+    wrap(() => {
+      trusted(event)
+      const entityType = z.string().max(60).nullable().parse(rawEntityType)
+      const entityId = z.string().uuid().nullable().parse(rawEntityId)
+      return executionService.listEvidence(entityType, entityId)
+    })
+  )
+
+  ipcMain.handle('execution:update-evidence-status', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.updateEvidenceStatus(updateEvidenceStatusInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:create-memo', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.createMemo(createMemoInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:list-memos', (event, rawInboxOnly) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.listMemos(z.boolean().parse(rawInboxOnly))
+    })
+  )
+
+  ipcMain.handle('execution:convert-memo-to-task', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.convertMemoToTask(convertMemoToTaskInputSchema.parse(rawInput))
     })
   )
 

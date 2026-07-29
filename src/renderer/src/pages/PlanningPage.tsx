@@ -18,6 +18,7 @@ import type {
   CreateProjectInput,
   CreateTaskInput,
   IpcResult,
+  Milestone,
   Project,
   Task
 } from '../../../shared/contracts'
@@ -58,6 +59,7 @@ export function PlanningPage(): React.JSX.Element {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false)
 
   const projectsQuery = useQuery({
     queryKey: ['projects'],
@@ -82,6 +84,12 @@ export function PlanningPage(): React.JSX.Element {
         })
       )
   })
+  const milestonesQuery = useQuery({
+    queryKey: ['milestones', selectedProjectId],
+    enabled: selectedProjectId !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.planning.listMilestones(selectedProjectId!))
+  })
 
   const projects = projectsQuery.data ?? []
   useEffect(() => {
@@ -93,6 +101,7 @@ export function PlanningPage(): React.JSX.Element {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
   const tasks = tasksQuery.data ?? []
+  const milestones = milestonesQuery.data ?? []
   const completedCount = tasks.filter((task) => task.status === 'completed').length
 
   const updateTask = useMutation({
@@ -247,6 +256,47 @@ export function PlanningPage(): React.JSX.Element {
                 </div>
               </div>
 
+              <section className="milestone-section">
+                <div className="task-section-heading">
+                  <div>
+                    <span className="section-label">阶段结果</span>
+                    <h3>里程碑</h3>
+                  </div>
+                  <button className="text-action" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                    <Plus size={14} />
+                    添加里程碑
+                  </button>
+                </div>
+                {milestones.length === 0 ? (
+                  <button className="milestone-empty" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                    <span className="trace-node current" />
+                    <span>
+                      <strong>把项目拆成可验证的阶段结果</strong>
+                      <small>例如教材章节、功能版本或训练周期。</small>
+                    </span>
+                  </button>
+                ) : (
+                  <div className="milestone-track">
+                    {milestones.map((milestone) => (
+                      <article key={milestone.id}>
+                        <span className={`milestone-node milestone-${milestone.status}`}>
+                          {milestone.progress >= 1 ? <Check size={12} /> : null}
+                        </span>
+                        <div>
+                          <strong>{milestone.title}</strong>
+                          <span>
+                            进度 {Math.round(milestone.progress * 100)}%
+                            {milestone.manualWeight ? ` · 权重 ${milestone.manualWeight}` : ''}
+                            {milestone.mastery !== null ? ` · 掌握度 ${milestone.mastery}%` : ''}
+                          </span>
+                        </div>
+                        <small>{milestone.plannedDate ?? '未设日期'}</small>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <section className="task-section">
                 <div className="task-section-heading">
                   <div>
@@ -331,9 +381,21 @@ export function PlanningPage(): React.JSX.Element {
         onOpenChange={setTaskDialogOpen}
         project={selectedProject}
         tags={tagsQuery.data ?? []}
+        milestones={milestones}
         onCreated={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+            queryClient.invalidateQueries({ queryKey: ['projects'] })
+          ])
+        }}
+      />
+      <MilestoneDialog
+        open={milestoneDialogOpen}
+        onOpenChange={setMilestoneDialogOpen}
+        project={selectedProject}
+        onCreated={async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['milestones'] }),
             queryClient.invalidateQueries({ queryKey: ['projects'] })
           ])
         }}
@@ -438,15 +500,17 @@ interface TaskDialogProps {
   onOpenChange: (open: boolean) => void
   project: Project | null
   tags: Array<{ id: string; name: string; color: string | null }>
+  milestones: Milestone[]
   onCreated: () => Promise<void>
 }
 
-function TaskDialog({ open, onOpenChange, project, tags, onCreated }: TaskDialogProps): React.JSX.Element {
+function TaskDialog({ open, onOpenChange, project, tags, milestones, onCreated }: TaskDialogProps): React.JSX.Element {
   const [title, setTitle] = useState('')
   const [difficulty, setDifficulty] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [estimatedMinutes, setEstimatedMinutes] = useState('')
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
+  const [milestoneId, setMilestoneId] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -460,7 +524,7 @@ function TaskDialog({ open, onOpenChange, project, tags, onCreated }: TaskDialog
       parentTaskId: null,
       projectId: project.id,
       goalId: null,
-      milestoneId: null,
+      milestoneId: milestoneId || null,
       title,
       description: '',
       status: 'ready',
@@ -485,6 +549,7 @@ function TaskDialog({ open, onOpenChange, project, tags, onCreated }: TaskDialog
     setDifficulty('')
     setEstimatedMinutes('')
     setSelectedTagIds([])
+    setMilestoneId('')
     onOpenChange(false)
   }
 
@@ -534,6 +599,19 @@ function TaskDialog({ open, onOpenChange, project, tags, onCreated }: TaskDialog
                 <input type="number" min="1" value={estimatedMinutes} onChange={(event) => setEstimatedMinutes(event.target.value)} />
               </label>
             </div>
+            {milestones.length > 0 && (
+              <label>
+                <span>所属里程碑</span>
+                <select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}>
+                  <option value="">不关联里程碑</option>
+                  {milestones.map((milestone) => (
+                    <option key={milestone.id} value={milestone.id}>
+                      {milestone.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {tags.length > 0 && (
               <fieldset className="tag-picker">
                 <legend>标签</legend>
@@ -564,6 +642,110 @@ function TaskDialog({ open, onOpenChange, project, tags, onCreated }: TaskDialog
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
             <button className="button button-primary" disabled={!title.trim() || busy || !project} onClick={() => void submit()}>
               {busy ? '正在创建…' : '创建任务'}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+interface MilestoneDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  project: Project | null
+  onCreated: () => Promise<void>
+}
+
+function MilestoneDialog({
+  open,
+  onOpenChange,
+  project,
+  onCreated
+}: MilestoneDialogProps): React.JSX.Element {
+  const [title, setTitle] = useState('')
+  const [plannedDate, setPlannedDate] = useState('')
+  const [estimatedMinutes, setEstimatedMinutes] = useState('')
+  const [manualWeight, setManualWeight] = useState('')
+  const [verificationCriteria, setVerificationCriteria] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (): Promise<void> => {
+    if (!project) return
+    setBusy(true)
+    setError('')
+    const result = await window.youtrace.planning.createMilestone({
+      projectId: project.id,
+      goalId: null,
+      title,
+      description: '',
+      plannedDate: plannedDate || null,
+      estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
+      manualWeight: manualWeight ? Number(manualWeight) : null,
+      mastery: null,
+      verificationCriteria,
+      status: 'not_started',
+      includeInProgress: true
+    })
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error.message)
+      return
+    }
+    await onCreated()
+    setTitle('')
+    setPlannedDate('')
+    setEstimatedMinutes('')
+    setManualWeight('')
+    setVerificationCriteria('')
+    onOpenChange(false)
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content">
+          <div className="dialog-heading">
+            <div>
+              <span className="section-label">{project?.name ?? '当前项目'}</span>
+              <Dialog.Title>新建里程碑</Dialog.Title>
+              <Dialog.Description>里程碑是一项阶段性、可以验证的结果。</Dialog.Description>
+            </div>
+            <Dialog.Close className="dialog-close" aria-label="关闭">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+          <div className="dialog-form">
+            <label>
+              <span>里程碑名称</span>
+              <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：完成教材第一章" />
+            </label>
+            <div className="form-row form-row-three">
+              <label>
+                <span>计划日期</span>
+                <input type="date" value={plannedDate} onChange={(event) => setPlannedDate(event.target.value)} />
+              </label>
+              <label>
+                <span>预计分钟</span>
+                <input type="number" min="1" value={estimatedMinutes} onChange={(event) => setEstimatedMinutes(event.target.value)} />
+              </label>
+              <label>
+                <span>手动权重</span>
+                <input type="number" min="0.01" step="0.01" value={manualWeight} onChange={(event) => setManualWeight(event.target.value)} />
+              </label>
+            </div>
+            <label>
+              <span>验证标准</span>
+              <textarea value={verificationCriteria} onChange={(event) => setVerificationCriteria(event.target.value)} placeholder="什么事实可以证明这个阶段已经完成？" />
+            </label>
+            {error && <div className="inline-error">{error}</div>}
+          </div>
+          <div className="dialog-actions">
+            <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+            <button className="button button-primary" disabled={!title.trim() || busy || !project} onClick={() => void submit()}>
+              {busy ? '正在创建…' : '创建里程碑'}
             </button>
           </div>
         </Dialog.Content>

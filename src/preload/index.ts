@@ -30,14 +30,38 @@ const api: YouTraceApi = {
     createProject: (input) => ipcRenderer.invoke('planning:create-project', input),
     updateProject: (input) => ipcRenderer.invoke('planning:update-project', input),
     trashProject: (id) => ipcRenderer.invoke('planning:trash-project', id),
+    listGoals: (projectId) => ipcRenderer.invoke('planning:list-goals', projectId),
+    createGoal: (input) => ipcRenderer.invoke('planning:create-goal', input),
+    updateGoal: (input) => ipcRenderer.invoke('planning:update-goal', input),
+    listMilestones: (projectId) => ipcRenderer.invoke('planning:list-milestones', projectId),
+    createMilestone: (input) => ipcRenderer.invoke('planning:create-milestone', input),
+    updateMilestone: (input) => ipcRenderer.invoke('planning:update-milestone', input),
     listTasks: (input) => ipcRenderer.invoke('planning:list-tasks', input),
     createTask: (input) => ipcRenderer.invoke('planning:create-task', input),
     updateTask: (input) => ipcRenderer.invoke('planning:update-task', input),
     trashTask: (id) => ipcRenderer.invoke('planning:trash-task', id),
+    addTaskDependency: (input) => ipcRenderer.invoke('planning:add-task-dependency', input),
+    listTaskDependencies: (taskId) =>
+      ipcRenderer.invoke('planning:list-task-dependencies', taskId),
     listTags: () => ipcRenderer.invoke('planning:list-tags'),
     createTag: (input) => ipcRenderer.invoke('planning:create-tag', input),
     assignTag: (input) => ipcRenderer.invoke('planning:assign-tag', input),
     search: (input) => ipcRenderer.invoke('planning:search', input)
+  },
+  execution: {
+    getActiveEffort: () => ipcRenderer.invoke('execution:get-active-effort'),
+    startEffort: (input) => ipcRenderer.invoke('execution:start-effort', input),
+    stopEffort: (input) => ipcRenderer.invoke('execution:stop-effort', input),
+    createManualEffort: (input) => ipcRenderer.invoke('execution:create-manual-effort', input),
+    listEfforts: (input) => ipcRenderer.invoke('execution:list-efforts', input),
+    createEvidence: (input) => ipcRenderer.invoke('execution:create-evidence', input),
+    listEvidence: (entityType, entityId) =>
+      ipcRenderer.invoke('execution:list-evidence', entityType, entityId),
+    updateEvidenceStatus: (input) =>
+      ipcRenderer.invoke('execution:update-evidence-status', input),
+    createMemo: (input) => ipcRenderer.invoke('execution:create-memo', input),
+    listMemos: (inboxOnly) => ipcRenderer.invoke('execution:list-memos', inboxOnly),
+    convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,

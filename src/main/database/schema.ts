@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 1
+export const CURRENT_SCHEMA_VERSION = 2
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -186,6 +186,14 @@ export const INITIAL_SCHEMA_SQL = `
     entity_id TEXT NOT NULL,
     created_at TEXT NOT NULL,
     PRIMARY KEY (attachment_id, entity_type, entity_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS entity_evidence (
+    evidence_id TEXT NOT NULL REFERENCES evidence(id),
+    entity_type TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (evidence_id, entity_type, entity_id)
   );
 
   CREATE TABLE IF NOT EXISTS memos (

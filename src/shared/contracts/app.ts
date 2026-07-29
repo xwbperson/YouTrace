@@ -1,18 +1,39 @@
 import { z } from 'zod'
 import type {
+  AddTaskDependencyInput,
   AssignTagInput,
+  CreateGoalInput,
+  CreateMilestoneInput,
   CreateProjectInput,
   CreateTagInput,
   CreateTaskInput,
+  Goal,
+  Milestone,
   Project,
   SearchInput,
   SearchResult,
   Tag,
   Task,
+  TaskDependency,
   TaskListInput,
+  UpdateGoalInput,
+  UpdateMilestoneInput,
   UpdateProjectInput,
   UpdateTaskInput
 } from './planning'
+import type {
+  ConvertMemoToTaskInput,
+  CreateEvidenceInput,
+  CreateManualEffortInput,
+  CreateMemoInput,
+  EffortEntry,
+  EffortListInput,
+  Evidence,
+  Memo,
+  StartEffortInput,
+  StopEffortInput,
+  UpdateEvidenceStatusInput
+} from './execution'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -88,14 +109,35 @@ export interface YouTraceApi {
     createProject(input: CreateProjectInput): Promise<IpcResult<Project>>
     updateProject(input: UpdateProjectInput): Promise<IpcResult<Project>>
     trashProject(id: string): Promise<IpcResult<void>>
+    listGoals(projectId: string | null): Promise<IpcResult<Goal[]>>
+    createGoal(input: CreateGoalInput): Promise<IpcResult<Goal>>
+    updateGoal(input: UpdateGoalInput): Promise<IpcResult<Goal>>
+    listMilestones(projectId: string): Promise<IpcResult<Milestone[]>>
+    createMilestone(input: CreateMilestoneInput): Promise<IpcResult<Milestone>>
+    updateMilestone(input: UpdateMilestoneInput): Promise<IpcResult<Milestone>>
     listTasks(input: TaskListInput): Promise<IpcResult<Task[]>>
     createTask(input: CreateTaskInput): Promise<IpcResult<Task>>
     updateTask(input: UpdateTaskInput): Promise<IpcResult<Task>>
     trashTask(id: string): Promise<IpcResult<void>>
+    addTaskDependency(input: AddTaskDependencyInput): Promise<IpcResult<void>>
+    listTaskDependencies(taskId: string): Promise<IpcResult<TaskDependency[]>>
     listTags(): Promise<IpcResult<Tag[]>>
     createTag(input: CreateTagInput): Promise<IpcResult<Tag>>
     assignTag(input: AssignTagInput): Promise<IpcResult<void>>
     search(input: SearchInput): Promise<IpcResult<SearchResult[]>>
+  }
+  execution: {
+    getActiveEffort(): Promise<IpcResult<EffortEntry | null>>
+    startEffort(input: StartEffortInput): Promise<IpcResult<EffortEntry>>
+    stopEffort(input: StopEffortInput): Promise<IpcResult<EffortEntry>>
+    createManualEffort(input: CreateManualEffortInput): Promise<IpcResult<EffortEntry>>
+    listEfforts(input: EffortListInput): Promise<IpcResult<EffortEntry[]>>
+    createEvidence(input: CreateEvidenceInput): Promise<IpcResult<Evidence>>
+    listEvidence(entityType: string | null, entityId: string | null): Promise<IpcResult<Evidence[]>>
+    updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<IpcResult<Evidence>>
+    createMemo(input: CreateMemoInput): Promise<IpcResult<Memo>>
+    listMemos(inboxOnly: boolean): Promise<IpcResult<Memo[]>>
+    convertMemoToTask(input: ConvertMemoToTaskInput): Promise<IpcResult<Task>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

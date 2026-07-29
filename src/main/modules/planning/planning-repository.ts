@@ -1,13 +1,18 @@
 import type Database from 'better-sqlite3'
 import type {
+  CreateGoalInput,
+  CreateMilestoneInput,
   CreateProjectInput,
   CreateTagInput,
   CreateTaskInput,
+  Goal,
+  Milestone,
   Project,
   SearchInput,
   SearchResult,
   Tag,
   Task,
+  TaskDependency,
   TaskListInput
 } from '../../../shared/contracts'
 
@@ -56,6 +61,36 @@ interface TagRow {
   icon: string | null
   description: string
   favorite: number
+  created_at: string
+  updated_at: string
+}
+
+interface GoalRow {
+  id: string
+  project_id: string | null
+  title: string
+  success_criteria: string
+  target_date: string | null
+  measure_type: Goal['measureType']
+  status: Goal['status']
+  created_at: string
+  updated_at: string
+}
+
+interface MilestoneRow {
+  id: string
+  project_id: string | null
+  goal_id: string | null
+  title: string
+  description: string
+  planned_date: string | null
+  completed_date: string | null
+  estimated_minutes: number | null
+  manual_weight: number | null
+  mastery: number | null
+  verification_criteria: string
+  status: Milestone['status']
+  include_in_progress: number
   created_at: string
   updated_at: string
 }
@@ -181,6 +216,173 @@ export class PlanningRepository {
       return true
     })
     return transaction()
+  }
+
+  listGoals(projectId: string | null): GoalRow[] {
+    const condition = projectId === null ? 'project_id IS NULL' : 'project_id = ?'
+    return this.database()
+      .prepare(
+        `SELECT id, project_id, title, success_criteria, target_date, measure_type,
+                status, created_at, updated_at
+           FROM goals
+          WHERE ${condition} AND deleted_at IS NULL AND archived_at IS NULL
+          ORDER BY COALESCE(target_date, '9999-12-31'), created_at`
+      )
+      .all(...(projectId === null ? [] : [projectId])) as GoalRow[]
+  }
+
+  getGoal(id: string): GoalRow | null {
+    return (
+      (this.database()
+        .prepare(
+          `SELECT id, project_id, title, success_criteria, target_date, measure_type,
+                  status, created_at, updated_at
+             FROM goals WHERE id = ? AND deleted_at IS NULL`
+        )
+        .get(id) as GoalRow | undefined) ?? null
+    )
+  }
+
+  insertGoal(id: string, input: CreateGoalInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO goals(
+           id, project_id, title, success_criteria, target_date, measure_type,
+           status, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.title,
+        input.successCriteria,
+        input.targetDate,
+        input.measureType,
+        input.status,
+        now,
+        now
+      )
+    this.upsertSearch(database, 'goal', id, input.title, input.successCriteria)
+    this.insertAudit(database, 'goal', id, 'created', null, input, now)
+  }
+
+  updateGoal(id: string, input: CreateGoalInput, before: GoalRow, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `UPDATE goals
+            SET project_id = ?, title = ?, success_criteria = ?, target_date = ?,
+                measure_type = ?, status = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .run(
+        input.projectId,
+        input.title,
+        input.successCriteria,
+        input.targetDate,
+        input.measureType,
+        input.status,
+        now,
+        id
+      )
+    this.upsertSearch(database, 'goal', id, input.title, input.successCriteria)
+    this.insertAudit(database, 'goal', id, 'updated', before, input, now)
+  }
+
+  listMilestones(projectId: string): MilestoneRow[] {
+    return this.database()
+      .prepare(
+        `SELECT id, project_id, goal_id, title, description, planned_date,
+                completed_date, estimated_minutes, manual_weight, mastery,
+                verification_criteria, status, include_in_progress, created_at, updated_at
+           FROM milestones
+          WHERE project_id = ? AND deleted_at IS NULL AND archived_at IS NULL
+          ORDER BY COALESCE(planned_date, '9999-12-31'), created_at`
+      )
+      .all(projectId) as MilestoneRow[]
+  }
+
+  getMilestone(id: string): MilestoneRow | null {
+    return (
+      (this.database()
+        .prepare(
+          `SELECT id, project_id, goal_id, title, description, planned_date,
+                  completed_date, estimated_minutes, manual_weight, mastery,
+                  verification_criteria, status, include_in_progress, created_at, updated_at
+             FROM milestones WHERE id = ? AND deleted_at IS NULL`
+        )
+        .get(id) as MilestoneRow | undefined) ?? null
+    )
+  }
+
+  insertMilestone(id: string, input: CreateMilestoneInput, now: string): void {
+    const database = this.database()
+    database
+      .prepare(
+        `INSERT INTO milestones(
+           id, project_id, goal_id, title, description, planned_date, completed_date,
+           estimated_minutes, manual_weight, mastery, verification_criteria, status,
+           include_in_progress, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.goalId,
+        input.title,
+        input.description,
+        input.plannedDate,
+        ['completed', 'verified', 'accepted'].includes(input.status) ? now.slice(0, 10) : null,
+        input.estimatedMinutes,
+        input.manualWeight,
+        input.mastery,
+        input.verificationCriteria,
+        input.status,
+        input.includeInProgress ? 1 : 0,
+        now,
+        now
+      )
+    this.upsertSearch(database, 'milestone', id, input.title, input.description)
+    this.insertAudit(database, 'milestone', id, 'created', null, input, now)
+  }
+
+  updateMilestone(
+    id: string,
+    input: CreateMilestoneInput,
+    before: MilestoneRow,
+    now: string
+  ): void {
+    const completedDate = ['completed', 'verified', 'accepted'].includes(input.status)
+      ? before.completed_date ?? now.slice(0, 10)
+      : null
+    const database = this.database()
+    database
+      .prepare(
+        `UPDATE milestones
+            SET project_id = ?, goal_id = ?, title = ?, description = ?, planned_date = ?,
+                completed_date = ?, estimated_minutes = ?, manual_weight = ?, mastery = ?,
+                verification_criteria = ?, status = ?, include_in_progress = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .run(
+        input.projectId,
+        input.goalId,
+        input.title,
+        input.description,
+        input.plannedDate,
+        completedDate,
+        input.estimatedMinutes,
+        input.manualWeight,
+        input.mastery,
+        input.verificationCriteria,
+        input.status,
+        input.includeInProgress ? 1 : 0,
+        now,
+        id
+      )
+    this.upsertSearch(database, 'milestone', id, input.title, input.description)
+    this.insertAudit(database, 'milestone', id, 'updated', before, input, now)
   }
 
   getMilestoneProgressFacts(projectId: string): MilestoneProgressFact[] {
@@ -418,6 +620,63 @@ export class PlanningRepository {
       return true
     })
     return transaction()
+  }
+
+  listDependencyEdges(): Array<{ taskId: string; prerequisiteTaskId: string }> {
+    return (
+      this.database()
+        .prepare('SELECT task_id, prerequisite_task_id FROM task_dependencies')
+        .all() as Array<{ task_id: string; prerequisite_task_id: string }>
+    ).map((row) => ({
+      taskId: row.task_id,
+      prerequisiteTaskId: row.prerequisite_task_id
+    }))
+  }
+
+  addTaskDependency(
+    taskId: string,
+    prerequisiteTaskId: string,
+    overrideReason: string | null,
+    now: string
+  ): void {
+    this.database()
+      .prepare(
+        `INSERT OR IGNORE INTO task_dependencies(
+           task_id, prerequisite_task_id, override_reason, created_at
+         ) VALUES (?, ?, ?, ?)`
+      )
+      .run(taskId, prerequisiteTaskId, overrideReason, now)
+  }
+
+  listTaskDependencies(taskId: string): TaskDependency[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT d.task_id, d.prerequisite_task_id, d.override_reason, d.created_at,
+                t.title AS prerequisite_title, t.status AS prerequisite_status,
+                t.project_id AS prerequisite_project_id
+           FROM task_dependencies d
+           JOIN tasks t ON t.id = d.prerequisite_task_id
+          WHERE d.task_id = ?
+          ORDER BY d.created_at`
+      )
+      .all(taskId) as Array<{
+      task_id: string
+      prerequisite_task_id: string
+      override_reason: string | null
+      created_at: string
+      prerequisite_title: string
+      prerequisite_status: Task['status']
+      prerequisite_project_id: string | null
+    }>
+    return rows.map((row) => ({
+      taskId: row.task_id,
+      prerequisiteTaskId: row.prerequisite_task_id,
+      prerequisiteTitle: row.prerequisite_title,
+      prerequisiteStatus: row.prerequisite_status,
+      prerequisiteProjectId: row.prerequisite_project_id,
+      overrideReason: row.override_reason,
+      createdAt: row.created_at
+    }))
   }
 
   listTags(): Tag[] {
