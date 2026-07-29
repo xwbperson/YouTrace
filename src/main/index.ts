@@ -6,6 +6,8 @@ import {
   Menu,
   nativeImage,
   net,
+  Notification,
+  powerMonitor,
   protocol,
   Tray
 } from 'electron'
@@ -20,6 +22,10 @@ import { PracticeRepository } from './modules/practice/practice-repository'
 import { PracticeService } from './modules/practice/practice-service'
 import { TemporalRepository } from './modules/temporal/temporal-repository'
 import { TemporalService } from './modules/temporal/temporal-service'
+import { WorkflowRepository } from './modules/workflow/workflow-repository'
+import { WorkflowService } from './modules/workflow/workflow-service'
+import { ReminderRepository } from './modules/reminders/reminder-repository'
+import { ReminderService } from './modules/reminders/reminder-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -38,6 +44,8 @@ let tray: Tray | null = null
 let isQuitting = false
 let bootstrapState: AppBootstrapState = { status: 'needs-workspace', workspace: null }
 let workspaceManager: WorkspaceManager
+let reminderService: ReminderService | null = null
+let reminderTimer: NodeJS.Timeout | null = null
 
 const singleInstanceLock = app.requestSingleInstanceLock()
 if (!singleInstanceLock) {
@@ -67,6 +75,13 @@ app.whenReady().then(async () => {
     new TemporalRepository(() => workspaceManager.getDatabase()),
     planningRepository
   )
+  const workflowService = new WorkflowService(
+    new WorkflowRepository(() => workspaceManager.getDatabase()),
+    planningService
+  )
+  reminderService = new ReminderService(
+    new ReminderRepository(() => workspaceManager.getDatabase())
+  )
 
   registerApplicationProtocol()
   registerIpc({
@@ -76,6 +91,8 @@ app.whenReady().then(async () => {
     executionService,
     practiceService,
     temporalService,
+    workflowService,
+    reminderService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state
@@ -84,6 +101,9 @@ app.whenReady().then(async () => {
 
   createMainWindow()
   createTray()
+  dispatchReminders()
+  reminderTimer = setInterval(dispatchReminders, 60_000)
+  powerMonitor.on('resume', dispatchReminders)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
@@ -96,6 +116,10 @@ app.on('before-quit', () => {
 })
 
 app.on('will-quit', (event) => {
+  if (reminderTimer) {
+    clearInterval(reminderTimer)
+    reminderTimer = null
+  }
   if (!workspaceManager) return
   event.preventDefault()
   workspaceManager
@@ -215,4 +239,23 @@ function showMainWindow(): void {
   if (mainWindow.isMinimized()) mainWindow.restore()
   mainWindow.show()
   mainWindow.focus()
+}
+
+function dispatchReminders(): void {
+  if (!reminderService) return
+  try {
+    const notices = reminderService.refreshAndProcess(new Date().toISOString())
+    if (!Notification.isSupported()) return
+    for (const notice of notices) {
+      const notification = new Notification({
+        title: notice.title,
+        body: notice.body,
+        silent: false
+      })
+      notification.on('click', showMainWindow)
+      notification.show()
+    }
+  } catch {
+    // 工作区尚未打开或通知生成失败时，不影响业务数据和主窗口。
+  }
 }

@@ -89,6 +89,23 @@ const api: YouTraceApi = {
     listCountdowns: (now) => ipcRenderer.invoke('temporal:list-countdowns', now),
     createCountdown: (input) => ipcRenderer.invoke('temporal:create-countdown', input)
   },
+  workflow: {
+    listReviews: () => ipcRenderer.invoke('workflow:list-reviews'),
+    createReview: (input) => ipcRenderer.invoke('workflow:create-review', input),
+    updateReview: (input) => ipcRenderer.invoke('workflow:update-review', input),
+    applyReviewAdjustments: (input) =>
+      ipcRenderer.invoke('workflow:apply-review-adjustments', input),
+    listTemplates: () => ipcRenderer.invoke('workflow:list-templates'),
+    previewTemplate: (input) => ipcRenderer.invoke('workflow:preview-template', input),
+    applyTemplate: (input) => ipcRenderer.invoke('workflow:apply-template', input),
+    saveProjectTemplate: (input) => ipcRenderer.invoke('workflow:save-project-template', input)
+  },
+  reminders: {
+    getSettings: () => ipcRenderer.invoke('reminders:get-settings'),
+    updateSettings: (input) => ipcRenderer.invoke('reminders:update-settings', input),
+    listUpcoming: () => ipcRenderer.invoke('reminders:list-upcoming'),
+    refresh: (now) => ipcRenderer.invoke('reminders:refresh', now)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,
     toggleMaximize: () =>

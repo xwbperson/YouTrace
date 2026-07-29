@@ -58,6 +58,22 @@ import type {
   TimeBlock,
   TimeRangeInput
 } from './temporal'
+import type {
+  AppliedTemplate,
+  ApplyReviewAdjustmentsInput,
+  CreateReviewInput,
+  PreviewTemplateInput,
+  ProjectTemplate,
+  Review,
+  SaveProjectTemplateInput,
+  TemplatePreview,
+  UpdateReviewInput
+} from './workflow'
+import type {
+  NotificationSettings,
+  ReminderNotice,
+  UpcomingReminder
+} from './reminders'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -186,6 +202,22 @@ export interface YouTraceApi {
     trashTimeBlock(id: string): Promise<IpcResult<void>>
     listCountdowns(now: string): Promise<IpcResult<Countdown[]>>
     createCountdown(input: CreateCountdownInput): Promise<IpcResult<Countdown>>
+  }
+  workflow: {
+    listReviews(): Promise<IpcResult<Review[]>>
+    createReview(input: CreateReviewInput): Promise<IpcResult<Review>>
+    updateReview(input: UpdateReviewInput): Promise<IpcResult<Review>>
+    applyReviewAdjustments(input: ApplyReviewAdjustmentsInput): Promise<IpcResult<Review>>
+    listTemplates(): Promise<IpcResult<ProjectTemplate[]>>
+    previewTemplate(input: PreviewTemplateInput): Promise<IpcResult<TemplatePreview>>
+    applyTemplate(input: PreviewTemplateInput): Promise<IpcResult<AppliedTemplate>>
+    saveProjectTemplate(input: SaveProjectTemplateInput): Promise<IpcResult<ProjectTemplate>>
+  }
+  reminders: {
+    getSettings(): Promise<IpcResult<NotificationSettings>>
+    updateSettings(input: NotificationSettings): Promise<IpcResult<NotificationSettings>>
+    listUpcoming(): Promise<IpcResult<UpcomingReminder[]>>
+    refresh(now: string): Promise<IpcResult<ReminderNotice[]>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

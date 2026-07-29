@@ -3,6 +3,7 @@ import { dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import {
   addTaskDependencyInputSchema,
+  applyReviewAdjustmentsInputSchema,
   assignTagInputSchema,
   convertMemoToTaskInputSchema,
   createGoalInputSchema,
@@ -22,12 +23,16 @@ import {
   createPlanInputSchema,
   createTimeBlockInputSchema,
   createWorkspaceInputSchema,
+  createReviewInputSchema,
   effortListInputSchema,
   openWorkspaceInputSchema,
+  notificationSettingsSchema,
   moveTimeBlockInputSchema,
   recordHabitInputSchema,
   recordMetricInputSchema,
   searchInputSchema,
+  previewTemplateInputSchema,
+  saveProjectTemplateInputSchema,
   startEffortInputSchema,
   stopEffortInputSchema,
   taskListInputSchema,
@@ -37,6 +42,7 @@ import {
   updateMilestoneInputSchema,
   updateProjectInputSchema,
   updateTaskInputSchema,
+  updateReviewInputSchema,
   type AppBootstrapState,
   type IpcResult,
   type WindowState
@@ -47,6 +53,8 @@ import type { PlanningService } from '../modules/planning/planning-service'
 import type { ExecutionService } from '../modules/execution/execution-service'
 import type { PracticeService } from '../modules/practice/practice-service'
 import type { TemporalService } from '../modules/temporal/temporal-service'
+import type { WorkflowService } from '../modules/workflow/workflow-service'
+import type { ReminderService } from '../modules/reminders/reminder-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
@@ -55,6 +63,8 @@ interface RegisterIpcOptions {
   executionService: ExecutionService
   practiceService: PracticeService
   temporalService: TemporalService
+  workflowService: WorkflowService
+  reminderService: ReminderService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
@@ -67,6 +77,8 @@ export function registerIpc(options: RegisterIpcOptions): void {
     executionService,
     practiceService,
     temporalService,
+    workflowService,
+    reminderService,
     getBootstrapState,
     setBootstrapState
   } = options
@@ -513,6 +525,92 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return temporalService.createCountdown(createCountdownInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:list-reviews', (event) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.listReviews()
+    })
+  )
+
+  ipcMain.handle('workflow:create-review', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.createReview(createReviewInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:update-review', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.updateReview(updateReviewInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:apply-review-adjustments', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.applyReviewAdjustments(
+        applyReviewAdjustmentsInputSchema.parse(rawInput)
+      )
+    })
+  )
+
+  ipcMain.handle('workflow:list-templates', (event) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.listTemplates()
+    })
+  )
+
+  ipcMain.handle('workflow:preview-template', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.previewTemplate(previewTemplateInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:apply-template', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.applyTemplate(previewTemplateInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:save-project-template', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.saveProjectTemplate(saveProjectTemplateInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('reminders:get-settings', (event) =>
+    wrap(() => {
+      trusted(event)
+      return reminderService.getSettings()
+    })
+  )
+
+  ipcMain.handle('reminders:update-settings', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return reminderService.updateSettings(notificationSettingsSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('reminders:list-upcoming', (event) =>
+    wrap(() => {
+      trusted(event)
+      return reminderService.listUpcoming()
+    })
+  )
+
+  ipcMain.handle('reminders:refresh', (event, rawNow) =>
+    wrap(() => {
+      trusted(event)
+      return reminderService.refreshAndProcess(z.string().datetime().parse(rawNow))
     })
   )
 

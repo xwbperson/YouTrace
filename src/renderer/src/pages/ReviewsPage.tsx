@@ -1,0 +1,235 @@
+import * as Dialog from '@radix-ui/react-dialog'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Archive,
+  ArrowRight,
+  CalendarClock,
+  Check,
+  ClipboardList,
+  Clock3,
+  GitBranch,
+  Plus,
+  RotateCcw,
+  X
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { IpcResult, Review } from '../../../shared/contracts'
+
+function unwrap<T>(result: IpcResult<T>): T {
+  if (!result.ok) throw new Error(result.error.message)
+  return result.data
+}
+
+function localDate(date: Date): string {
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+}
+
+function weekBounds(): { start: string; end: string } {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  start.setDate(start.getDate() - (start.getDay() === 0 ? 6 : start.getDay() - 1))
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  return { start: localDate(start), end: localDate(end) }
+}
+
+export function ReviewsPage(): React.JSX.Element {
+  const queryClient = useQueryClient()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const reviewsQuery = useQuery({
+    queryKey: ['reviews'],
+    queryFn: async () => unwrap(await window.youtrace.workflow.listReviews())
+  })
+  const reviews = reviewsQuery.data ?? []
+  useEffect(() => {
+    if (!selectedId && reviews[0]) setSelectedId(reviews[0].id)
+    if (selectedId && !reviews.some((review) => review.id === selectedId)) {
+      setSelectedId(reviews[0]?.id ?? null)
+    }
+  }, [reviews, selectedId])
+  const selected = reviews.find((review) => review.id === selectedId) ?? null
+
+  return (
+    <div className="reviews-page">
+      <header className="reviews-toolbar">
+        <div>
+          <span className="page-kicker">让事实改变后续计划</span>
+          <h1>复盘</h1>
+          <p>快照保留当时的计划，调整只作用于未来。</p>
+        </div>
+        <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>
+          <Plus size={15} />
+          生成复盘
+        </button>
+      </header>
+
+      {reviews.length === 0 ? (
+        <div className="review-empty panel">
+          <Archive size={29} />
+          <strong>还没有复盘</strong>
+          <p>先建立周期计划并记录一些投入，再生成第一份不可变事实快照。</p>
+          <button className="button button-secondary" type="button" onClick={() => setCreateOpen(true)}>
+            <Plus size={14} />
+            生成本周复盘
+          </button>
+        </div>
+      ) : (
+        <div className="reviews-layout">
+          <aside className="review-rail panel">
+            {reviews.map((review) => (
+              <button type="button" key={review.id} className={review.id === selectedId ? 'active' : ''} onClick={() => setSelectedId(review.id)}>
+                <span>{review.reviewType === 'daily' ? '每日' : review.reviewType === 'weekly' ? '每周' : '每月'}</span>
+                <strong>{review.title}</strong>
+                <small>{review.startDate} — {review.endDate}</small>
+                {review.status === 'completed' && <em><Check size={11} />已完成</em>}
+              </button>
+            ))}
+          </aside>
+          {selected && (
+            <ReviewWorkspace
+              key={selected.id}
+              review={selected}
+              onChanged={() => queryClient.invalidateQueries({ queryKey: ['reviews'] })}
+            />
+          )}
+        </div>
+      )}
+
+      <CreateReviewDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={async (review) => {
+          setSelectedId(review.id)
+          await queryClient.invalidateQueries({ queryKey: ['reviews'] })
+        }}
+      />
+    </div>
+  )
+}
+
+function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unknown> }): React.JSX.Element {
+  const { review } = props
+  const [importantOutcomes, setImportantOutcomes] = useState(review.importantOutcomes)
+  const [blockers, setBlockers] = useState(review.blockers)
+  const [nextFirstStep, setNextFirstStep] = useState(review.nextFirstStep)
+  const [nextCommitments, setNextCommitments] = useState(review.nextCommitments)
+  const [selectedTaskId, setSelectedTaskId] = useState(review.snapshot.tasks.find((task) => task.status !== 'completed')?.id ?? '')
+  const [reason, setReason] = useState('')
+  const [newDueDate, setNewDueDate] = useState('')
+  const [splitTitle, setSplitTitle] = useState('')
+  const effortMinutes = review.snapshot.efforts.reduce((sum, effort) => sum + effort.effectiveMinutes, 0)
+  const incomplete = review.snapshot.tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled')
+
+  const save = async (status: 'draft' | 'completed'): Promise<void> => {
+    const result = await window.youtrace.workflow.updateReview({
+      id: review.id,
+      importantOutcomes,
+      blockers,
+      nextFirstStep,
+      nextCommitments,
+      status
+    })
+    if (result.ok) await props.onChanged()
+  }
+
+  const adjust = async (action: 'reschedule' | 'cancel' | 'split'): Promise<void> => {
+    if (!selectedTaskId || !reason.trim()) return
+    const adjustment =
+      action === 'reschedule'
+        ? { taskId: selectedTaskId, action, newDueAt: new Date(`${newDueDate}T12:00:00`).toISOString() } as const
+        : action === 'cancel'
+          ? { taskId: selectedTaskId, action } as const
+          : { taskId: selectedTaskId, action, newTitle: splitTitle, estimatedMinutes: null, newDueAt: newDueDate ? new Date(`${newDueDate}T12:00:00`).toISOString() : null } as const
+    const result = await window.youtrace.workflow.applyReviewAdjustments({
+      reviewId: review.id,
+      reason,
+      adjustments: [adjustment]
+    })
+    if (result.ok) {
+      setReason('')
+      setNewDueDate('')
+      setSplitTitle('')
+      await props.onChanged()
+    }
+  }
+
+  return (
+    <main className="review-workspace panel">
+      <header>
+        <div>
+          <span className="section-label">快照生成于 {new Date(review.snapshot.generatedAt).toLocaleString('zh-CN')}</span>
+          <h2>{review.title}</h2>
+        </div>
+        <span className={`review-status ${review.status}`}>{review.status === 'completed' ? '已完成' : '草稿'}</span>
+      </header>
+
+      <div className="snapshot-metrics">
+        <article><ClipboardList size={16} /><span>计划事项</span><strong>{review.snapshot.tasks.length}</strong></article>
+        <article><Clock3 size={16} /><span>真实投入</span><strong>{Math.round(effortMinutes / 6) / 10}h</strong></article>
+        <article><Check size={16} /><span>已完成</span><strong>{review.snapshot.tasks.filter((task) => task.status === 'completed').length}</strong></article>
+        <article><Archive size={16} /><span>成果证据</span><strong>{review.snapshot.evidence.length}</strong></article>
+      </div>
+
+      <section className="snapshot-section">
+        <div className="review-section-heading"><span>不可变计划快照</span><small>后续调整不会改写这里</small></div>
+        <div className="snapshot-list">
+          {review.snapshot.tasks.map((task) => (
+            <article key={task.id}>
+              <span className={`snapshot-dot ${task.status}`} />
+              <strong>{task.title}</strong>
+              <small>{task.status === 'completed' ? '已完成' : '原计划未完成'} · {task.dueAt?.slice(0, 10) ?? '无截止日期'}</small>
+            </article>
+          ))}
+          {review.snapshot.tasks.length === 0 && <p>这个周期没有捕获到计划任务。</p>}
+        </div>
+      </section>
+
+      <section className="review-editor">
+        <label><span>重要成果</span><textarea value={importantOutcomes} onChange={(event) => setImportantOutcomes(event.target.value)} placeholder="这个周期真正完成了什么？" /></label>
+        <label><span>阻塞与延期原因</span><textarea value={blockers} onChange={(event) => setBlockers(event.target.value)} placeholder="记录事实，不把原因改写成结果。" /></label>
+        <label><span>下一周期第一步</span><textarea value={nextFirstStep} onChange={(event) => setNextFirstStep(event.target.value)} /></label>
+        <label><span>下一周期承诺</span><textarea value={nextCommitments} onChange={(event) => setNextCommitments(event.target.value)} /></label>
+      </section>
+
+      {incomplete.length > 0 && (
+        <section className="adjustment-panel">
+          <div className="review-section-heading"><span>调整未来计划</span><small>已执行 {review.adjustmentCount} 次调整</small></div>
+          <div className="adjustment-form">
+            <label><span>选择原任务</span><select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)}>{incomplete.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label>
+            <label><span>新日期</span><input type="date" value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>
+            <label><span>拆分出的新任务</span><input value={splitTitle} onChange={(event) => setSplitTitle(event.target.value)} placeholder="仅拆分时填写" /></label>
+            <label className="adjustment-reason"><span>调整原因</span><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="必填：为什么改变计划？" /></label>
+          </div>
+          <div className="adjustment-actions">
+            <button type="button" disabled={!reason.trim() || !newDueDate} onClick={() => void adjust('reschedule')}><CalendarClock size={14} />顺延</button>
+            <button type="button" disabled={!reason.trim() || !splitTitle.trim()} onClick={() => void adjust('split')}><GitBranch size={14} />拆分</button>
+            <button type="button" disabled={!reason.trim()} onClick={() => void adjust('cancel')}><X size={14} />取消任务</button>
+          </div>
+        </section>
+      )}
+
+      <footer className="review-actions">
+        <button className="button button-secondary" type="button" onClick={() => void save('draft')}><RotateCcw size={14} />保存草稿</button>
+        <button className="button button-primary" type="button" onClick={() => void save('completed')}><Check size={14} />完成复盘</button>
+      </footer>
+    </main>
+  )
+}
+
+function CreateReviewDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (review: Review) => Promise<void> }): React.JSX.Element {
+  const bounds = useMemo(weekBounds, [props.open])
+  const [reviewType, setReviewType] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
+  const [startDate, setStartDate] = useState(bounds.start)
+  const [endDate, setEndDate] = useState(bounds.end)
+  const [title, setTitle] = useState('本周复盘')
+  const [error, setError] = useState('')
+  const submit = async (): Promise<void> => {
+    const result = await window.youtrace.workflow.createReview({ reviewType, startDate, endDate, title })
+    if (!result.ok) return setError(result.error.message)
+    await props.onCreated(result.data)
+    props.onOpenChange(false)
+  }
+  return <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">先冻结事实，再写判断</span><Dialog.Title>生成复盘</Dialog.Title><Dialog.Description>系统会保存这个周期的计划、任务、投入和成果快照。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><label><span>复盘标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="form-row form-row-three"><label><span>周期</span><select value={reviewType} onChange={(event) => setReviewType(event.target.value as typeof reviewType)}><option value="daily">每日</option><option value="weekly">每周</option><option value="monthly">每月</option></select></label><label><span>开始日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim()} onClick={() => void submit()}>生成快照<ArrowRight size={14} /></button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+}

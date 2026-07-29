@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 4
+export const CURRENT_SCHEMA_VERSION = 5
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -362,6 +362,58 @@ export const INITIAL_SCHEMA_SQL = `
     error TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reminder_event_payloads (
+    event_id TEXT PRIMARY KEY REFERENCES reminder_events(id),
+    title TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reviews (
+    id TEXT PRIMARY KEY,
+    review_type TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    title TEXT NOT NULL,
+    important_outcomes TEXT NOT NULL DEFAULT '',
+    incomplete_items TEXT NOT NULL DEFAULT '',
+    blockers TEXT NOT NULL DEFAULT '',
+    next_first_step TEXT NOT NULL DEFAULT '',
+    next_commitments TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS review_snapshots (
+    id TEXT PRIMARY KEY,
+    review_id TEXT NOT NULL UNIQUE REFERENCES reviews(id),
+    snapshot_json TEXT NOT NULL,
+    captured_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS plan_adjustments (
+    id TEXT PRIMARY KEY,
+    review_id TEXT NOT NULL REFERENCES reviews(id),
+    task_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    before_json TEXT NOT NULL,
+    after_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS project_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    source_project_id TEXT,
+    definition_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS course_profiles (

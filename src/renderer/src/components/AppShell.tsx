@@ -26,6 +26,9 @@ import { TagsPage } from '../pages/TagsPage'
 import { GlobalSearch } from './GlobalSearch'
 import { CalendarPage } from '../pages/CalendarPage'
 import { CountdownSummary } from './CountdownSummary'
+import { ReviewsPage } from '../pages/ReviewsPage'
+import { TemplatesPage } from '../pages/TemplatesPage'
+import { SettingsPage } from '../pages/SettingsPage'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
@@ -102,7 +105,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <Tags size={17} />
             <span>标签</span>
           </button>
-          <button type="button">
+          <button type="button" onClick={() => setActive('templates')}>
             <LayoutTemplate size={17} />
             <span>模板</span>
           </button>
@@ -113,7 +116,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
         </div>
 
         <div className="sidebar-footer">
-          <button type="button">
+          <button type="button" onClick={() => setActive('settings')}>
             <Settings size={17} />
             <span>设置</span>
           </button>
@@ -134,6 +137,12 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <RecordsPage />
           ) : active === 'calendar' ? (
             <CalendarPage />
+          ) : active === 'reviews' ? (
+            <ReviewsPage />
+          ) : active === 'templates' ? (
+            <TemplatesPage />
+          ) : active === 'settings' ? (
+            <SettingsPage workspace={workspace} />
           ) : active === 'memos' ? (
             <MemosPage />
           ) : active === 'tags' ? (
