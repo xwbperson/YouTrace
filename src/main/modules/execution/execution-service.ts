@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type {
   ConvertMemoToTaskInput,
+  CorrectEffortInput,
   CreateEvidenceInput,
   CreateManualEffortInput,
   CreateMemoInput,
   EffortEntry,
+  EffortRevision,
   EffortListInput,
   Evidence,
   Memo,
@@ -39,6 +41,35 @@ export class ExecutionService {
       })
     }
     const entity = this.resolveEntity(input.entityType, input.entityId)
+    if (input.entityType === 'task') {
+      const blocking = this.planningService
+        .listTaskDependencies(input.entityId)
+        .filter(
+          (dependency) =>
+            !dependency.prerequisiteAvailable || dependency.prerequisiteStatus !== 'completed'
+        )
+      if (blocking.length > 0 && !input.dependencyOverrideReason) {
+        throw new YouTraceError({
+          code: 'TASK_DEPENDENCY_BLOCKED',
+          message: `任务仍被 ${blocking.length} 项前置任务阻塞。`,
+          details: {
+            blockers: blocking.map((dependency) => ({
+              id: dependency.prerequisiteTaskId,
+              title: dependency.prerequisiteTitle,
+              reason: dependency.blockedReason
+            }))
+          },
+          recovery: '请先完成前置任务，或填写强制开始原因。'
+        })
+      }
+      if (blocking.length > 0 && input.dependencyOverrideReason) {
+        this.planningRepository.recordDependencyOverride(
+          input.entityId,
+          input.dependencyOverrideReason,
+          new Date().toISOString()
+        )
+      }
+    }
     const id = randomUUID()
     this.repository.insertStartedEffort(
       id,
@@ -99,6 +130,32 @@ export class ExecutionService {
 
   listEfforts(input: EffortListInput): EffortEntry[] {
     return this.repository.listEfforts(input)
+  }
+
+  correctEffort(input: CorrectEffortInput): EffortEntry {
+    const current = this.repository.getEffort(input.id)
+    if (!current) throw entityNotFound('努力记录')
+    if (!current.endedAt) {
+      throw new YouTraceError({
+        code: 'EFFORT_ACTIVE_CORRECTION_DENIED',
+        message: '活动计时必须先停止，才能更正时间。'
+      })
+    }
+    if (Date.parse(input.endedAt) < Date.parse(input.startedAt)) {
+      throw new YouTraceError({
+        code: 'EFFORT_TIME_INVALID',
+        message: '结束时间不能早于开始时间。'
+      })
+    }
+    if (!this.repository.correctEffort(current, input, new Date().toISOString())) {
+      throw entityNotFound('努力记录')
+    }
+    return this.requireEffort(input.id)
+  }
+
+  listEffortHistory(id: string): EffortRevision[] {
+    if (!this.repository.getEffort(id)) throw entityNotFound('努力记录')
+    return this.repository.listEffortHistory(id)
   }
 
   createEvidence(input: CreateEvidenceInput): Evidence {

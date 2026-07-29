@@ -112,7 +112,7 @@ describe('habit, metric and course practice service', () => {
         publisher: ''
       }
     })
-    practice.createKnowledge({
+    const knowledge = practice.createKnowledge({
       projectId: project.id,
       milestoneId: null,
       title: '分层体系结构',
@@ -129,6 +129,36 @@ describe('habit, metric and course practice service', () => {
       analysis: '混淆了端到端可靠性和分组转发。',
       mastery: 30,
       nextReviewDate: '2026-08-01'
+    })
+    const learningTest = practice.createLearningTest({
+      projectId: project.id,
+      milestoneId: null,
+      title: '第一章测试',
+      score: 82,
+      maxScore: 100,
+      testedAt: '2026-08-01T02:00:00.000Z',
+      note: '运输层概念仍需复习'
+    })
+    expect(practice.listLearningTests(project.id)).toMatchObject([
+      { id: learningTest.id, score: 82, maxScore: 100 }
+    ])
+    const queue = practice.listReviewQueue(project.id)
+    const knowledgeReview = queue.find(
+      (item) => item.entityType === 'knowledge' && item.entityId === knowledge.id
+    )!
+    const nextReview = practice.recordReviewResult({
+      queueId: knowledgeReview.id,
+      result: 'good',
+      reviewedAt: '2026-08-01T03:00:00.000Z'
+    })
+    expect(nextReview).toMatchObject({
+      entityId: knowledge.id,
+      scheduledDate: '2026-08-08',
+      status: 'pending'
+    })
+    expect(practice.listKnowledge(project.id)[0]).toMatchObject({
+      mastery: 75,
+      nextReviewDate: '2026-08-08'
     })
 
     expect(practice.listCourses()[0]).toMatchObject({

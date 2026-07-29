@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import type {
   AddTaskDependencyInput,
+  Area,
   AssignTagInput,
+  CreateAreaInput,
+  CreateChecklistItemInput,
   CreateGoalInput,
   CreateMilestoneInput,
   CreateProjectInput,
@@ -10,12 +13,22 @@ import type {
   Goal,
   Milestone,
   Project,
+  MergeTagsInput,
+  SavedView,
+  SaveViewInput,
   SearchInput,
   SearchResult,
   Tag,
+  TagStats,
   Task,
+  TaskChecklistItem,
   TaskDependency,
   TaskListInput,
+  TaskRecurrence,
+  SetTaskRecurrenceInput,
+  SetChecklistProgressInput,
+  UpdateAreaInput,
+  UpdateChecklistItemInput,
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
@@ -25,12 +38,41 @@ import { YouTraceError } from '../../../shared/errors'
 import { calculateMastery, calculateProjectProgress, calculateWeightedProgress } from './domain/progress'
 import { wouldCreateDependencyCycle } from './domain/dependencies'
 import { PlanningRepository, type MilestoneProgressFact } from './planning-repository'
+import { searchInputSchema } from '../../../shared/contracts'
 
 export class PlanningService {
   constructor(private readonly repository: PlanningRepository) {}
 
-  listProjects(): Project[] {
-    return this.repository.listProjects().map((row) => this.mapProject(row))
+  listAreas(includeArchived = false): Area[] {
+    return this.repository.listAreas(includeArchived)
+  }
+
+  createArea(input: CreateAreaInput): Area {
+    const id = randomUUID()
+    this.repository.insertArea(id, input, new Date().toISOString())
+    return this.repository.getArea(id)!
+  }
+
+  updateArea(input: UpdateAreaInput): Area {
+    const current = this.repository.getArea(input.id)
+    if (!current) throw notFound('领域')
+    this.repository.updateArea(
+      input.id,
+      {
+        name: input.name ?? current.name,
+        color: input.color === undefined ? current.color : input.color,
+        icon: input.icon === undefined ? current.icon : input.icon,
+        description: input.description ?? current.description
+      },
+      input.archived ?? current.archived,
+      current,
+      new Date().toISOString()
+    )
+    return this.repository.getArea(input.id)!
+  }
+
+  listProjects(includeArchived = false): Project[] {
+    return this.repository.listProjects(includeArchived).map((row) => this.mapProject(row))
   }
 
   createProject(input: CreateProjectInput): Project {
@@ -133,7 +175,7 @@ export class PlanningService {
   }
 
   listTasks(input: TaskListInput): Task[] {
-    return this.repository.listTasks(input)
+    return applyTaskProgress(this.repository.listTasks(input))
   }
 
   createTask(input: CreateTaskInput): Task {
@@ -166,7 +208,16 @@ export class PlanningService {
       includeInProgress: input.includeInProgress ?? current.includeInProgress,
       tagIds: input.tagIds ?? current.tagIds
     }
-    this.repository.updateTask(input.id, merged, current, new Date().toISOString())
+    const now = new Date().toISOString()
+    const recurrence = this.repository.getTaskRecurrence(input.id)
+    this.repository.updateTask(input.id, merged, current, now)
+    if (
+      recurrence?.active &&
+      current.status !== 'completed' &&
+      merged.status === 'completed'
+    ) {
+      this.createNextRecurrence(current, recurrence, now)
+    }
     return this.requireTask(input.id)
   }
 
@@ -204,6 +255,63 @@ export class PlanningService {
     return this.repository.listTaskDependencies(taskId)
   }
 
+  listChecklist(taskId: string): TaskChecklistItem[] {
+    if (!this.repository.getTask(taskId)) throw notFound('任务')
+    return this.repository.listChecklist(taskId)
+  }
+
+  createChecklistItem(input: CreateChecklistItemInput): TaskChecklistItem {
+    if (!this.repository.getTask(input.taskId)) throw notFound('任务')
+    return this.repository.insertChecklistItem(randomUUID(), input, new Date().toISOString())
+  }
+
+  updateChecklistItem(input: UpdateChecklistItemInput): TaskChecklistItem {
+    const current = this.repository.getChecklistItem(input.id)
+    if (!current) throw notFound('检查项')
+    return this.repository.updateChecklistItem(
+      input.id,
+      input.text ?? current.text,
+      input.checked ?? current.checked,
+      new Date().toISOString()
+    )!
+  }
+
+  deleteChecklistItem(id: string): void {
+    if (!this.repository.deleteChecklistItem(id)) throw notFound('检查项')
+  }
+
+  setChecklistProgress(input: SetChecklistProgressInput): Task {
+    if (!this.repository.getTask(input.taskId)) throw notFound('任务')
+    this.repository.setChecklistProgress(input.taskId, input.enabled, new Date().toISOString())
+    return this.requireTask(input.taskId)
+  }
+
+  getTaskRecurrence(taskId: string): TaskRecurrence | null {
+    if (!this.repository.getTask(taskId)) throw notFound('任务')
+    return this.repository.getTaskRecurrence(taskId)
+  }
+
+  setTaskRecurrence(input: SetTaskRecurrenceInput): TaskRecurrence | null {
+    if (!this.repository.getTask(input.taskId)) throw notFound('任务')
+    if (!input.rule) {
+      this.repository.removeTaskRecurrence(input.taskId)
+      return null
+    }
+    const existing = this.repository.getTaskRecurrence(input.taskId)
+    return this.repository.setTaskRecurrence(
+      input.taskId,
+      {
+        seriesId: existing?.seriesId ?? randomUUID(),
+        frequency: input.rule.frequency,
+        intervalValue: input.rule.intervalValue,
+        weekdays: input.rule.weekdays,
+        nextOccurrence: input.rule.nextOccurrence,
+        active: true
+      },
+      new Date().toISOString()
+    )
+  }
+
   listTags(): Tag[] {
     return this.repository.listTags()
   }
@@ -232,8 +340,85 @@ export class PlanningService {
     this.repository.assignTag(input.tagId, input.entityType, input.entityId, new Date().toISOString())
   }
 
+  getTagStats(id: string): TagStats {
+    if (!this.repository.getTag(id)) throw notFound('标签')
+    return this.repository.getTagStats(id)
+  }
+
+  mergeTags(input: MergeTagsInput): Tag {
+    if (!this.repository.getTag(input.sourceTagId) || !this.repository.getTag(input.targetTagId)) {
+      throw notFound('标签')
+    }
+    this.repository.mergeTags(input.sourceTagId, input.targetTagId, new Date().toISOString())
+    return this.repository.getTag(input.targetTagId)!
+  }
+
   search(input: SearchInput): SearchResult[] {
-    return this.repository.search(input)
+    return this.repository.search(searchInputSchema.parse(input))
+  }
+
+  listSavedViews(): SavedView[] {
+    this.ensurePresetViews()
+    return this.repository.listSavedViews()
+  }
+
+  saveView(input: SaveViewInput): SavedView {
+    return this.repository.insertSavedView(randomUUID(), input, false, new Date().toISOString())
+  }
+
+  deleteSavedView(id: string): void {
+    if (!this.repository.deleteSavedView(id, new Date().toISOString())) {
+      throw new YouTraceError({
+        code: 'SAVED_VIEW_DELETE_DENIED',
+        message: '预设视图不能删除，或该视图已经不存在。'
+      })
+    }
+  }
+
+  private createNextRecurrence(current: Task, recurrence: TaskRecurrence, now: string): void {
+    const nextDate = recurrence.nextOccurrence
+    const nextDueAt = current.dueAt ? moveInstantToDate(current.dueAt, nextDate) : null
+    const nextTask = this.createTask({
+      parentTaskId: current.parentTaskId,
+      projectId: current.projectId,
+      goalId: current.goalId,
+      milestoneId: current.milestoneId,
+      title: current.title,
+      description: current.description,
+      status: nextDueAt ? 'scheduled' : 'ready',
+      difficulty: current.difficulty,
+      priority: current.priority,
+      estimatedMinutes: current.estimatedMinutes,
+      progressWeight: current.progressWeight,
+      startDate: nextDate,
+      dueAt: nextDueAt,
+      verificationCriteria: current.verificationCriteria,
+      includeInProgress: current.includeInProgress,
+      tagIds: current.tagIds
+    })
+    const following = nextRecurrenceDate(recurrence, nextDate)
+    this.repository.disableTaskRecurrence(current.id, now)
+    this.repository.setTaskRecurrence(
+      nextTask.id,
+      {
+        seriesId: recurrence.seriesId,
+        frequency: recurrence.frequency,
+        intervalValue: recurrence.intervalValue,
+        weekdays: recurrence.weekdays,
+        nextOccurrence: following,
+        active: true
+      },
+      now
+    )
+  }
+
+  private ensurePresetViews(): void {
+    const existing = new Set(this.repository.listSavedViews().map((view) => view.name))
+    for (const preset of presetViews()) {
+      if (!existing.has(preset.name)) {
+        this.repository.insertSavedView(preset.id, preset, true, new Date().toISOString())
+      }
+    }
   }
 
   private requireProject(id: string): Project {
@@ -340,14 +525,18 @@ function groupMilestones(facts: MilestoneProgressFact[]): Array<{
   return [...grouped.values()].map((rows) => {
     const milestone = rows[0]!
     const taskRows = rows.filter((row) => row.taskId !== null)
+    const taskIds = new Set(taskRows.map((row) => row.taskId))
+    const topLevelTasks = taskRows.filter(
+      (row) => row.taskParentTaskId === null || !taskIds.has(row.taskParentTaskId)
+    )
     const completion =
       taskRows.length === 0
         ? ['completed', 'verified', 'accepted'].includes(milestone.status)
           ? 1
           : 0
         : calculateWeightedProgress(
-            taskRows.map((task) => ({
-              completion: task.taskStatus === 'completed' ? 1 : 0,
+            topLevelTasks.map((task) => ({
+              completion: taskFactCompletion(task, taskRows),
               includeInProgress: task.taskIncludeInProgress ?? true,
               estimatedMinutes: task.taskEstimatedMinutes,
               manualWeight: task.taskProgressWeight
@@ -371,14 +560,69 @@ function calculateMilestoneCompletion(
   if (taskRows.length === 0) {
     return ['completed', 'verified', 'accepted'].includes(status) ? 1 : 0
   }
+  const taskIds = new Set(taskRows.map((row) => row.taskId))
+  const topLevelTasks = taskRows.filter(
+    (row) => row.taskParentTaskId === null || !taskIds.has(row.taskParentTaskId)
+  )
   return calculateWeightedProgress(
-    taskRows.map((task) => ({
-      completion: task.taskStatus === 'completed' ? 1 : 0,
+    topLevelTasks.map((task) => ({
+      completion: taskFactCompletion(task, taskRows),
       includeInProgress: task.taskIncludeInProgress ?? true,
       estimatedMinutes: task.taskEstimatedMinutes,
       manualWeight: task.taskProgressWeight
     }))
   )
+}
+
+function taskFactCompletion(
+  task: MilestoneProgressFact,
+  allTasks: MilestoneProgressFact[],
+  visited = new Set<string>()
+): number {
+  if (!task.taskId || visited.has(task.taskId)) return 0
+  const nextVisited = new Set(visited).add(task.taskId)
+  const children = allTasks.filter(
+    (candidate) => candidate.taskParentTaskId === task.taskId && candidate.taskId !== null
+  )
+  if (children.length > 0) {
+    return calculateWeightedProgress(
+      children.map((child) => ({
+        completion: taskFactCompletion(child, allTasks, nextVisited),
+        includeInProgress: child.taskIncludeInProgress ?? true,
+        estimatedMinutes: child.taskEstimatedMinutes,
+        manualWeight: child.taskProgressWeight
+      }))
+    )
+  }
+  if (task.checklistProgressEnabled && task.checklistCount > 0) {
+    return task.checklistChecked / task.checklistCount
+  }
+  return task.taskStatus === 'completed' ? 1 : 0
+}
+
+function applyTaskProgress(tasks: Task[]): Task[] {
+  const byParent = new Map<string, Task[]>()
+  for (const task of tasks) {
+    if (!task.parentTaskId) continue
+    const children = byParent.get(task.parentTaskId) ?? []
+    children.push(task)
+    byParent.set(task.parentTaskId, children)
+  }
+  const calculate = (task: Task, visited = new Set<string>()): number => {
+    if (visited.has(task.id)) return 0
+    const children = byParent.get(task.id) ?? []
+    if (children.length === 0) return task.progress
+    const nextVisited = new Set(visited).add(task.id)
+    return calculateWeightedProgress(
+      children.map((child) => ({
+        completion: calculate(child, nextVisited),
+        includeInProgress: child.includeInProgress,
+        estimatedMinutes: child.estimatedMinutes,
+        manualWeight: child.progressWeight
+      }))
+    )
+  }
+  return tasks.map((task) => ({ ...task, progress: calculate(task) }))
 }
 
 function mapGoal(row: NonNullable<ReturnType<PlanningRepository['getGoal']>>): Goal {
@@ -401,4 +645,101 @@ function notFound(label: string): YouTraceError {
     message: `${label}不存在或已进入回收站。`,
     recovery: '请刷新当前页面后重试。'
   })
+}
+
+function nextRecurrenceDate(recurrence: TaskRecurrence, fromDate: string): string {
+  if (recurrence.frequency === 'monthly') {
+    const [year, month, day] = fromDate.split('-').map(Number) as [number, number, number]
+    const targetMonth = month - 1 + recurrence.intervalValue
+    const targetYear = year + Math.floor(targetMonth / 12)
+    const normalizedMonth = ((targetMonth % 12) + 12) % 12
+    const lastDay = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate()
+    return formatUtcDate(new Date(Date.UTC(targetYear, normalizedMonth, Math.min(day, lastDay))))
+  }
+  if (recurrence.frequency === 'weekdays') {
+    let cursor = addUtcDays(fromDate, 1)
+    while ([0, 6].includes(new Date(`${cursor}T12:00:00.000Z`).getUTCDay())) {
+      cursor = addUtcDays(cursor, 1)
+    }
+    return cursor
+  }
+  if (recurrence.frequency === 'weekly' && recurrence.weekdays.length > 0) {
+    let cursor = addUtcDays(fromDate, 1)
+    const allowed = new Set(recurrence.weekdays)
+    for (let offset = 0; offset < 7 * Math.max(1, recurrence.intervalValue); offset += 1) {
+      if (allowed.has(new Date(`${cursor}T12:00:00.000Z`).getUTCDay())) return cursor
+      cursor = addUtcDays(cursor, 1)
+    }
+  }
+  const interval =
+    recurrence.frequency === 'weekly'
+      ? 7 * recurrence.intervalValue
+      : recurrence.intervalValue
+  return addUtcDays(fromDate, interval)
+}
+
+function addUtcDays(value: string, amount: number): string {
+  const date = new Date(`${value}T12:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + amount)
+  return formatUtcDate(date)
+}
+
+function formatUtcDate(value: Date): string {
+  return value.toISOString().slice(0, 10)
+}
+
+function moveInstantToDate(instant: string, localDate: string): string {
+  const time = new Date(instant)
+  const [year, month, day] = localDate.split('-').map(Number) as [number, number, number]
+  time.setUTCFullYear(year, month - 1, day)
+  return time.toISOString()
+}
+
+function presetViews(): Array<SaveViewInput & { id: string }> {
+  const base = searchInputSchema.parse({
+    query: '',
+    entityTypes: ['task'],
+    statuses: [],
+    tagIds: [],
+    projectId: null,
+    dueFrom: null,
+    dueTo: null,
+    difficulties: [],
+    priorities: [],
+    overdueOnly: false,
+    untaggedOnly: false,
+    hasEvidence: null,
+    limit: 100
+  })
+  return [
+    {
+      id: '15000000-0000-4000-8000-000000000001',
+      name: '高优先级且逾期',
+      filters: { ...base, priorities: ['high', 'critical'], overdueOnly: true }
+    },
+    {
+      id: '15000000-0000-4000-8000-000000000002',
+      name: '高难度待办',
+      filters: {
+        ...base,
+        statuses: ['ready', 'scheduled', 'in_progress'],
+        difficulties: [4, 5]
+      }
+    },
+    {
+      id: '15000000-0000-4000-8000-000000000003',
+      name: '没有标签的内容',
+      filters: { ...base, untaggedOnly: true }
+    },
+    {
+      id: '15000000-0000-4000-8000-000000000004',
+      name: '没有证据的任务',
+      filters: { ...base, hasEvidence: false }
+    },
+    {
+      id: '15000000-0000-4000-8000-000000000005',
+      name: '待处理与阻塞',
+      filters: { ...base, statuses: ['inbox', 'blocked'] }
+    }
+  ]
 }

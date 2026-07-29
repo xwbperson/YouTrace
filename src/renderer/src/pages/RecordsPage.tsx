@@ -8,12 +8,14 @@ import {
   FileCheck2,
   Image,
   Link2,
+  History,
+  Pencil,
   Plus,
   TimerReset,
   X
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import type { Evidence, IpcResult, Task } from '../../../shared/contracts'
+import { useEffect, useMemo, useState } from 'react'
+import type { EffortEntry, Evidence, IpcResult, Task } from '../../../shared/contracts'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -25,6 +27,7 @@ export function RecordsPage(): React.JSX.Element {
   const [tab, setTab] = useState<'effort' | 'evidence'>('effort')
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [evidenceDialogOpen, setEvidenceDialogOpen] = useState(false)
+  const [selectedEffort, setSelectedEffort] = useState<EffortEntry | null>(null)
 
   const effortsQuery = useQuery({
     queryKey: ['efforts'],
@@ -150,7 +153,7 @@ export function RecordsPage(): React.JSX.Element {
                         <strong>{effort.entityTitle ?? '已删除来源'}</strong>
                         <span>{effort.source === 'timer' ? '计时记录' : '手动补录'}</span>
                       </div>
-                      <b>{formatMinutes(effort.effectiveMinutes)}</b>
+                      <div className="effort-card-actions"><b>{formatMinutes(effort.effectiveMinutes)}</b><button type="button" onClick={() => setSelectedEffort(effort)}><Pencil size={11} />更正</button></div>
                     </header>
                     {effort.result && <p>{effort.result}</p>}
                     {(effort.obstacles || effort.nextStep) && (
@@ -200,8 +203,60 @@ export function RecordsPage(): React.JSX.Element {
           await queryClient.invalidateQueries({ queryKey: ['evidence'] })
         }}
       />
+      <CorrectEffortDialog
+        effort={selectedEffort}
+        onOpenChange={(open) => { if (!open) setSelectedEffort(null) }}
+        onCorrected={async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['efforts'] }),
+            queryClient.invalidateQueries({ queryKey: ['tasks'] })
+          ])
+        }}
+      />
     </main>
   )
+}
+
+function CorrectEffortDialog({
+  effort,
+  onOpenChange,
+  onCorrected
+}: {
+  effort: EffortEntry | null
+  onOpenChange: (open: boolean) => void
+  onCorrected: () => Promise<void>
+}): React.JSX.Element {
+  const [startedAt, setStartedAt] = useState('')
+  const [endedAt, setEndedAt] = useState('')
+  const [minutes, setMinutes] = useState('')
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const historyQuery = useQuery({
+    queryKey: ['effort-history', effort?.id],
+    enabled: Boolean(effort),
+    queryFn: async () => unwrap(await window.youtrace.execution.listEffortHistory(effort!.id))
+  })
+  useEffect(() => {
+    if (!effort) return
+    setStartedAt(toLocalDateTime(effort.startedAt))
+    setEndedAt(toLocalDateTime(effort.endedAt ?? new Date().toISOString()))
+    setMinutes(effort.effectiveMinutes.toString())
+  }, [effort])
+  const submit = async (): Promise<void> => {
+    if (!effort) return
+    const result = await window.youtrace.execution.correctEffort({
+      id: effort.id,
+      startedAt: new Date(startedAt).toISOString(),
+      endedAt: new Date(endedAt).toISOString(),
+      effectiveMinutes: Number(minutes),
+      reason
+    })
+    if (!result.ok) return setError(result.error.message)
+    await onCorrected()
+    setReason('')
+    onOpenChange(false)
+  }
+  return <Dialog.Root open={effort !== null} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">原值永久保留在修改历史</span><Dialog.Title>更正努力时间</Dialog.Title><Dialog.Description>{effort?.entityTitle}</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><div className="form-row"><label><span>开始时间</span><input type="datetime-local" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} /></label><label><span>结束时间</span><input type="datetime-local" value={endedAt} onChange={(event) => setEndedAt(event.target.value)} /></label></div><label><span>有效分钟</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></label><label><span>更正原因（必填）</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>{(historyQuery.data ?? []).length > 0 && <div className="effort-history"><strong><History size={12} />修改历史</strong>{(historyQuery.data ?? []).map((revision) => <span key={revision.id}>{new Date(revision.occurredAt).toLocaleString('zh-CN')} · {revision.before.effectiveMinutes} → {revision.after.effectiveMinutes} 分钟 · {revision.reason}</span>)}</div>}{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!startedAt || !endedAt || !reason.trim()} onClick={() => void submit()}>保存更正</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function EvidenceCard({ evidence }: { evidence: Evidence }): React.JSX.Element {
@@ -466,4 +521,10 @@ function localDateTime(offsetMinutes: number): string {
   const date = new Date(Date.now() + offsetMinutes * 60_000)
   const timezoneOffset = date.getTimezoneOffset() * 60_000
   return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16)
+}
+
+function toLocalDateTime(value: string): string {
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }

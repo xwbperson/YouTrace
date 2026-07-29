@@ -55,6 +55,35 @@ export class DataService {
     return this.repository.listBackups()
   }
 
+  async maybeCreateAutomaticBackup(
+    intervalHours: number,
+    retentionCount: number
+  ): Promise<BackupInfo | null> {
+    const automatic = this.repository
+      .listBackups()
+      .filter((backup) => backup.kind === 'automatic')
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    const latest = automatic[0]
+    if (
+      latest &&
+      Date.now() - Date.parse(latest.createdAt) < intervalHours * 60 * 60 * 1_000
+    ) {
+      return null
+    }
+    const created = await this.createBackup('自动备份', 'automatic')
+    const root = this.workspaceManager.getCurrentPath()
+    const retained = this.repository
+      .listBackups()
+      .filter((backup) => backup.kind === 'automatic')
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    for (const expired of retained.slice(retentionCount)) {
+      const path = resolveWithin(root, expired.relativePath)
+      await unlink(path).catch(() => undefined)
+      this.repository.deleteBackupRecord(expired.id)
+    }
+    return created
+  }
+
   async createBackup(
     label: string,
     kind: BackupInfo['kind'] = 'manual',

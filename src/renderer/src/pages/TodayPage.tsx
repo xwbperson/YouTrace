@@ -22,6 +22,9 @@ function unwrap<T>(result: IpcResult<T>): T {
 export function TodayPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [overrideTask, setOverrideTask] = useState<Task | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [actionError, setActionError] = useState('')
   const [now, setNow] = useState(Date.now())
 
   const tasksQuery = useQuery({
@@ -43,6 +46,35 @@ export function TodayPage(): React.JSX.Element {
     queryFn: async () => unwrap(await window.youtrace.execution.getActiveEffort()),
     refetchInterval: 10_000
   })
+  const todayStart = useMemo(() => {
+    const date = new Date()
+    date.setHours(0, 0, 0, 0)
+    return date.toISOString()
+  }, [])
+  const todayEnd = useMemo(() => {
+    const date = new Date(todayStart)
+    date.setDate(date.getDate() + 1)
+    return date.toISOString()
+  }, [todayStart])
+  const blocksQuery = useQuery({
+    queryKey: ['time-blocks', 'today', todayStart, todayEnd],
+    queryFn: async () =>
+      unwrap(await window.youtrace.temporal.listTimeBlocks({ start: todayStart, end: todayEnd }))
+  })
+  const todayEffortsQuery = useQuery({
+    queryKey: ['efforts', 'today', todayStart, todayEnd],
+    queryFn: async () =>
+      unwrap(
+        await window.youtrace.execution.listEfforts({
+          entityType: null,
+          entityId: null,
+          from: todayStart,
+          to: todayEnd,
+          limit: 500,
+          offset: 0
+        })
+      )
+  })
 
   useEffect(() => {
     if (!activeQuery.data) return
@@ -51,22 +83,51 @@ export function TodayPage(): React.JSX.Element {
   }, [activeQuery.data])
 
   const tasks = tasksQuery.data ?? []
+  const today = new Date().toLocaleDateString('sv-SE')
+  const focusTasks = [...tasks]
+    .sort((left, right) => {
+      const leftToday = left.startDate === today || left.dueAt?.slice(0, 10) === today ? 0 : 1
+      const rightToday = right.startDate === today || right.dueAt?.slice(0, 10) === today ? 0 : 1
+      return leftToday - rightToday
+    })
+    .slice(0, 3)
+  const remainingTasks = tasks.filter((task) => !focusTasks.some((focus) => focus.id === task.id))
   const active = activeQuery.data ?? null
-  const plannedMinutes = tasks.reduce((sum, task) => sum + (task.estimatedMinutes ?? 0), 0)
-  const actualMinutes = tasks.reduce((sum, task) => sum + task.actualMinutes, 0)
+  const plannedMinutes = focusTasks.reduce((sum, task) => sum + (task.estimatedMinutes ?? 0), 0)
+  const actualMinutes = (todayEffortsQuery.data ?? []).reduce(
+    (sum, effort) => sum + effort.effectiveMinutes,
+    0
+  )
   const elapsedSeconds = active
     ? Math.max(0, Math.floor((now - Date.parse(active.startedAt)) / 1_000))
     : 0
 
   const startMutation = useMutation({
-    mutationFn: async (task: Task) =>
-      unwrap(
-        await window.youtrace.execution.startEffort({
+    mutationFn: async ({
+      task,
+      dependencyOverrideReason
+    }: {
+      task: Task
+      dependencyOverrideReason?: string
+    }) => {
+      const result = await window.youtrace.execution.startEffort({
           entityType: 'task',
           entityId: task.id,
+          dependencyOverrideReason: dependencyOverrideReason || null,
           tagIds: task.tagIds
         })
-      ),
+      if (!result.ok) {
+        throw Object.assign(new Error(result.error.message), { code: result.error.code })
+      }
+      return result.data
+    },
+    onError: (error, variables) => {
+      if ((error as Error & { code?: string }).code === 'TASK_DEPENDENCY_BLOCKED') {
+        setOverrideTask(variables.task)
+      } else {
+        setActionError(error.message)
+      }
+    },
     onSuccess: async () => {
       setNow(Date.now())
       await Promise.all([
@@ -87,6 +148,18 @@ export function TodayPage(): React.JSX.Element {
       ])
     }
   })
+
+  const quickUpdate = async (
+    task: Task,
+    input: Parameters<typeof window.youtrace.planning.updateTask>[0]
+  ): Promise<void> => {
+    const result = await window.youtrace.planning.updateTask({ ...input, id: task.id })
+    if (!result.ok) return setActionError(result.error.message)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['today-tasks'] }),
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    ])
+  }
 
   return (
     <main className="today-page">
@@ -135,12 +208,12 @@ export function TodayPage(): React.JSX.Element {
               <span className="section-label">可执行的下一步</span>
               <h2>今日任务</h2>
             </div>
-            <span className="task-count">{tasks.length} 项</span>
+            <span className="task-count">{focusTasks.length} / 最多 3 项</span>
           </div>
 
           {tasksQuery.isPending ? (
             <p className="rail-message">正在读取任务…</p>
-          ) : tasks.length === 0 ? (
+          ) : focusTasks.length === 0 ? (
             <div className="today-empty">
               <Check size={23} />
               <strong>现在没有待执行任务</strong>
@@ -148,7 +221,7 @@ export function TodayPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="today-task-list">
-              {tasks.map((task) => {
+              {focusTasks.map((task) => {
                 const isCurrent = active?.entityId === task.id
                 return (
                   <article key={task.id} className={isCurrent ? 'current' : ''}>
@@ -176,16 +249,27 @@ export function TodayPage(): React.JSX.Element {
                       <button
                         className={`start-task${isCurrent ? ' current' : ''}`}
                         disabled={Boolean(active) || startMutation.isPending}
-                        onClick={() => startMutation.mutate(task)}
+                        onClick={() => startMutation.mutate({ task })}
                       >
                         {isCurrent ? <TimerReset size={15} /> : <Play size={14} fill="currentColor" />}
                         {isCurrent ? '计时中' : '开始'}
                       </button>
                     )}
+                    <div className="today-task-quick">
+                      <button type="button" title="转明日" onClick={() => void quickUpdate(task, { id: task.id, startDate: tomorrowDate() })}>明日</button>
+                      <button type="button" title="延期一天" onClick={() => void quickUpdate(task, { id: task.id, dueAt: task.dueAt ? new Date(Date.parse(task.dueAt) + 86_400_000).toISOString() : new Date(Date.now() + 86_400_000).toISOString() })}>延期</button>
+                      <button type="button" title="标为阻塞" onClick={() => void quickUpdate(task, { id: task.id, status: 'blocked' })}>阻塞</button>
+                    </div>
                   </article>
                 )
               })}
             </div>
+          )}
+          {remainingTasks.length > 0 && (
+            <details className="today-backlog">
+              <summary>未安排待办 · {remainingTasks.length} 项</summary>
+              <div>{remainingTasks.map((task) => <span key={task.id}><strong>{task.title}</strong><small>{task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}</small></span>)}</div>
+            </details>
           )}
         </section>
 
@@ -210,6 +294,10 @@ export function TodayPage(): React.JSX.Element {
             <strong>今天最重要的一件事</strong>
             <p>{tasks[0]?.title ?? '尚未设置。选择一个真正影响结果的下一步。'}</p>
           </section>
+          <section className="panel today-schedule">
+            <span className="section-label">已安排时间块</span>
+            {(blocksQuery.data ?? []).length === 0 ? <p>今天还没有时间块。</p> : (blocksQuery.data ?? []).map((block) => <article key={block.id}><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(block.startsAt))}</strong><span>{block.title}</span><small>{block.durationMinutes} 分钟</small></article>)}
+          </section>
         </aside>
       </div>
 
@@ -227,6 +315,8 @@ export function TodayPage(): React.JSX.Element {
           }}
         />
       )}
+      <Dialog.Root open={overrideTask !== null} onOpenChange={(open) => { if (!open) { setOverrideTask(null); setOverrideReason('') } }}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">前置任务尚未完成</span><Dialog.Title>强制开始“{overrideTask?.title}”</Dialog.Title><Dialog.Description>覆盖原因会写入活动历史，不会解除原依赖。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><label><span>强制开始原因</span><textarea autoFocus value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} /></label></div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!overrideReason.trim() || !overrideTask} onClick={() => { if (!overrideTask) return; startMutation.mutate({ task: overrideTask, dependencyOverrideReason: overrideReason }, { onSuccess: () => { setOverrideTask(null); setOverrideReason('') } }) }}>记录原因并开始</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+      {actionError && <div className="data-feedback error">{actionError}<button aria-label="关闭提示" onClick={() => setActionError('')}><X size={13} /></button></div>}
     </main>
   )
 }
@@ -329,4 +419,11 @@ function priorityLabel(priority: Task['priority']): string {
   return { low: '低优先级', medium: '中优先级', high: '高优先级', critical: '关键任务' }[
     priority
   ]
+}
+
+function tomorrowDate(): string {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }

@@ -70,7 +70,9 @@ test('creates a project and completes a task through the real Electron UI', asyn
     await page.keyboard.press('Control+K')
     const searchDialog = page.getByRole('dialog', { name: '全局搜索' })
     await searchDialog.getByLabel('搜索目标、任务和记录').fill('计算机网络')
-    await expect(searchDialog.getByText('完成计算机网络课程')).toBeVisible()
+    await expect(
+      searchDialog.getByRole('button', { name: /完成计算机网络课程/ })
+    ).toBeVisible()
     await page.screenshot({ path: 'test-results/planning.png' })
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)

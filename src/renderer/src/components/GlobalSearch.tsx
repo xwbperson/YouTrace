@@ -1,8 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { useQuery } from '@tanstack/react-query'
-import { FileText, Layers3, Search, Tag, TimerReset, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import type { IpcResult, SearchResult } from '../../../shared/contracts'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookmarkPlus, FileText, Filter, Layers3, Search, Tag, TimerReset, Trash2, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import type { IpcResult, ParsedSearchInput, SearchResult } from '../../../shared/contracts'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -20,33 +20,120 @@ export function GlobalSearch({
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [status, setStatus] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [tagId, setTagId] = useState('')
+  const [difficulty, setDifficulty] = useState('')
+  const [priority, setPriority] = useState('')
+  const [dueFrom, setDueFrom] = useState('')
+  const [dueTo, setDueTo] = useState('')
+  const [overdueOnly, setOverdueOnly] = useState(false)
+  const [untaggedOnly, setUntaggedOnly] = useState(false)
+  const [hasEvidence, setHasEvidence] = useState('')
+  const [saveName, setSaveName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedQuery(query.trim()), 160)
     return () => window.clearTimeout(timeout)
   }, [query])
 
+  const filters = useMemo<ParsedSearchInput>(() => ({
+    query: debouncedQuery,
+    entityTypes: [],
+    statuses: status ? [status as ParsedSearchInput['statuses'][number]] : [],
+    tagIds: tagId ? [tagId] : [],
+    projectId: projectId || null,
+    dueFrom: dueFrom || null,
+    dueTo: dueTo || null,
+    difficulties: difficulty ? [Number(difficulty)] : [],
+    priorities: priority ? [priority as ParsedSearchInput['priorities'][number]] : [],
+    overdueOnly,
+    untaggedOnly,
+    hasEvidence: hasEvidence === '' ? null : hasEvidence === 'yes',
+    limit: 40
+  }), [
+    debouncedQuery,
+    difficulty,
+    dueFrom,
+    dueTo,
+    hasEvidence,
+    overdueOnly,
+    priority,
+    projectId,
+    status,
+    tagId,
+    untaggedOnly
+  ])
+  const hasFilters =
+    status !== '' ||
+    projectId !== '' ||
+    tagId !== '' ||
+    difficulty !== '' ||
+    priority !== '' ||
+    dueFrom !== '' ||
+    dueTo !== '' ||
+    overdueOnly ||
+    untaggedOnly ||
+    hasEvidence !== ''
+  const projectsQuery = useQuery({
+    queryKey: ['projects'],
+    enabled: open,
+    queryFn: async () => unwrap(await window.youtrace.planning.listProjects())
+  })
+  const tagsQuery = useQuery({
+    queryKey: ['tags'],
+    enabled: open,
+    queryFn: async () => unwrap(await window.youtrace.planning.listTags())
+  })
+  const savedViewsQuery = useQuery({
+    queryKey: ['saved-views'],
+    enabled: open,
+    queryFn: async () => unwrap(await window.youtrace.planning.listSavedViews())
+  })
   const resultsQuery = useQuery({
-    queryKey: ['global-search', debouncedQuery],
-    enabled: open && debouncedQuery.length > 0,
+    queryKey: ['global-search', filters],
+    enabled: open && (debouncedQuery.length > 0 || hasFilters),
     queryFn: async () =>
-      unwrap(
-        await window.youtrace.planning.search({
-          query: debouncedQuery,
-          entityTypes: [],
-          limit: 40
-        })
-      )
+      unwrap(await window.youtrace.planning.search(filters))
   })
 
   const results = resultsQuery.data ?? []
+  const applyView = (view: ParsedSearchInput): void => {
+    setQuery(view.query)
+    setDebouncedQuery(view.query)
+    setStatus(view.statuses[0] ?? '')
+    setProjectId(view.projectId ?? '')
+    setTagId(view.tagIds[0] ?? '')
+    setDifficulty(view.difficulties[0]?.toString() ?? '')
+    setPriority(view.priorities[0] ?? '')
+    setDueFrom(view.dueFrom ?? '')
+    setDueTo(view.dueTo ?? '')
+    setOverdueOnly(view.overdueOnly)
+    setUntaggedOnly(view.untaggedOnly)
+    setHasEvidence(view.hasEvidence === null ? '' : view.hasEvidence ? 'yes' : 'no')
+  }
+  const saveView = async (): Promise<void> => {
+    if (!saveName.trim()) return
+    setSaving(true)
+    const result = await window.youtrace.planning.saveView({ name: saveName, filters })
+    setSaving(false)
+    if (result.ok) {
+      setSaveName('')
+      await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
+    }
+  }
 
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(next) => {
         onOpenChange(next)
-        if (!next) setQuery('')
+        if (!next) {
+          setQuery('')
+          setDebouncedQuery('')
+        }
       }}
     >
       <Dialog.Portal>
@@ -64,8 +151,56 @@ export function GlobalSearch({
             />
             <kbd>Esc</kbd>
           </div>
+          <div className="search-saved-views" aria-label="保存的视图">
+            {(savedViewsQuery.data ?? []).map((view) => (
+              <span key={view.id}>
+                <button type="button" onClick={() => applyView(view.filters)}>{view.name}</button>
+                {!view.isPreset && (
+                  <button
+                    type="button"
+                    aria-label={`删除视图：${view.name}`}
+                    onClick={async () => {
+                      await window.youtrace.planning.deleteSavedView(view.id)
+                      await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
+                    }}
+                  >
+                    <Trash2 size={10} />
+                  </button>
+                )}
+              </span>
+            ))}
+          </div>
+          <div className="search-filter-grid" aria-label="组合筛选">
+            <span className="search-filter-label"><Filter size={13} />筛选</span>
+            <select aria-label="筛选状态" value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">全部状态</option><option value="ready">待安排</option><option value="scheduled">已安排</option><option value="in_progress">进行中</option><option value="blocked">阻塞</option><option value="completed">已完成</option>
+            </select>
+            <select aria-label="筛选项目" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">全部项目</option>{(projectsQuery.data ?? []).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+            <select aria-label="筛选标签" value={tagId} onChange={(event) => { setTagId(event.target.value); if (event.target.value) setUntaggedOnly(false) }}>
+              <option value="">全部标签</option>{(tagsQuery.data ?? []).map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
+            </select>
+            <select aria-label="筛选难度" value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
+              <option value="">全部难度</option>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>难度 {value}</option>)}
+            </select>
+            <select aria-label="筛选优先级" value={priority} onChange={(event) => setPriority(event.target.value)}>
+              <option value="">全部优先级</option><option value="low">低</option><option value="medium">中</option><option value="high">高</option><option value="critical">关键</option>
+            </select>
+            <input aria-label="截止起始日期" type="date" value={dueFrom} onChange={(event) => setDueFrom(event.target.value)} />
+            <input aria-label="截止结束日期" type="date" value={dueTo} onChange={(event) => setDueTo(event.target.value)} />
+            <select aria-label="筛选证据" value={hasEvidence} onChange={(event) => setHasEvidence(event.target.value)}>
+              <option value="">证据不限</option><option value="yes">已有证据</option><option value="no">没有证据</option>
+            </select>
+            <label><input type="checkbox" checked={overdueOnly} onChange={(event) => setOverdueOnly(event.target.checked)} />只看逾期</label>
+            <label><input type="checkbox" checked={untaggedOnly} onChange={(event) => { setUntaggedOnly(event.target.checked); if (event.target.checked) setTagId('') }} />没有标签</label>
+            <div className="search-save-view">
+              <input aria-label="视图名称" value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="命名当前筛选" />
+              <button type="button" disabled={!saveName.trim() || saving} onClick={() => void saveView()}><BookmarkPlus size={13} />保存</button>
+            </div>
+          </div>
           <div className="global-search-results">
-            {!debouncedQuery ? (
+            {!debouncedQuery && !hasFilters ? (
               <div className="search-guidance">
                 <span className="section-label">跨模块搜索</span>
                 <p>输入中文短词、中英文标题或正文。业务表是事实来源，索引可以随时重建。</p>
@@ -79,7 +214,7 @@ export function GlobalSearch({
               <div className="search-state">正在搜索…</div>
             ) : results.length === 0 ? (
               <div className="search-state">
-                <strong>没有找到“{debouncedQuery}”</strong>
+                <strong>没有找到符合条件的内容</strong>
                 <span>可以尝试更短的词，或检查内容是否已进入回收站。</span>
               </div>
             ) : (

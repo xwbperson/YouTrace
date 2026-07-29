@@ -26,7 +26,10 @@ const api: YouTraceApi = {
     reveal: () => ipcRenderer.invoke('workspace:reveal') as Promise<IpcResult<void>>
   },
   planning: {
-    listProjects: () => ipcRenderer.invoke('planning:list-projects'),
+    listAreas: (includeArchived) => ipcRenderer.invoke('planning:list-areas', includeArchived),
+    createArea: (input) => ipcRenderer.invoke('planning:create-area', input),
+    updateArea: (input) => ipcRenderer.invoke('planning:update-area', input),
+    listProjects: (includeArchived) => ipcRenderer.invoke('planning:list-projects', includeArchived),
     createProject: (input) => ipcRenderer.invoke('planning:create-project', input),
     updateProject: (input) => ipcRenderer.invoke('planning:update-project', input),
     trashProject: (id) => ipcRenderer.invoke('planning:trash-project', id),
@@ -43,10 +46,22 @@ const api: YouTraceApi = {
     addTaskDependency: (input) => ipcRenderer.invoke('planning:add-task-dependency', input),
     listTaskDependencies: (taskId) =>
       ipcRenderer.invoke('planning:list-task-dependencies', taskId),
+    listChecklist: (taskId) => ipcRenderer.invoke('planning:list-checklist', taskId),
+    createChecklistItem: (input) => ipcRenderer.invoke('planning:create-checklist-item', input),
+    updateChecklistItem: (input) => ipcRenderer.invoke('planning:update-checklist-item', input),
+    deleteChecklistItem: (id) => ipcRenderer.invoke('planning:delete-checklist-item', id),
+    setChecklistProgress: (input) => ipcRenderer.invoke('planning:set-checklist-progress', input),
+    getTaskRecurrence: (taskId) => ipcRenderer.invoke('planning:get-task-recurrence', taskId),
+    setTaskRecurrence: (input) => ipcRenderer.invoke('planning:set-task-recurrence', input),
     listTags: () => ipcRenderer.invoke('planning:list-tags'),
     createTag: (input) => ipcRenderer.invoke('planning:create-tag', input),
     assignTag: (input) => ipcRenderer.invoke('planning:assign-tag', input),
-    search: (input) => ipcRenderer.invoke('planning:search', input)
+    getTagStats: (id) => ipcRenderer.invoke('planning:get-tag-stats', id),
+    mergeTags: (input) => ipcRenderer.invoke('planning:merge-tags', input),
+    search: (input) => ipcRenderer.invoke('planning:search', input),
+    listSavedViews: () => ipcRenderer.invoke('planning:list-saved-views'),
+    saveView: (input) => ipcRenderer.invoke('planning:save-view', input),
+    deleteSavedView: (id) => ipcRenderer.invoke('planning:delete-saved-view', id)
   },
   execution: {
     getActiveEffort: () => ipcRenderer.invoke('execution:get-active-effort'),
@@ -54,6 +69,8 @@ const api: YouTraceApi = {
     stopEffort: (input) => ipcRenderer.invoke('execution:stop-effort', input),
     createManualEffort: (input) => ipcRenderer.invoke('execution:create-manual-effort', input),
     listEfforts: (input) => ipcRenderer.invoke('execution:list-efforts', input),
+    correctEffort: (input) => ipcRenderer.invoke('execution:correct-effort', input),
+    listEffortHistory: (id) => ipcRenderer.invoke('execution:list-effort-history', id),
     createEvidence: (input) => ipcRenderer.invoke('execution:create-evidence', input),
     listEvidence: (entityType, entityId) =>
       ipcRenderer.invoke('execution:list-evidence', entityType, entityId),
@@ -76,7 +93,11 @@ const api: YouTraceApi = {
     listKnowledge: (projectId) => ipcRenderer.invoke('practice:list-knowledge', projectId),
     createKnowledge: (input) => ipcRenderer.invoke('practice:create-knowledge', input),
     listMistakes: (projectId) => ipcRenderer.invoke('practice:list-mistakes', projectId),
-    createMistake: (input) => ipcRenderer.invoke('practice:create-mistake', input)
+    createMistake: (input) => ipcRenderer.invoke('practice:create-mistake', input),
+    listLearningTests: (projectId) => ipcRenderer.invoke('practice:list-learning-tests', projectId),
+    createLearningTest: (input) => ipcRenderer.invoke('practice:create-learning-test', input),
+    listReviewQueue: (projectId) => ipcRenderer.invoke('practice:list-review-queue', projectId),
+    recordReviewResult: (input) => ipcRenderer.invoke('practice:record-review-result', input)
   },
   temporal: {
     listPlans: (startDate, endDate) =>
@@ -120,6 +141,10 @@ const api: YouTraceApi = {
     listTrash: () => ipcRenderer.invoke('data:list-trash'),
     restoreTrash: (input) => ipcRenderer.invoke('data:restore-trash', input),
     purgeTrash: (input) => ipcRenderer.invoke('data:purge-trash', input)
+  },
+  settings: {
+    getPreferences: () => ipcRenderer.invoke('settings:get-preferences'),
+    updatePreferences: (input) => ipcRenderer.invoke('settings:update-preferences', input)
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,

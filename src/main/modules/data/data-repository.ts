@@ -79,6 +79,10 @@ export class DataRepository {
     return this.getBackup(id)!
   }
 
+  deleteBackupRecord(id: string): void {
+    this.database().prepare('DELETE FROM backup_records WHERE id = ?').run(id)
+  }
+
   listReferencedFiles(): Array<{ id: string; relativePath: string }> {
     return (
       this.database()

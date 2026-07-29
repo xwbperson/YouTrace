@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type {
   Course,
+  CreateLearningTestInput,
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
@@ -8,10 +9,13 @@ import type {
   CreateMistakeInput,
   Habit,
   KnowledgeItem,
+  LearningTest,
   Metric,
   Mistake,
   RecordHabitInput,
-  RecordMetricInput
+  RecordMetricInput,
+  RecordReviewResultInput,
+  ReviewQueueItem
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
 import type { PlanningRepository } from '../planning/planning-repository'
@@ -106,6 +110,53 @@ export class PracticeService {
     const item = this.repository.getMistake(id)
     if (!item) throw notFound('错题')
     return item
+  }
+
+  listLearningTests(projectId: string): LearningTest[] {
+    return this.repository.listLearningTests(projectId)
+  }
+
+  createLearningTest(input: CreateLearningTestInput): LearningTest {
+    if (!this.planningRepository.getProject(input.projectId)) throw notFound('课程项目')
+    const id = randomUUID()
+    this.repository.insertLearningTest(id, input, new Date().toISOString())
+    const test = this.repository.getLearningTest(id)
+    if (!test) throw notFound('学习测试')
+    return test
+  }
+
+  listReviewQueue(projectId: string): ReviewQueueItem[] {
+    return this.repository.listReviewQueue(projectId)
+  }
+
+  recordReviewResult(input: RecordReviewResultInput): ReviewQueueItem {
+    const item = this.repository.getReviewQueueItem(input.queueId)
+    if (!item || item.status !== 'pending') throw notFound('待复习项目')
+    const policy = {
+      again: { days: 1, mastery: 25 },
+      hard: { days: 3, mastery: 50 },
+      good: { days: 7, mastery: 75 },
+      easy: { days: 14, mastery: 90 }
+    }[input.result]
+    const next = new Date(input.reviewedAt)
+    next.setUTCDate(next.getUTCDate() + policy.days)
+    const nextDate = next.toISOString().slice(0, 10)
+    this.repository.recordReviewResult(
+      item,
+      input,
+      nextDate,
+      policy.mastery,
+      new Date().toISOString()
+    )
+    return this.repository
+      .listReviewQueue(item.projectId)
+      .find(
+        (candidate) =>
+          candidate.entityType === item.entityType &&
+          candidate.entityId === item.entityId &&
+          candidate.scheduledDate === nextDate &&
+          candidate.status === 'pending'
+      )!
   }
 
   private requireHabit(id: string, date: string): Habit {

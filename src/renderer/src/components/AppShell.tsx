@@ -16,6 +16,7 @@ import {
   Tags,
   TimerReset
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import type { WorkspaceSummary } from '../../../shared/contracts'
 import { PlanningPage } from '../pages/PlanningPage'
@@ -57,6 +58,22 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
       }).format(new Date()),
     []
   )
+  const preferencesQuery = useQuery({
+    queryKey: ['user-preferences'],
+    queryFn: async () => {
+      const result = await window.youtrace.settings.getPreferences()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    }
+  })
+
+  useEffect(() => {
+    const preferences = preferencesQuery.data
+    if (!preferences) return
+    document.documentElement.dataset.theme = preferences.theme
+    document.documentElement.dataset.density = preferences.density
+    document.documentElement.style.setProperty('--user-font-scale', preferences.fontScale.toString())
+  }, [preferencesQuery.data])
 
   useEffect(() => {
     const listener = (event: KeyboardEvent): void => {

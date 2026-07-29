@@ -12,6 +12,7 @@ export const effortEntityTypeSchema = z.enum([
 export const startEffortInputSchema = z.object({
   entityType: effortEntityTypeSchema,
   entityId: z.string().uuid(),
+  dependencyOverrideReason: z.string().trim().min(1).max(2_000).nullable().optional(),
   tagIds: z.array(z.string().uuid()).max(50).default([])
 })
 
@@ -47,6 +48,14 @@ export const effortListInputSchema = z.object({
   to: z.string().datetime().nullable().default(null),
   limit: z.number().int().min(1).max(500).default(100),
   offset: z.number().int().min(0).default(0)
+})
+
+export const correctEffortInputSchema = z.object({
+  id: z.string().uuid(),
+  startedAt: z.string().datetime(),
+  endedAt: z.string().datetime(),
+  effectiveMinutes: z.number().int().min(0).max(525_600),
+  reason: z.string().trim().min(1).max(2_000)
 })
 
 export const evidenceStatusSchema = z.enum(['prepared', 'completed', 'verified', 'accepted'])
@@ -118,6 +127,23 @@ export interface Evidence {
   updatedAt: string
 }
 
+export interface EffortRevision {
+  id: string
+  effortId: string
+  before: {
+    startedAt: string
+    endedAt: string | null
+    effectiveMinutes: number
+  }
+  after: {
+    startedAt: string
+    endedAt: string
+    effectiveMinutes: number
+  }
+  reason: string
+  occurredAt: string
+}
+
 export interface Memo {
   id: string
   kind: z.infer<typeof memoKindSchema>
@@ -134,6 +160,7 @@ export type StartEffortInput = z.infer<typeof startEffortInputSchema>
 export type StopEffortInput = z.infer<typeof stopEffortInputSchema>
 export type CreateManualEffortInput = z.infer<typeof createManualEffortInputSchema>
 export type EffortListInput = z.infer<typeof effortListInputSchema>
+export type CorrectEffortInput = z.infer<typeof correctEffortInputSchema>
 export type CreateEvidenceInput = z.infer<typeof createEvidenceInputSchema>
 export type UpdateEvidenceStatusInput = z.infer<typeof updateEvidenceStatusInputSchema>
 export type CreateMemoInput = z.infer<typeof createMemoInputSchema>

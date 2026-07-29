@@ -4,6 +4,7 @@ import {
   BarChart3,
   BookOpen,
   Check,
+  ClipboardCheck,
   Circle,
   Flame,
   Gauge,
@@ -18,6 +19,7 @@ import type {
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
+  CreateLearningTestInput,
   CreateMetricInput,
   CreateMistakeInput,
   Habit,
@@ -48,6 +50,7 @@ export function PracticePage(): React.JSX.Element {
   const [metricToRecord, setMetricToRecord] = useState<Metric | null>(null)
   const [knowledgeDialogOpen, setKnowledgeDialogOpen] = useState(false)
   const [mistakeDialogOpen, setMistakeDialogOpen] = useState(false)
+  const [testDialogOpen, setTestDialogOpen] = useState(false)
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const today = useMemo(() => localDate(), [])
   const projectId = scopeId === 'personal' ? null : scopeId
@@ -90,6 +93,18 @@ export function PracticePage(): React.JSX.Element {
     enabled: selectedCourse !== null,
     queryFn: async () =>
       unwrap(await window.youtrace.practice.listMistakes(selectedCourse!.projectId))
+  })
+  const testsQuery = useQuery({
+    queryKey: ['learning-tests', selectedCourse?.projectId],
+    enabled: selectedCourse !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.practice.listLearningTests(selectedCourse!.projectId))
+  })
+  const reviewQueueQuery = useQuery({
+    queryKey: ['review-queue', selectedCourse?.projectId],
+    enabled: selectedCourse !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.practice.listReviewQueue(selectedCourse!.projectId))
   })
 
   const recordHabit = useMutation({
@@ -333,6 +348,10 @@ export function PracticePage(): React.JSX.Element {
                         <Plus size={14} />
                         错题
                       </button>
+                      <button className="button button-secondary" type="button" onClick={() => setTestDialogOpen(true)}>
+                        <ClipboardCheck size={14} />
+                        测试
+                      </button>
                     </div>
                   </header>
                   <div className="learning-columns">
@@ -375,6 +394,18 @@ export function PracticePage(): React.JSX.Element {
                         </article>
                       ))}
                       {(mistakesQuery.data ?? []).length === 0 && <p>还没有错题。</p>}
+                    </section>
+                  </div>
+                  <div className="learning-followup">
+                    <section>
+                      <div className="learning-heading"><span>测试记录</span><strong>{testsQuery.data?.length ?? 0}</strong></div>
+                      {(testsQuery.data ?? []).slice(0, 5).map((test) => <article key={test.id}><ClipboardCheck size={14} /><div><strong>{test.title}</strong><span>{test.score === null ? '未记录成绩' : `${test.score} / ${test.maxScore ?? '—'}`} · {new Date(test.testedAt).toLocaleDateString('zh-CN')}</span></div></article>)}
+                      {(testsQuery.data ?? []).length === 0 && <p>还没有测试记录。</p>}
+                    </section>
+                    <section>
+                      <div className="learning-heading"><span>复习队列</span><strong>{(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').length}</strong></div>
+                      {(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').slice(0, 6).map((item) => <article className="review-queue-row" key={item.id}><RotateCcw size={14} /><div><strong>{item.title}</strong><span>{item.scheduledDate} · {item.entityType === 'knowledge' ? '知识点' : '错题'}</span></div><div>{(['again', 'hard', 'good', 'easy'] as const).map((result) => <button key={result} type="button" onClick={async () => { await window.youtrace.practice.recordReviewResult({ queueId: item.id, result, reviewedAt: new Date().toISOString() }); await Promise.all([queryClient.invalidateQueries({ queryKey: ['review-queue'] }), queryClient.invalidateQueries({ queryKey: ['knowledge'] }), queryClient.invalidateQueries({ queryKey: ['mistakes'] }), queryClient.invalidateQueries({ queryKey: ['courses'] })]) }}>{reviewResultLabel(result)}</button>)}</div></article>)}
+                      {(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').length === 0 && <p>当前没有待复习内容。</p>}
                     </section>
                   </div>
                 </main>
@@ -432,6 +463,14 @@ export function PracticePage(): React.JSX.Element {
             queryClient.invalidateQueries({ queryKey: ['mistakes'] }),
             queryClient.invalidateQueries({ queryKey: ['courses'] })
           ])
+        }}
+      />
+      <LearningTestDialog
+        open={testDialogOpen}
+        onOpenChange={setTestDialogOpen}
+        course={selectedCourse}
+        onCreated={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['learning-tests'] })
         }}
       />
     </div>
@@ -731,4 +770,41 @@ function MistakeDialog(props: {
       <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!question.trim() || !props.course} onClick={() => void submit()}>记录错题</button></div>
     </DialogFrame>
   )
+}
+
+function LearningTestDialog(props: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  course: Course | null
+  onCreated: () => Promise<void>
+}): React.JSX.Element {
+  const [title, setTitle] = useState('')
+  const [score, setScore] = useState('')
+  const [maxScore, setMaxScore] = useState('100')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+  const submit = async (): Promise<void> => {
+    if (!props.course) return
+    const input: CreateLearningTestInput = {
+      projectId: props.course.projectId,
+      milestoneId: null,
+      title,
+      score: score ? Number(score) : null,
+      maxScore: maxScore ? Number(maxScore) : null,
+      testedAt: new Date().toISOString(),
+      note
+    }
+    const result = await window.youtrace.practice.createLearningTest(input)
+    if (!result.ok) return setError(result.error.message)
+    await props.onCreated()
+    setTitle('')
+    setScore('')
+    setNote('')
+    props.onOpenChange(false)
+  }
+  return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title="记录学习测试" description="测试成绩是掌握证据，不会自动改写任务完成状态。"><div className="dialog-form"><label><span>测试名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="form-row"><label><span>成绩</span><input type="number" min="0" value={score} onChange={(event) => setScore(event.target.value)} /></label><label><span>满分</span><input type="number" min="1" value={maxScore} onChange={(event) => setMaxScore(event.target.value)} /></label></div><label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !props.course} onClick={() => void submit()}>记录测试</button></div></DialogFrame>
+}
+
+function reviewResultLabel(result: 'again' | 'hard' | 'good' | 'easy'): string {
+  return { again: '重来', hard: '困难', good: '良好', easy: '轻松' }[result]
 }

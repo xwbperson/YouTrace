@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 6
+export const CURRENT_SCHEMA_VERSION = 7
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -25,6 +25,18 @@ export const INITIAL_SCHEMA_SQL = `
     archived_at TEXT,
     deleted_at TEXT
   );
+
+  INSERT OR IGNORE INTO areas(
+    id, name, color, icon, description, created_at, updated_at
+  ) VALUES
+    ('11000000-0000-4000-8000-000000000001', '学习', '#216E65', 'book-open', '课程、考试与知识积累', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000002', '健身', '#B95D1B', 'dumbbell', '训练、恢复与身体指标', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000003', '编程', '#3D6FA8', 'code-2', '软件项目与技术练习', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000004', '读书', '#7D5A9E', 'library', '阅读计划与读书笔记', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000005', '工作', '#886A30', 'briefcase', '岗位职责与阶段交付', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000006', '生活', '#4F7A70', 'home', '日常生活与个人事务', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000007', '健康', '#A04848', 'heart-pulse', '健康维护与就医事项', datetime('now'), datetime('now')),
+    ('11000000-0000-4000-8000-000000000008', '财务', '#6B7952', 'wallet-cards', '预算、储蓄与财务目标', datetime('now'), datetime('now'));
 
   CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -108,6 +120,40 @@ export const INITIAL_SCHEMA_SQL = `
     PRIMARY KEY (task_id, prerequisite_task_id),
     CHECK (task_id <> prerequisite_task_id)
   );
+
+  CREATE TABLE IF NOT EXISTS task_checklist_items (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    text TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    checked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS task_checklist_task_idx
+    ON task_checklist_items(task_id, sort_order);
+
+  CREATE TABLE IF NOT EXISTS task_progress_settings (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+    checklist_enabled INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS task_recurrence_rules (
+    task_id TEXT PRIMARY KEY REFERENCES tasks(id),
+    series_id TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    interval_value INTEGER NOT NULL DEFAULT 1,
+    weekdays_json TEXT NOT NULL DEFAULT '[]',
+    next_occurrence TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS task_recurrence_series_occurrence_unique
+    ON task_recurrence_rules(series_id, next_occurrence);
 
   CREATE TABLE IF NOT EXISTS tags (
     id TEXT PRIMARY KEY,
@@ -426,6 +472,16 @@ export const INITIAL_SCHEMA_SQL = `
     manifest_hash TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
     source_schema_version INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS saved_views (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    filters_json TEXT NOT NULL,
+    is_preset INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS course_profiles (

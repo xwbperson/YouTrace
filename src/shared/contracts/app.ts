@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import type {
   AddTaskDependencyInput,
+  Area,
   AssignTagInput,
+  CreateAreaInput,
+  CreateChecklistItemInput,
   CreateGoalInput,
   CreateMilestoneInput,
   CreateProjectInput,
@@ -10,12 +13,22 @@ import type {
   Goal,
   Milestone,
   Project,
+  MergeTagsInput,
+  SavedView,
+  SaveViewInput,
   SearchInput,
   SearchResult,
+  SetTaskRecurrenceInput,
+  SetChecklistProgressInput,
   Tag,
+  TagStats,
   Task,
+  TaskChecklistItem,
   TaskDependency,
   TaskListInput,
+  TaskRecurrence,
+  UpdateAreaInput,
+  UpdateChecklistItemInput,
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
@@ -23,10 +36,12 @@ import type {
 } from './planning'
 import type {
   ConvertMemoToTaskInput,
+  CorrectEffortInput,
   CreateEvidenceInput,
   CreateManualEffortInput,
   CreateMemoInput,
   EffortEntry,
+  EffortRevision,
   EffortListInput,
   Evidence,
   Memo,
@@ -39,14 +54,18 @@ import type {
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
+  CreateLearningTestInput,
   CreateMetricInput,
   CreateMistakeInput,
   Habit,
   KnowledgeItem,
+  LearningTest,
   Metric,
   Mistake,
   RecordHabitInput,
-  RecordMetricInput
+  RecordMetricInput,
+  RecordReviewResultInput,
+  ReviewQueueItem
 } from './practice'
 import type {
   Countdown,
@@ -87,6 +106,7 @@ import type {
   TrashItem,
   WorkspaceCheck
 } from './data'
+import type { UserPreferences } from './preferences'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -158,7 +178,10 @@ export interface YouTraceApi {
     reveal(): Promise<IpcResult<void>>
   }
   planning: {
-    listProjects(): Promise<IpcResult<Project[]>>
+    listAreas(includeArchived?: boolean): Promise<IpcResult<Area[]>>
+    createArea(input: CreateAreaInput): Promise<IpcResult<Area>>
+    updateArea(input: UpdateAreaInput): Promise<IpcResult<Area>>
+    listProjects(includeArchived?: boolean): Promise<IpcResult<Project[]>>
     createProject(input: CreateProjectInput): Promise<IpcResult<Project>>
     updateProject(input: UpdateProjectInput): Promise<IpcResult<Project>>
     trashProject(id: string): Promise<IpcResult<void>>
@@ -174,10 +197,22 @@ export interface YouTraceApi {
     trashTask(id: string): Promise<IpcResult<void>>
     addTaskDependency(input: AddTaskDependencyInput): Promise<IpcResult<void>>
     listTaskDependencies(taskId: string): Promise<IpcResult<TaskDependency[]>>
+    listChecklist(taskId: string): Promise<IpcResult<TaskChecklistItem[]>>
+    createChecklistItem(input: CreateChecklistItemInput): Promise<IpcResult<TaskChecklistItem>>
+    updateChecklistItem(input: UpdateChecklistItemInput): Promise<IpcResult<TaskChecklistItem>>
+    deleteChecklistItem(id: string): Promise<IpcResult<void>>
+    setChecklistProgress(input: SetChecklistProgressInput): Promise<IpcResult<Task>>
+    getTaskRecurrence(taskId: string): Promise<IpcResult<TaskRecurrence | null>>
+    setTaskRecurrence(input: SetTaskRecurrenceInput): Promise<IpcResult<TaskRecurrence | null>>
     listTags(): Promise<IpcResult<Tag[]>>
     createTag(input: CreateTagInput): Promise<IpcResult<Tag>>
     assignTag(input: AssignTagInput): Promise<IpcResult<void>>
+    getTagStats(id: string): Promise<IpcResult<TagStats>>
+    mergeTags(input: MergeTagsInput): Promise<IpcResult<Tag>>
     search(input: SearchInput): Promise<IpcResult<SearchResult[]>>
+    listSavedViews(): Promise<IpcResult<SavedView[]>>
+    saveView(input: SaveViewInput): Promise<IpcResult<SavedView>>
+    deleteSavedView(id: string): Promise<IpcResult<void>>
   }
   execution: {
     getActiveEffort(): Promise<IpcResult<EffortEntry | null>>
@@ -185,6 +220,8 @@ export interface YouTraceApi {
     stopEffort(input: StopEffortInput): Promise<IpcResult<EffortEntry>>
     createManualEffort(input: CreateManualEffortInput): Promise<IpcResult<EffortEntry>>
     listEfforts(input: EffortListInput): Promise<IpcResult<EffortEntry[]>>
+    correctEffort(input: CorrectEffortInput): Promise<IpcResult<EffortEntry>>
+    listEffortHistory(id: string): Promise<IpcResult<EffortRevision[]>>
     createEvidence(input: CreateEvidenceInput): Promise<IpcResult<Evidence>>
     listEvidence(entityType: string | null, entityId: string | null): Promise<IpcResult<Evidence[]>>
     updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<IpcResult<Evidence>>
@@ -205,6 +242,10 @@ export interface YouTraceApi {
     createKnowledge(input: CreateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
     listMistakes(projectId: string): Promise<IpcResult<Mistake[]>>
     createMistake(input: CreateMistakeInput): Promise<IpcResult<Mistake>>
+    listLearningTests(projectId: string): Promise<IpcResult<LearningTest[]>>
+    createLearningTest(input: CreateLearningTestInput): Promise<IpcResult<LearningTest>>
+    listReviewQueue(projectId: string): Promise<IpcResult<ReviewQueueItem[]>>
+    recordReviewResult(input: RecordReviewResultInput): Promise<IpcResult<ReviewQueueItem>>
   }
   temporal: {
     listPlans(startDate: string, endDate: string): Promise<IpcResult<PlanPeriod[]>>
@@ -246,6 +287,10 @@ export interface YouTraceApi {
     listTrash(): Promise<IpcResult<TrashItem[]>>
     restoreTrash(input: TrashActionInput): Promise<IpcResult<TrashItem>>
     purgeTrash(input: TrashActionInput): Promise<IpcResult<void>>
+  }
+  settings: {
+    getPreferences(): Promise<IpcResult<UserPreferences>>
+    updatePreferences(input: UserPreferences): Promise<IpcResult<UserPreferences>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

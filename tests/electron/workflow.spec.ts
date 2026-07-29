@@ -108,7 +108,7 @@ test('previews a template and keeps a review snapshot after rescheduling', async
     await page.getByLabel('静默结束').fill('06:30')
     await page.getByRole('checkbox', { name: /任务截止/ }).uncheck()
     await page.getByRole('button', { name: '保存通知设置' }).click()
-    await expect(page.getByRole('button', { name: '已保存' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '已保存', exact: true })).toBeVisible()
     const reminderSettings = await page.evaluate(
       async () =>
         (globalThis as unknown as {

@@ -25,7 +25,7 @@ import type {
   TimeBlock
 } from '../../../shared/contracts'
 
-type CalendarView = 'week' | 'plans' | 'countdowns'
+type CalendarView = 'day' | 'week' | 'month' | 'plans' | 'countdowns'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -43,6 +43,17 @@ function startOfWeek(date: Date): Date {
   const day = result.getDay()
   result.setDate(result.getDate() - (day === 0 ? 6 : day - 1))
   return result
+}
+
+function startOfDay(date: Date): Date {
+  const result = new Date(date)
+  result.setHours(0, 0, 0, 0)
+  return result
+}
+
+function startOfMonthGrid(date: Date): Date {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1)
+  return startOfWeek(first)
 }
 
 function addDays(date: Date, amount: number): Date {
@@ -65,9 +76,22 @@ export function CalendarPage(): React.JSX.Element {
   const [countdownDialogOpen, setCountdownDialogOpen] = useState(false)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const weekStart = useMemo(() => startOfWeek(anchorDate), [anchorDate])
-  const days = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart])
-  const rangeStart = weekStart.toISOString()
-  const rangeEnd = addDays(weekStart, 7).toISOString()
+  const calendarStart = useMemo(
+    () =>
+      view === 'day'
+        ? startOfDay(anchorDate)
+        : view === 'month'
+          ? startOfMonthGrid(anchorDate)
+          : weekStart,
+    [anchorDate, view, weekStart]
+  )
+  const dayCount = view === 'day' ? 1 : view === 'month' ? 42 : 7
+  const days = useMemo(
+    () => Array.from({ length: dayCount }, (_, index) => addDays(calendarStart, index)),
+    [calendarStart, dayCount]
+  )
+  const rangeStart = calendarStart.toISOString()
+  const rangeEnd = addDays(calendarStart, dayCount).toISOString()
 
   const tasksQuery = useQuery({
     queryKey: ['tasks', 'calendar'],
@@ -147,20 +171,22 @@ export function CalendarPage(): React.JSX.Element {
       </header>
 
       <div className="calendar-tabs" role="tablist" aria-label="日历视图">
+        <button role="tab" aria-selected={view === 'day'} className={view === 'day' ? 'active' : ''} onClick={() => setView('day')}>日</button>
         <button role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>周日历</button>
+        <button role="tab" aria-selected={view === 'month'} className={view === 'month' ? 'active' : ''} onClick={() => setView('month')}>月</button>
         <button role="tab" aria-selected={view === 'plans'} className={view === 'plans' ? 'active' : ''} onClick={() => setView('plans')}>周期计划</button>
         <button role="tab" aria-selected={view === 'countdowns'} className={view === 'countdowns' ? 'active' : ''} onClick={() => setView('countdowns')}>倒计时</button>
       </div>
 
-      {view === 'week' && (
-        <section className="week-calendar panel">
+      {['day', 'week', 'month'].includes(view) && (
+        <section className={`week-calendar panel calendar-view-${view}`}>
           <header>
-            <button type="button" aria-label="上一周" onClick={() => setAnchorDate(addDays(anchorDate, -7))}><ChevronLeft size={16} /></button>
+            <button type="button" aria-label="上一周期" onClick={() => setAnchorDate(navigateCalendar(anchorDate, view, -1))}><ChevronLeft size={16} /></button>
             <div>
-              <strong>{localDate(weekStart)} — {localDate(addDays(weekStart, 6))}</strong>
+              <strong>{calendarRangeLabel(view, days)}</strong>
               <span>每日容量 8 小时</span>
             </div>
-            <button type="button" aria-label="下一周" onClick={() => setAnchorDate(addDays(anchorDate, 7))}><ChevronRight size={16} /></button>
+            <button type="button" aria-label="下一周期" onClick={() => setAnchorDate(navigateCalendar(anchorDate, view, 1))}><ChevronRight size={16} /></button>
           </header>
           <div className="week-grid">
             {days.map((day) => {
@@ -169,7 +195,7 @@ export function CalendarPage(): React.JSX.Element {
               const totalMinutes = dayBlocks.reduce((sum, block) => sum + block.durationMinutes, 0)
               return (
                 <section
-                  className={`calendar-day ${date === localDate(new Date()) ? 'today' : ''}`}
+                  className={`calendar-day ${date === localDate(new Date()) ? 'today' : ''} ${view === 'month' && day.getMonth() !== anchorDate.getMonth() ? 'outside-month' : ''}`}
                   key={date}
                   aria-label={`${date} 安排`}
                   onDragOver={(event) => event.preventDefault()}
@@ -344,6 +370,7 @@ function TimeBlockDialog(props: { open: boolean; onOpenChange: (open: boolean) =
 
 function PlanDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; tasks: Task[]; onCreated: () => Promise<unknown> }): React.JSX.Element {
   const thisWeek = startOfWeek(new Date())
+  const [periodType, setPeriodType] = useState<CreatePlanInput['periodType']>('week')
   const [title, setTitle] = useState('本周计划')
   const [focusResult, setFocusResult] = useState('')
   const [startDate, setStartDate] = useState(localDate(thisWeek))
@@ -351,14 +378,14 @@ function PlanDialog(props: { open: boolean; onOpenChange: (open: boolean) => voi
   const [capacity, setCapacity] = useState('2400')
   const [taskIds, setTaskIds] = useState<string[]>([])
   const submit = async (): Promise<void> => {
-    const input: CreatePlanInput = { periodType: 'week', startDate, endDate, title, focusResult, capacityMinutes: capacity ? Number(capacity) : null, items: taskIds.map((id) => { const task = props.tasks.find((item) => item.id === id)!; return { entityType: 'task' as const, entityId: id, titleSnapshot: task.title } }) }
+    const input: CreatePlanInput = { periodType, startDate, endDate, title, focusResult, capacityMinutes: capacity ? Number(capacity) : null, items: taskIds.map((id) => { const task = props.tasks.find((item) => item.id === id)!; return { entityType: 'task' as const, entityId: id, titleSnapshot: task.title } }) }
     const result = await window.youtrace.temporal.createPlan(input)
     if (!result.ok) return
     await props.onCreated()
     setTaskIds([])
     props.onOpenChange(false)
   }
-  return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} title="新建周期计划" description="计划引用现有对象，并用容量检验承诺是否现实。"><div className="dialog-form"><label><span>计划名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>本周期重点结果</span><textarea value={focusResult} onChange={(event) => setFocusResult(event.target.value)} /></label><div className="form-row form-row-three"><label><span>开始日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><label><span>可用分钟</span><input type="number" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div><fieldset className="plan-task-picker"><legend>承诺事项</legend>{props.tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled').map((task) => <button type="button" key={task.id} className={taskIds.includes(task.id) ? 'active' : ''} onClick={() => setTaskIds((current) => current.includes(task.id) ? current.filter((id) => id !== task.id) : [...current, task.id])}>{task.title}<span>{task.estimatedMinutes ?? '—'} 分钟</span></button>)}</fieldset></div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim()} onClick={() => void submit()}>创建计划</button></div></DialogFrame>
+  return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} title="新建周期计划" description="计划引用现有对象，并用容量检验承诺是否现实。"><div className="dialog-form"><div className="form-row"><label><span>计划名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>周期层级</span><select value={periodType} onChange={(event) => setPeriodType(event.target.value as CreatePlanInput['periodType'])}><option value="year">年计划</option><option value="quarter">季度计划</option><option value="month">月计划</option><option value="week">周计划</option><option value="day">日计划</option></select></label></div><label><span>本周期重点结果</span><textarea value={focusResult} onChange={(event) => setFocusResult(event.target.value)} /></label><div className="form-row form-row-three"><label><span>开始日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><label><span>可用分钟</span><input type="number" value={capacity} onChange={(event) => setCapacity(event.target.value)} /></label></div><fieldset className="plan-task-picker"><legend>承诺事项</legend>{props.tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled').map((task) => <button type="button" key={task.id} className={taskIds.includes(task.id) ? 'active' : ''} onClick={() => setTaskIds((current) => current.includes(task.id) ? current.filter((id) => id !== task.id) : [...current, task.id])}>{task.title}<span>{task.estimatedMinutes ?? '—'} 分钟</span></button>)}</fieldset></div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim()} onClick={() => void submit()}>创建计划</button></div></DialogFrame>
 }
 
 function CountdownDialog(props: { open: boolean; onOpenChange: (open: boolean) => void; projects: Project[]; tasks: Task[]; tags: Tag[]; onCreated: () => Promise<unknown> }): React.JSX.Element {
@@ -390,4 +417,28 @@ function CountdownDialog(props: { open: boolean; onOpenChange: (open: boolean) =
     props.onOpenChange(false)
   }
   return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} title="新建倒计时" description="风险只基于期限、剩余工作量与真实投入，不伪造历史速度。"><div className="dialog-form"><label><span>倒计时标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="form-row"><label><span>目标时间</span><input type="datetime-local" value={targetAt} onChange={(event) => setTargetAt(event.target.value)} /></label><label><span>关联任务</span><select value={taskId} onChange={(event) => setTaskId(event.target.value)}><option value="">独立倒计时</option>{props.tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></label></div><div className="form-row form-row-three"><label><span>剩余分钟</span><input type="number" min="0" value={remainingMinutes} onChange={(event) => setRemainingMinutes(event.target.value)} /></label><label><span>缓冲工作日</span><input type="number" min="0" value={bufferDays} onChange={(event) => setBufferDays(event.target.value)} /></label><label><span>重要程度</span><select value={importance} onChange={(event) => setImportance(event.target.value as CreateCountdownInput['importance'])}><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="critical">关键</option></select></label></div>{props.tags.length > 0 && <fieldset className="tag-picker"><legend>标签</legend><div>{props.tags.map((tag) => <button type="button" key={tag.id} className={tagIds.includes(tag.id) ? 'active' : ''} onClick={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])}>{tag.name}</button>)}</div></fieldset>}{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !targetAt} onClick={() => void submit()}>创建倒计时</button></div></DialogFrame>
+}
+
+function navigateCalendar(date: Date, view: CalendarView, direction: -1 | 1): Date {
+  const result = new Date(date)
+  if (view === 'month') result.setMonth(result.getMonth() + direction)
+  else result.setDate(result.getDate() + direction * (view === 'week' ? 7 : 1))
+  return result
+}
+
+function calendarRangeLabel(view: CalendarView, days: Date[]): string {
+  if (view === 'day') {
+    return new Intl.DateTimeFormat('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long'
+    }).format(days[0])
+  }
+  if (view === 'month') {
+    return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long' }).format(
+      days[20] ?? days[0]
+    )
+  }
+  return `${localDate(days[0]!)} — ${localDate(days.at(-1)!)}`
 }

@@ -5,7 +5,10 @@ import {
   addTaskDependencyInputSchema,
   applyReviewAdjustmentsInputSchema,
   assignTagInputSchema,
+  createAreaInputSchema,
+  createChecklistItemInputSchema,
   convertMemoToTaskInputSchema,
+  correctEffortInputSchema,
   createGoalInputSchema,
   createEvidenceInputSchema,
   createManualEffortInputSchema,
@@ -14,6 +17,7 @@ import {
   createCourseInputSchema,
   createHabitInputSchema,
   createKnowledgeInputSchema,
+  createLearningTestInputSchema,
   createMetricInputSchema,
   createMistakeInputSchema,
   createProjectInputSchema,
@@ -28,13 +32,18 @@ import {
   openWorkspaceInputSchema,
   notificationSettingsSchema,
   importEvidenceFileInputSchema,
+  mergeTagsInputSchema,
   migrateWorkspaceInputSchema,
   restoreBackupInputSchema,
   trashActionInputSchema,
   moveTimeBlockInputSchema,
   recordHabitInputSchema,
   recordMetricInputSchema,
+  recordReviewResultInputSchema,
   searchInputSchema,
+  saveViewInputSchema,
+  setChecklistProgressInputSchema,
+  setTaskRecurrenceInputSchema,
   previewTemplateInputSchema,
   saveProjectTemplateInputSchema,
   startEffortInputSchema,
@@ -42,11 +51,14 @@ import {
   taskListInputSchema,
   timeRangeInputSchema,
   updateEvidenceStatusInputSchema,
+  updateAreaInputSchema,
+  updateChecklistItemInputSchema,
   updateGoalInputSchema,
   updateMilestoneInputSchema,
   updateProjectInputSchema,
   updateTaskInputSchema,
   updateReviewInputSchema,
+  userPreferencesSchema,
   type AppBootstrapState,
   type IpcResult,
   type WindowState
@@ -60,6 +72,7 @@ import type { TemporalService } from '../modules/temporal/temporal-service'
 import type { WorkflowService } from '../modules/workflow/workflow-service'
 import type { ReminderService } from '../modules/reminders/reminder-service'
 import type { DataService } from '../modules/data/data-service'
+import type { SettingsService } from '../modules/settings/settings-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
@@ -71,6 +84,7 @@ interface RegisterIpcOptions {
   workflowService: WorkflowService
   reminderService: ReminderService
   dataService: DataService
+  settingsService: SettingsService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
@@ -86,6 +100,7 @@ export function registerIpc(options: RegisterIpcOptions): void {
     workflowService,
     reminderService,
     dataService,
+    settingsService,
     getBootstrapState,
     setBootstrapState
   } = options
@@ -172,10 +187,33 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
-  ipcMain.handle('planning:list-projects', (event) =>
+  ipcMain.handle('planning:list-areas', (event, rawIncludeArchived) =>
     wrap(() => {
       trusted(event)
-      return planningService.listProjects()
+      return planningService.listAreas(z.boolean().optional().default(false).parse(rawIncludeArchived))
+    })
+  )
+
+  ipcMain.handle('planning:create-area', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createArea(createAreaInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-area', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateArea(updateAreaInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:list-projects', (event, rawIncludeArchived) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listProjects(
+        z.boolean().optional().default(false).parse(rawIncludeArchived)
+      )
     })
   )
 
@@ -285,6 +323,55 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:list-checklist', (event, rawTaskId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listChecklist(z.string().uuid().parse(rawTaskId))
+    })
+  )
+
+  ipcMain.handle('planning:create-checklist-item', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.createChecklistItem(createChecklistItemInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-checklist-item', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateChecklistItem(updateChecklistItemInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:delete-checklist-item', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.deleteChecklistItem(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('planning:set-checklist-progress', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.setChecklistProgress(setChecklistProgressInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:get-task-recurrence', (event, rawTaskId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.getTaskRecurrence(z.string().uuid().parse(rawTaskId))
+    })
+  )
+
+  ipcMain.handle('planning:set-task-recurrence', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.setTaskRecurrence(setTaskRecurrenceInputSchema.parse(rawInput))
+    })
+  )
+
   ipcMain.handle('planning:list-tags', (event) =>
     wrap(() => {
       trusted(event)
@@ -306,10 +393,45 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:get-tag-stats', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.getTagStats(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('planning:merge-tags', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.mergeTags(mergeTagsInputSchema.parse(rawInput))
+    })
+  )
+
   ipcMain.handle('planning:search', (event, rawInput) =>
     wrap(() => {
       trusted(event)
       return planningService.search(searchInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:list-saved-views', (event) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listSavedViews()
+    })
+  )
+
+  ipcMain.handle('planning:save-view', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.saveView(saveViewInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:delete-saved-view', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.deleteSavedView(z.string().uuid().parse(rawId))
     })
   )
 
@@ -345,6 +467,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return executionService.listEfforts(effortListInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:correct-effort', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.correctEffort(correctEffortInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:list-effort-history', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.listEffortHistory(z.string().uuid().parse(rawId))
     })
   )
 
@@ -475,6 +611,34 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return practiceService.createMistake(createMistakeInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-learning-tests', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listLearningTests(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('practice:create-learning-test', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createLearningTest(createLearningTestInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-review-queue', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listReviewQueue(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
+  ipcMain.handle('practice:record-review-result', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.recordReviewResult(recordReviewResultInputSchema.parse(rawInput))
     })
   )
 
@@ -732,6 +896,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
       trusted(event)
       const input = trashActionInputSchema.parse(rawInput)
       await dataService.purgeTrash(input.id, input.confirmation)
+    })
+  )
+
+  ipcMain.handle('settings:get-preferences', (event) =>
+    wrap(() => {
+      trusted(event)
+      return settingsService.getPreferences()
+    })
+  )
+
+  ipcMain.handle('settings:update-preferences', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return settingsService.updatePreferences(userPreferencesSchema.parse(rawInput))
     })
   )
 

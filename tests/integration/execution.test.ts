@@ -82,6 +82,21 @@ describe('execution and evidence application service', () => {
     })
     expect(stopped.endedAt).not.toBeNull()
     expect(stopped.result).toBe('找到环境问题')
+    const corrected = execution.correctEffort({
+      id: stopped.id,
+      startedAt: stopped.startedAt,
+      endedAt: stopped.endedAt!,
+      effectiveMinutes: 25,
+      reason: '暂停期间忘记停止计时'
+    })
+    expect(corrected.effectiveMinutes).toBe(25)
+    expect(execution.listEffortHistory(stopped.id)).toMatchObject([
+      {
+        reason: '暂停期间忘记停止计时',
+        before: { effectiveMinutes: stopped.effectiveMinutes },
+        after: { effectiveMinutes: 25 }
+      }
+    ])
 
     const startedAt = '2026-07-30T01:00:00.000Z'
     const manual = execution.createManualEffort({
@@ -139,5 +154,68 @@ describe('execution and evidence application service', () => {
       )
       .get(memo.id, converted.id) as { relation_type: string }
     expect(relation.relation_type).toBe('CONVERTED_TO')
+  })
+
+  it('requires an auditable reason to start through an incomplete dependency', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '依赖执行',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const createTask = (title: string) =>
+      planning.createTask({
+        parentTaskId: null,
+        projectId: project.id,
+        goalId: null,
+        milestoneId: null,
+        title,
+        description: '',
+        status: 'ready',
+        difficulty: null,
+        priority: 'medium',
+        estimatedMinutes: 20,
+        progressWeight: null,
+        startDate: null,
+        dueAt: null,
+        verificationCriteria: '',
+        includeInProgress: true,
+        tagIds: []
+      })
+    const prerequisite = createTask('先完成环境配置')
+    const dependent = createTask('运行实验')
+    planning.addTaskDependency({
+      taskId: dependent.id,
+      prerequisiteTaskId: prerequisite.id,
+      overrideReason: null
+    })
+    expect(() =>
+      execution.startEffort({
+        entityType: 'task',
+        entityId: dependent.id,
+        tagIds: []
+      })
+    ).toThrow(/阻塞/)
+    const active = execution.startEffort({
+      entityType: 'task',
+      entityId: dependent.id,
+      dependencyOverrideReason: '先验证无环境依赖的子步骤',
+      tagIds: []
+    })
+    expect(active.entityId).toBe(dependent.id)
+    const audit = workspaceManager
+      .getDatabase()
+      .prepare(
+        `SELECT after_json FROM audit_events
+          WHERE entity_type = 'task' AND entity_id = ? AND action = 'dependency_overridden'`
+      )
+      .get(dependent.id) as { after_json: string }
+    expect(JSON.parse(audit.after_json)).toMatchObject({
+      reason: '先验证无环境依赖的子步骤'
+    })
   })
 })

@@ -70,6 +70,25 @@ export const createMistakeInputSchema = z.object({
   nextReviewDate: localDateSchema.nullable().default(null)
 })
 
+export const createLearningTestInputSchema = z.object({
+  projectId: z.string().uuid(),
+  milestoneId: z.string().uuid().nullable().default(null),
+  title: z.string().trim().min(1).max(240),
+  score: z.number().finite().min(0).nullable().default(null),
+  maxScore: z.number().finite().positive().nullable().default(null),
+  testedAt: z.string().datetime(),
+  note: z.string().max(10_000).default('')
+}).refine(
+  (value) => value.score === null || value.maxScore === null || value.score <= value.maxScore,
+  { message: '成绩不能超过满分。', path: ['score'] }
+)
+
+export const recordReviewResultInputSchema = z.object({
+  queueId: z.string().uuid(),
+  result: z.enum(['again', 'hard', 'good', 'easy']),
+  reviewedAt: z.string().datetime()
+})
+
 export interface Habit {
   id: string
   projectId: string | null
@@ -150,6 +169,32 @@ export interface Mistake {
   updatedAt: string
 }
 
+export interface LearningTest {
+  id: string
+  projectId: string
+  milestoneId: string | null
+  title: string
+  score: number | null
+  maxScore: number | null
+  testedAt: string
+  note: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ReviewQueueItem {
+  id: string
+  entityType: 'knowledge' | 'mistake'
+  entityId: string
+  title: string
+  scheduledDate: string
+  status: 'pending' | 'completed'
+  result: 'again' | 'hard' | 'good' | 'easy' | null
+  projectId: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type CreateHabitInput = z.infer<typeof createHabitInputSchema>
 export type RecordHabitInput = z.infer<typeof recordHabitInputSchema>
 export type CreateMetricInput = z.infer<typeof createMetricInputSchema>
@@ -157,3 +202,5 @@ export type RecordMetricInput = z.infer<typeof recordMetricInputSchema>
 export type CreateCourseInput = z.infer<typeof createCourseInputSchema>
 export type CreateKnowledgeInput = z.infer<typeof createKnowledgeInputSchema>
 export type CreateMistakeInput = z.infer<typeof createMistakeInputSchema>
+export type CreateLearningTestInput = z.infer<typeof createLearningTestInputSchema>
+export type RecordReviewResultInput = z.infer<typeof recordReviewResultInputSchema>

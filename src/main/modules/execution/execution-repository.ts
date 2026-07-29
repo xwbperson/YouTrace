@@ -1,9 +1,11 @@
 import type Database from 'better-sqlite3'
 import type {
+  CorrectEffortInput,
   CreateEvidenceInput,
   CreateManualEffortInput,
   CreateMemoInput,
   EffortEntry,
+  EffortRevision,
   EffortListInput,
   Evidence,
   Memo,
@@ -191,6 +193,76 @@ export class ExecutionRepository {
     }
     parameters.push(input.limit, input.offset)
     return this.queryEfforts(conditions.join(' AND '), parameters, 'LIMIT ? OFFSET ?').map(mapEffort)
+  }
+
+  correctEffort(
+    current: EffortEntry,
+    input: CorrectEffortInput,
+    now: string
+  ): boolean {
+    const database = this.database()
+    const before = {
+      startedAt: current.startedAt,
+      endedAt: current.endedAt,
+      effectiveMinutes: current.effectiveMinutes
+    }
+    const after = {
+      startedAt: input.startedAt,
+      endedAt: input.endedAt,
+      effectiveMinutes: input.effectiveMinutes
+    }
+    const transaction = database.transaction(() => {
+      const result = database
+        .prepare(
+          `UPDATE effort_entries
+              SET started_at = ?, ended_at = ?, effective_minutes = ?, updated_at = ?
+            WHERE id = ? AND ended_at IS NOT NULL AND voided_at IS NULL AND deleted_at IS NULL`
+        )
+        .run(input.startedAt, input.endedAt, input.effectiveMinutes, now, input.id)
+      if (result.changes === 0) return false
+      database
+        .prepare(
+          `INSERT INTO audit_events(
+             id, entity_type, entity_id, action, before_json, after_json, reason, occurred_at
+           ) VALUES (?, 'effort', ?, 'corrected', ?, ?, ?, ?)`
+        )
+        .run(
+          crypto.randomUUID(),
+          input.id,
+          JSON.stringify(before),
+          JSON.stringify(after),
+          input.reason,
+          now
+        )
+      return true
+    })
+    return transaction()
+  }
+
+  listEffortHistory(id: string): EffortRevision[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT id, entity_id, before_json, after_json, reason, occurred_at
+           FROM audit_events
+          WHERE entity_type = 'effort' AND entity_id = ? AND action = 'corrected'
+          ORDER BY occurred_at DESC`
+      )
+      .all(id) as Array<{
+      id: string
+      entity_id: string
+      before_json: string
+      after_json: string
+      reason: string
+      occurred_at: string
+    }>
+    return rows.map((row) => ({
+      id: row.id,
+      effortId: row.entity_id,
+      before: JSON.parse(row.before_json) as EffortRevision['before'],
+      after: JSON.parse(row.after_json) as EffortRevision['after'],
+      reason: row.reason,
+      occurredAt: row.occurred_at
+    }))
   }
 
   insertEvidence(id: string, input: CreateEvidenceInput, now: string): void {

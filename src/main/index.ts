@@ -28,6 +28,8 @@ import { ReminderRepository } from './modules/reminders/reminder-repository'
 import { ReminderService } from './modules/reminders/reminder-service'
 import { DataRepository } from './modules/data/data-repository'
 import { DataService } from './modules/data/data-service'
+import { SettingsRepository } from './modules/settings/settings-repository'
+import { SettingsService } from './modules/settings/settings-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -48,6 +50,9 @@ let bootstrapState: AppBootstrapState = { status: 'needs-workspace', workspace: 
 let workspaceManager: WorkspaceManager
 let reminderService: ReminderService | null = null
 let reminderTimer: NodeJS.Timeout | null = null
+let maintenanceTimer: NodeJS.Timeout | null = null
+let dataService: DataService | null = null
+let settingsService: SettingsService | null = null
 
 const singleInstanceLock = app.requestSingleInstanceLock()
 if (!singleInstanceLock) {
@@ -84,9 +89,12 @@ app.whenReady().then(async () => {
   reminderService = new ReminderService(
     new ReminderRepository(() => workspaceManager.getDatabase())
   )
-  const dataService = new DataService(
+  dataService = new DataService(
     workspaceManager,
     new DataRepository(() => workspaceManager.getDatabase())
+  )
+  settingsService = new SettingsService(
+    new SettingsRepository(() => workspaceManager.getDatabase())
   )
 
   registerApplicationProtocol()
@@ -100,6 +108,7 @@ app.whenReady().then(async () => {
     workflowService,
     reminderService,
     dataService,
+    settingsService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state
@@ -110,6 +119,8 @@ app.whenReady().then(async () => {
   createTray()
   dispatchReminders()
   reminderTimer = setInterval(dispatchReminders, 60_000)
+  void runWorkspaceMaintenance()
+  maintenanceTimer = setInterval(() => void runWorkspaceMaintenance(), 5 * 60_000)
   powerMonitor.on('resume', dispatchReminders)
 
   app.on('activate', () => {
@@ -126,6 +137,10 @@ app.on('will-quit', (event) => {
   if (reminderTimer) {
     clearInterval(reminderTimer)
     reminderTimer = null
+  }
+  if (maintenanceTimer) {
+    clearInterval(maintenanceTimer)
+    maintenanceTimer = null
   }
   if (!workspaceManager) return
   event.preventDefault()
@@ -168,6 +183,10 @@ function createMainWindow(): void {
 
   mainWindow.on('close', (event) => {
     if (!isQuitting) {
+      if (settingsService?.getPreferences().closeBehavior === 'quit') {
+        isQuitting = true
+        return
+      }
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -264,5 +283,19 @@ function dispatchReminders(): void {
     }
   } catch {
     // 工作区尚未打开或通知生成失败时，不影响业务数据和主窗口。
+  }
+}
+
+async function runWorkspaceMaintenance(): Promise<void> {
+  if (!dataService || !settingsService || bootstrapState.status !== 'ready') return
+  try {
+    const preferences = settingsService.getPreferences()
+    if (!preferences.automaticBackupEnabled || bootstrapState.workspace.readOnly) return
+    await dataService.maybeCreateAutomaticBackup(
+      preferences.automaticBackupIntervalHours,
+      preferences.backupRetentionCount
+    )
+  } catch {
+    // 自动维护失败会在下个周期重试，不影响工作区正常写入。
   }
 }

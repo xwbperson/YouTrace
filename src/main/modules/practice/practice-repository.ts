@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type {
   Course,
+  CreateLearningTestInput,
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
@@ -8,10 +9,13 @@ import type {
   CreateMistakeInput,
   Habit,
   KnowledgeItem,
+  LearningTest,
   Metric,
   Mistake,
   RecordHabitInput,
-  RecordMetricInput
+  RecordMetricInput,
+  RecordReviewResultInput,
+  ReviewQueueItem
 } from '../../../shared/contracts'
 
 interface HabitRow {
@@ -87,6 +91,32 @@ interface MistakeRow {
   analysis: string
   mastery: number | null
   next_review_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface LearningTestRow {
+  id: string
+  project_id: string
+  milestone_id: string | null
+  title: string
+  score: number | null
+  max_score: number | null
+  tested_at: string
+  note: string
+  created_at: string
+  updated_at: string
+}
+
+interface ReviewQueueRow {
+  id: string
+  entity_type: ReviewQueueItem['entityType']
+  entity_id: string
+  title: string
+  scheduled_date: string
+  status: ReviewQueueItem['status']
+  result: ReviewQueueItem['result']
+  project_id: string
   created_at: string
   updated_at: string
 }
@@ -469,6 +499,152 @@ export class PracticeRepository {
     transaction()
   }
 
+  listLearningTests(projectId: string): LearningTest[] {
+    return (
+      this.database()
+        .prepare(
+          `SELECT id, project_id, milestone_id, title, score, max_score,
+                  tested_at, note, created_at, updated_at
+             FROM learning_tests
+            WHERE project_id = ? AND deleted_at IS NULL
+            ORDER BY tested_at DESC`
+        )
+        .all(projectId) as LearningTestRow[]
+    ).map(mapLearningTest)
+  }
+
+  getLearningTest(id: string): LearningTest | null {
+    const row = this.database()
+      .prepare(
+        `SELECT id, project_id, milestone_id, title, score, max_score,
+                tested_at, note, created_at, updated_at
+           FROM learning_tests WHERE id = ? AND deleted_at IS NULL`
+      )
+      .get(id) as LearningTestRow | undefined
+    return row ? mapLearningTest(row) : null
+  }
+
+  insertLearningTest(
+    id: string,
+    input: CreateLearningTestInput,
+    now: string
+  ): void {
+    this.database()
+      .prepare(
+        `INSERT INTO learning_tests(
+           id, project_id, milestone_id, title, score, max_score, tested_at,
+           note, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.projectId,
+        input.milestoneId,
+        input.title,
+        input.score,
+        input.maxScore,
+        input.testedAt,
+        input.note,
+        now,
+        now
+      )
+    this.insertAudit(this.database(), 'learning_test', id, 'created', null, input, now)
+  }
+
+  listReviewQueue(projectId: string): ReviewQueueItem[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT r.id, r.entity_type, r.entity_id,
+                CASE r.entity_type
+                  WHEN 'knowledge' THEN k.title
+                  WHEN 'mistake' THEN SUBSTR(m.question, 1, 160)
+                END AS title,
+                r.scheduled_date, r.status, r.result,
+                COALESCE(k.project_id, m.project_id) AS project_id,
+                r.created_at, r.updated_at
+           FROM review_queue r
+           LEFT JOIN knowledge_items k
+             ON r.entity_type = 'knowledge' AND k.id = r.entity_id
+           LEFT JOIN mistakes m
+             ON r.entity_type = 'mistake' AND m.id = r.entity_id
+          WHERE COALESCE(k.project_id, m.project_id) = ?
+          ORDER BY r.status = 'completed', r.scheduled_date, r.created_at`
+      )
+      .all(projectId) as ReviewQueueRow[]
+    return rows.map(mapReviewQueue)
+  }
+
+  getReviewQueueItem(id: string): ReviewQueueItem | null {
+    const row = this.database()
+      .prepare(
+        `SELECT r.id, r.entity_type, r.entity_id,
+                CASE r.entity_type
+                  WHEN 'knowledge' THEN k.title
+                  WHEN 'mistake' THEN SUBSTR(m.question, 1, 160)
+                END AS title,
+                r.scheduled_date, r.status, r.result,
+                COALESCE(k.project_id, m.project_id) AS project_id,
+                r.created_at, r.updated_at
+           FROM review_queue r
+           LEFT JOIN knowledge_items k
+             ON r.entity_type = 'knowledge' AND k.id = r.entity_id
+           LEFT JOIN mistakes m
+             ON r.entity_type = 'mistake' AND m.id = r.entity_id
+          WHERE r.id = ?`
+      )
+      .get(id) as ReviewQueueRow | undefined
+    return row ? mapReviewQueue(row) : null
+  }
+
+  recordReviewResult(
+    item: ReviewQueueItem,
+    input: RecordReviewResultInput,
+    nextDate: string,
+    mastery: number,
+    now: string
+  ): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      database
+        .prepare(
+          `UPDATE review_queue SET status = 'completed', result = ?, updated_at = ?
+            WHERE id = ? AND status = 'pending'`
+        )
+        .run(input.result, now, item.id)
+      const table = item.entityType === 'knowledge' ? 'knowledge_items' : 'mistakes'
+      if (item.entityType === 'knowledge') {
+        database
+          .prepare(
+            `UPDATE knowledge_items
+                SET mastery = ?, last_reviewed_at = ?, next_review_date = ?, updated_at = ?
+              WHERE id = ?`
+          )
+          .run(mastery, input.reviewedAt, nextDate, now, item.entityId)
+      } else {
+        database
+          .prepare(
+            `UPDATE ${table}
+                SET mastery = ?, next_review_date = ?, updated_at = ?
+              WHERE id = ?`
+          )
+          .run(mastery, nextDate, now, item.entityId)
+      }
+      database
+        .prepare(
+          `INSERT OR IGNORE INTO review_queue(
+             id, entity_type, entity_id, scheduled_date, status, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, 'pending', ?, ?)`
+        )
+        .run(crypto.randomUUID(), item.entityType, item.entityId, nextDate, now, now)
+      this.insertAudit(database, item.entityType, item.entityId, 'reviewed', item, {
+        result: input.result,
+        mastery,
+        nextDate
+      }, now)
+    })
+    transaction()
+  }
+
   private upsertSearch(
     database: Database.Database,
     entityType: string,
@@ -600,6 +776,36 @@ function mapMistake(row: MistakeRow): Mistake {
     analysis: row.analysis,
     mastery: row.mastery,
     nextReviewDate: row.next_review_date,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapLearningTest(row: LearningTestRow): LearningTest {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    milestoneId: row.milestone_id,
+    title: row.title,
+    score: row.score,
+    maxScore: row.max_score,
+    testedAt: row.tested_at,
+    note: row.note,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+function mapReviewQueue(row: ReviewQueueRow): ReviewQueueItem {
+  return {
+    id: row.id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    title: row.title,
+    scheduledDate: row.scheduled_date,
+    status: row.status,
+    result: row.result,
+    projectId: row.project_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
