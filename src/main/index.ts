@@ -26,6 +26,8 @@ import { WorkflowRepository } from './modules/workflow/workflow-repository'
 import { WorkflowService } from './modules/workflow/workflow-service'
 import { ReminderRepository } from './modules/reminders/reminder-repository'
 import { ReminderService } from './modules/reminders/reminder-service'
+import { DataRepository } from './modules/data/data-repository'
+import { DataService } from './modules/data/data-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -82,6 +84,10 @@ app.whenReady().then(async () => {
   reminderService = new ReminderService(
     new ReminderRepository(() => workspaceManager.getDatabase())
   )
+  const dataService = new DataService(
+    workspaceManager,
+    new DataRepository(() => workspaceManager.getDatabase())
+  )
 
   registerApplicationProtocol()
   registerIpc({
@@ -93,6 +99,7 @@ app.whenReady().then(async () => {
     temporalService,
     workflowService,
     reminderService,
+    dataService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
       bootstrapState = state

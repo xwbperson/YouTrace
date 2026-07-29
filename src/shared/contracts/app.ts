@@ -74,6 +74,19 @@ import type {
   ReminderNotice,
   UpcomingReminder
 } from './reminders'
+import type {
+  BackupInfo,
+  BackupVerification,
+  ImportedEvidence,
+  ImportEvidenceFileInput,
+  MigrateWorkspaceInput,
+  ReadableExport,
+  RestoreBackupInput,
+  RestoreResult,
+  TrashActionInput,
+  TrashItem,
+  WorkspaceCheck
+} from './data'
 
 export const workspaceSummarySchema = z.object({
   id: z.string().uuid(),
@@ -218,6 +231,21 @@ export interface YouTraceApi {
     updateSettings(input: NotificationSettings): Promise<IpcResult<NotificationSettings>>
     listUpcoming(): Promise<IpcResult<UpcomingReminder[]>>
     refresh(now: string): Promise<IpcResult<ReminderNotice[]>>
+  }
+  data: {
+    checkWorkspace(): Promise<IpcResult<WorkspaceCheck>>
+    listBackups(): Promise<IpcResult<BackupInfo[]>>
+    createBackup(label: string): Promise<IpcResult<BackupInfo>>
+    verifyBackup(id: string): Promise<IpcResult<BackupVerification>>
+    restoreBackup(input: RestoreBackupInput): Promise<IpcResult<RestoreResult>>
+    migrateWorkspace(input: MigrateWorkspaceInput): Promise<IpcResult<RestoreResult>>
+    exportReadable(): Promise<IpcResult<ReadableExport>>
+    exportPortable(): Promise<IpcResult<BackupInfo>>
+    importPortable(targetRoot: string): Promise<IpcResult<RestoreResult | null>>
+    importEvidenceFile(input: ImportEvidenceFileInput): Promise<IpcResult<ImportedEvidence | null>>
+    listTrash(): Promise<IpcResult<TrashItem[]>>
+    restoreTrash(input: TrashActionInput): Promise<IpcResult<TrashItem>>
+    purgeTrash(input: TrashActionInput): Promise<IpcResult<void>>
   }
   window: {
     minimize(): Promise<IpcResult<void>>

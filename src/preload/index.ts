@@ -106,6 +106,21 @@ const api: YouTraceApi = {
     listUpcoming: () => ipcRenderer.invoke('reminders:list-upcoming'),
     refresh: (now) => ipcRenderer.invoke('reminders:refresh', now)
   },
+  data: {
+    checkWorkspace: () => ipcRenderer.invoke('data:check-workspace'),
+    listBackups: () => ipcRenderer.invoke('data:list-backups'),
+    createBackup: (label) => ipcRenderer.invoke('data:create-backup', label),
+    verifyBackup: (id) => ipcRenderer.invoke('data:verify-backup', id),
+    restoreBackup: (input) => ipcRenderer.invoke('data:restore-backup', input),
+    migrateWorkspace: (input) => ipcRenderer.invoke('data:migrate-workspace', input),
+    exportReadable: () => ipcRenderer.invoke('data:export-readable'),
+    exportPortable: () => ipcRenderer.invoke('data:export-portable'),
+    importPortable: (targetRoot) => ipcRenderer.invoke('data:import-portable', targetRoot),
+    importEvidenceFile: (input) => ipcRenderer.invoke('data:import-evidence-file', input),
+    listTrash: () => ipcRenderer.invoke('data:list-trash'),
+    restoreTrash: (input) => ipcRenderer.invoke('data:restore-trash', input),
+    purgeTrash: (input) => ipcRenderer.invoke('data:purge-trash', input)
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize') as Promise<IpcResult<void>>,
     toggleMaximize: () =>

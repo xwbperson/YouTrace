@@ -29,6 +29,7 @@ import { CountdownSummary } from './CountdownSummary'
 import { ReviewsPage } from '../pages/ReviewsPage'
 import { TemplatesPage } from '../pages/TemplatesPage'
 import { SettingsPage } from '../pages/SettingsPage'
+import { DataPage } from '../pages/DataPage'
 
 interface AppShellProps {
   workspace: WorkspaceSummary
@@ -109,7 +110,7 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <LayoutTemplate size={17} />
             <span>模板</span>
           </button>
-          <button type="button">
+          <button type="button" onClick={() => setActive('data')}>
             <MoreHorizontal size={17} />
             <span>更多</span>
           </button>
@@ -143,6 +144,8 @@ export function AppShell({ workspace }: AppShellProps): React.JSX.Element {
             <TemplatesPage />
           ) : active === 'settings' ? (
             <SettingsPage workspace={workspace} />
+          ) : active === 'data' ? (
+            <DataPage />
           ) : active === 'memos' ? (
             <MemosPage />
           ) : active === 'tags' ? (

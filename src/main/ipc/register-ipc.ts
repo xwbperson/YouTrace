@@ -27,6 +27,10 @@ import {
   effortListInputSchema,
   openWorkspaceInputSchema,
   notificationSettingsSchema,
+  importEvidenceFileInputSchema,
+  migrateWorkspaceInputSchema,
+  restoreBackupInputSchema,
+  trashActionInputSchema,
   moveTimeBlockInputSchema,
   recordHabitInputSchema,
   recordMetricInputSchema,
@@ -55,6 +59,7 @@ import type { PracticeService } from '../modules/practice/practice-service'
 import type { TemporalService } from '../modules/temporal/temporal-service'
 import type { WorkflowService } from '../modules/workflow/workflow-service'
 import type { ReminderService } from '../modules/reminders/reminder-service'
+import type { DataService } from '../modules/data/data-service'
 
 interface RegisterIpcOptions {
   getWindow: () => BrowserWindow | null
@@ -65,6 +70,7 @@ interface RegisterIpcOptions {
   temporalService: TemporalService
   workflowService: WorkflowService
   reminderService: ReminderService
+  dataService: DataService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
 }
@@ -79,6 +85,7 @@ export function registerIpc(options: RegisterIpcOptions): void {
     temporalService,
     workflowService,
     reminderService,
+    dataService,
     getBootstrapState,
     setBootstrapState
   } = options
@@ -611,6 +618,120 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return reminderService.refreshAndProcess(z.string().datetime().parse(rawNow))
+    })
+  )
+
+  ipcMain.handle('data:check-workspace', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.checkWorkspace()
+    })
+  )
+
+  ipcMain.handle('data:list-backups', (event) =>
+    wrap(() => {
+      trusted(event)
+      return dataService.listBackups()
+    })
+  )
+
+  ipcMain.handle('data:create-backup', (event, rawLabel) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.createBackup(z.string().max(200).parse(rawLabel))
+    })
+  )
+
+  ipcMain.handle('data:verify-backup', (event, rawId) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.verifyBackup(z.string().uuid().parse(rawId))
+    })
+  )
+
+  ipcMain.handle('data:restore-backup', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const input = restoreBackupInputSchema.parse(rawInput)
+      const result = await dataService.restoreBackup(input.backupId, input.targetRoot)
+      setBootstrapState({ status: 'ready', workspace: result.workspace })
+      return result
+    })
+  )
+
+  ipcMain.handle('data:migrate-workspace', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const input = migrateWorkspaceInputSchema.parse(rawInput)
+      const result = await dataService.migrateWorkspace(input.targetRoot)
+      setBootstrapState({ status: 'ready', workspace: result.workspace })
+      return result
+    })
+  )
+
+  ipcMain.handle('data:export-readable', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.exportReadable()
+    })
+  )
+
+  ipcMain.handle('data:export-portable', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.exportPortable()
+    })
+  )
+
+  ipcMain.handle('data:import-portable', (event, rawTargetRoot) =>
+    wrap(async () => {
+      const window = trusted(event)
+      const targetRoot = z.string().min(1).parse(rawTargetRoot)
+      const selection = await dialog.showOpenDialog(window, {
+        title: '选择有迹便携包',
+        properties: ['openFile'],
+        filters: [{ name: '有迹便携包', extensions: ['ytrace'] }]
+      })
+      if (selection.canceled || !selection.filePaths[0]) return null
+      const result = await dataService.importPortable(selection.filePaths[0], targetRoot)
+      setBootstrapState({ status: 'ready', workspace: result.workspace })
+      return result
+    })
+  )
+
+  ipcMain.handle('data:import-evidence-file', (event, rawInput) =>
+    wrap(async () => {
+      const window = trusted(event)
+      const input = importEvidenceFileInputSchema.parse(rawInput)
+      const selection = await dialog.showOpenDialog(window, {
+        title: '选择成果文件',
+        properties: ['openFile']
+      })
+      if (selection.canceled || !selection.filePaths[0]) return null
+      return dataService.importEvidenceFile(selection.filePaths[0], input)
+    })
+  )
+
+  ipcMain.handle('data:list-trash', (event) =>
+    wrap(() => {
+      trusted(event)
+      return dataService.listTrash()
+    })
+  )
+
+  ipcMain.handle('data:restore-trash', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      const input = trashActionInputSchema.parse(rawInput)
+      return dataService.restoreTrash(input.id)
+    })
+  )
+
+  ipcMain.handle('data:purge-trash', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const input = trashActionInputSchema.parse(rawInput)
+      await dataService.purgeTrash(input.id, input.confirmation)
     })
   )
 

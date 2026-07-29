@@ -6,6 +6,7 @@ import {
   Clock3,
   ExternalLink,
   FileCheck2,
+  Image,
   Link2,
   Plus,
   TimerReset,
@@ -204,7 +205,14 @@ export function RecordsPage(): React.JSX.Element {
 }
 
 function EvidenceCard({ evidence }: { evidence: Evidence }): React.JSX.Element {
-  const icon = evidence.kind === 'link' ? <Link2 size={17} /> : <FileCheck2 size={17} />
+  const icon =
+    evidence.kind === 'link' ? (
+      <Link2 size={17} />
+    ) : evidence.kind === 'image' ? (
+      <Image size={17} />
+    ) : (
+      <FileCheck2 size={17} />
+    )
   const status = {
     prepared: '已准备',
     completed: '已完成',
@@ -335,7 +343,9 @@ function EvidenceDialog({
   tasks: Task[]
   onCreated: () => Promise<void>
 }): React.JSX.Element {
-  const [kind, setKind] = useState<'note' | 'link' | 'score' | 'feedback'>('note')
+  const [kind, setKind] = useState<
+    'file' | 'image' | 'note' | 'link' | 'score' | 'feedback'
+  >('note')
   const [taskId, setTaskId] = useState('')
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
@@ -346,21 +356,33 @@ function EvidenceDialog({
   const submit = async (): Promise<void> => {
     setBusy(true)
     setError('')
-    const response = await window.youtrace.execution.createEvidence({
-      kind,
-      title,
-      note,
-      source: source || null,
-      verificationStatus: 'prepared',
-      entityType: taskId ? 'task' : null,
-      entityId: taskId || null,
-      tagIds: []
-    })
+    const isLocalFile = kind === 'file' || kind === 'image'
+    const response = isLocalFile
+      ? await window.youtrace.data.importEvidenceFile({
+          kind,
+          title,
+          note,
+          verificationStatus: 'prepared',
+          entityType: taskId ? 'task' : null,
+          entityId: taskId || null,
+          tagIds: []
+        })
+      : await window.youtrace.execution.createEvidence({
+          kind,
+          title,
+          note,
+          source: source || null,
+          verificationStatus: 'prepared',
+          entityType: taskId ? 'task' : null,
+          entityId: taskId || null,
+          tagIds: []
+        })
     setBusy(false)
     if (!response.ok) {
       setError(response.error.message)
       return
     }
+    if (isLocalFile && response.data === null) return
     await onCreated()
     setTitle('')
     setNote('')
@@ -386,6 +408,8 @@ function EvidenceDialog({
               <label>
                 <span>证据类型</span>
                 <select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+                  <option value="file">本地文件</option>
+                  <option value="image">图片</option>
                   <option value="note">文本笔记</option>
                   <option value="link">链接</option>
                   <option value="score">成绩</option>
@@ -402,13 +426,19 @@ function EvidenceDialog({
             </div>
             <label><span>标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
             <label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>
-            <label><span>来源或链接</span><input value={source} onChange={(event) => setSource(event.target.value)} /></label>
+            {kind === 'file' || kind === 'image' ? (
+              <div className="file-picker-note">
+                保存时选择文件；应用会校验哈希并复制到当前工作区。
+              </div>
+            ) : (
+              <label><span>来源或链接</span><input value={source} onChange={(event) => setSource(event.target.value)} /></label>
+            )}
             {error && <div className="inline-error">{error}</div>}
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
             <button className="button button-primary" disabled={!title.trim() || busy} onClick={() => void submit()}>
-              {busy ? '正在保存…' : '保存证据'}
+              {busy ? '正在保存…' : kind === 'file' || kind === 'image' ? '选择文件并保存' : '保存证据'}
             </button>
           </div>
         </Dialog.Content>

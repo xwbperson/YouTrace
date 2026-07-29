@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 5
+export const CURRENT_SCHEMA_VERSION = 6
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -414,6 +414,18 @@ export const INITIAL_SCHEMA_SQL = `
     updated_at TEXT NOT NULL,
     archived_at TEXT,
     deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS backup_records (
+    id TEXT PRIMARY KEY,
+    relative_path TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    label TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    verified_at TEXT,
+    manifest_hash TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    source_schema_version INTEGER NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS course_profiles (
