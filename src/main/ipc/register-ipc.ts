@@ -33,9 +33,12 @@ import {
   openWorkspaceInputSchema,
   notificationSettingsSchema,
   importEvidenceFileInputSchema,
+  interruptedEffortRecoveryActionSchema,
   mergeTagsInputSchema,
+  migrationRecoveryActionSchema,
   migrateWorkspaceInputSchema,
   restoreBackupInputSchema,
+  saveRecoveryDraftInputSchema,
   trashActionInputSchema,
   moveTimeBlockInputSchema,
   recordHabitInputSchema,
@@ -68,11 +71,13 @@ import { toAppError, YouTraceError } from '../../shared/errors'
 import type { WorkspaceManager } from '../workspace/workspace-manager'
 import type { PlanningService } from '../modules/planning/planning-service'
 import type { ExecutionService } from '../modules/execution/execution-service'
+import type { EffortRecoveryService } from '../modules/execution/effort-recovery-service'
 import type { PracticeService } from '../modules/practice/practice-service'
 import type { TemporalService } from '../modules/temporal/temporal-service'
 import type { WorkflowService } from '../modules/workflow/workflow-service'
 import type { ReminderService } from '../modules/reminders/reminder-service'
 import type { DataService } from '../modules/data/data-service'
+import type { DatabaseRecoveryService } from '../modules/data/database-recovery-service'
 import type { SettingsService } from '../modules/settings/settings-service'
 
 interface RegisterIpcOptions {
@@ -80,11 +85,13 @@ interface RegisterIpcOptions {
   workspaceManager: WorkspaceManager
   planningService: PlanningService
   executionService: ExecutionService
+  effortRecoveryService: EffortRecoveryService
   practiceService: PracticeService
   temporalService: TemporalService
   workflowService: WorkflowService
   reminderService: ReminderService
   dataService: DataService
+  databaseRecoveryService: DatabaseRecoveryService
   settingsService: SettingsService
   getBootstrapState: () => AppBootstrapState
   setBootstrapState: (state: AppBootstrapState) => void
@@ -96,11 +103,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     workspaceManager,
     planningService,
     executionService,
+    effortRecoveryService,
     practiceService,
     temporalService,
     workflowService,
     reminderService,
     dataService,
+    databaseRecoveryService,
     settingsService,
     getBootstrapState,
     setBootstrapState
@@ -213,6 +222,38 @@ export function registerIpc(options: RegisterIpcOptions): void {
           details: { reason: error }
         })
       }
+    })
+  )
+
+  ipcMain.handle('workspace:get-database-recovery', (event) =>
+    wrap(() => {
+      trusted(event)
+      return databaseRecoveryService.getPending()
+    })
+  )
+
+  ipcMain.handle('workspace:confirm-database-recovery', (event, rawId) =>
+    wrap(async () => {
+      trusted(event)
+      const workspace = await databaseRecoveryService.confirm(
+        z.string().uuid().parse(rawId)
+      )
+      setBootstrapState({ status: 'ready', workspace })
+      return workspace
+    })
+  )
+
+  ipcMain.handle('workspace:reveal-database-recovery-report', (event) =>
+    wrap(() => {
+      trusted(event)
+      const recovery = databaseRecoveryService.getPending()
+      if (!recovery) {
+        throw new YouTraceError({
+          code: 'DATABASE_RECOVERY_NOT_FOUND',
+          message: '当前没有数据库恢复报告。'
+        })
+      }
+      shell.showItemInFolder(recovery.reportPath)
     })
   )
 
@@ -479,9 +520,11 @@ export function registerIpc(options: RegisterIpcOptions): void {
   )
 
   ipcMain.handle('execution:start-effort', (event, rawInput) =>
-    wrap(() => {
+    wrap(async () => {
       trusted(event)
-      return executionService.startEffort(startEffortInputSchema.parse(rawInput))
+      const effort = executionService.startEffort(startEffortInputSchema.parse(rawInput))
+      await effortRecoveryService.recordHeartbeat()
+      return effort
     })
   )
 
@@ -500,9 +543,29 @@ export function registerIpc(options: RegisterIpcOptions): void {
   )
 
   ipcMain.handle('execution:stop-effort', (event, rawInput) =>
-    wrap(() => {
+    wrap(async () => {
       trusted(event)
-      return executionService.stopEffort(stopEffortInputSchema.parse(rawInput))
+      const effort = executionService.stopEffort(stopEffortInputSchema.parse(rawInput))
+      await effortRecoveryService.recordHeartbeat()
+      return effort
+    })
+  )
+
+  ipcMain.handle('execution:get-pending-recovery', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return effortRecoveryService.getPendingRecovery()
+    })
+  )
+
+  ipcMain.handle('execution:resolve-pending-recovery', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const effort = await effortRecoveryService.resolvePendingRecovery(
+        interruptedEffortRecoveryActionSchema.parse(rawInput)
+      )
+      await effortRecoveryService.recordHeartbeat()
+      return effort
     })
   )
 
@@ -933,6 +996,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('data:get-backup-storage-status', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.getBackupStorageStatus()
+    })
+  )
+
   ipcMain.handle('data:create-backup', (event, rawLabel) =>
     wrap(async () => {
       trusted(event)
@@ -964,6 +1034,62 @@ export function registerIpc(options: RegisterIpcOptions): void {
       const result = await dataService.migrateWorkspace(input.targetRoot)
       setBootstrapState({ status: 'ready', workspace: result.workspace })
       return result
+    })
+  )
+
+  ipcMain.handle('data:get-pending-migration', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.getPendingMigration()
+    })
+  )
+
+  ipcMain.handle('data:resolve-pending-migration', (event, rawAction) =>
+    wrap(async () => {
+      trusted(event)
+      const result = await dataService.resolvePendingMigration(
+        migrationRecoveryActionSchema.parse(rawAction)
+      )
+      if (result) setBootstrapState({ status: 'ready', workspace: result.workspace })
+      return result
+    })
+  )
+
+  ipcMain.handle('data:reveal-pending-migration-report', (event) =>
+    wrap(async () => {
+      trusted(event)
+      const directory = await dataService.getPendingMigrationReportDirectory()
+      const error = await shell.openPath(directory)
+      if (error) {
+        throw new YouTraceError({
+          code: 'MIGRATION_REPORT_OPEN_FAILED',
+          message: '无法打开迁移报告目录。',
+          details: { reason: error }
+        })
+      }
+    })
+  )
+
+  ipcMain.handle('data:save-recovery-draft', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.saveRecoveryDraft(saveRecoveryDraftInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('data:list-recovery-drafts', (event) =>
+    wrap(async () => {
+      trusted(event)
+      return dataService.listRecoveryDrafts()
+    })
+  )
+
+  ipcMain.handle('data:discard-recovery-draft', (event, rawKey) =>
+    wrap(async () => {
+      trusted(event)
+      await dataService.discardRecoveryDraft(
+        saveRecoveryDraftInputSchema.shape.key.parse(rawKey)
+      )
     })
   )
 

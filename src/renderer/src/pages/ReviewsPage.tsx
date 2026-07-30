@@ -111,6 +111,7 @@ export function ReviewsPage(): React.JSX.Element {
 
 function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unknown> }): React.JSX.Element {
   const { review } = props
+  const queryClient = useQueryClient()
   const [importantOutcomes, setImportantOutcomes] = useState(review.importantOutcomes)
   const [blockers, setBlockers] = useState(review.blockers)
   const [nextFirstStep, setNextFirstStep] = useState(review.nextFirstStep)
@@ -123,8 +124,44 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
   const [reason, setReason] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
   const [splitTitle, setSplitTitle] = useState('')
+  const [draftDirty, setDraftDirty] = useState(false)
+  const [draftHandled, setDraftHandled] = useState(false)
+  const draftKey = `review:${review.id}`
+  const draftsQuery = useQuery({
+    queryKey: ['recovery-drafts'],
+    queryFn: async () => unwrap(await window.youtrace.data.listRecoveryDrafts())
+  })
+  const recoveryDraft = (draftsQuery.data ?? []).find((draft) => draft.key === draftKey)
   const effortMinutes = review.snapshot.efforts.reduce((sum, effort) => sum + effort.effectiveMinutes, 0)
   const incomplete = review.snapshot.tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled')
+
+  useEffect(() => {
+    if (!draftsQuery.isSuccess || !draftDirty || (recoveryDraft && !draftHandled)) return
+    const timer = window.setTimeout(() => {
+      void window.youtrace.data.saveRecoveryDraft({
+        key: draftKey,
+        label: review.title,
+        content: importantOutcomes,
+        context: {
+          blockers,
+          nextFirstStep,
+          nextCommitments
+        }
+      })
+    }, 750)
+    return () => window.clearTimeout(timer)
+  }, [
+    blockers,
+    draftDirty,
+    draftHandled,
+    draftKey,
+    draftsQuery.isSuccess,
+    importantOutcomes,
+    nextCommitments,
+    nextFirstStep,
+    recoveryDraft,
+    review.title
+  ])
 
   const save = async (status: 'draft' | 'completed'): Promise<void> => {
     const result = await window.youtrace.workflow.updateReview({
@@ -135,7 +172,13 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
       nextCommitments,
       status
     })
-    if (result.ok) await props.onChanged()
+    if (result.ok) {
+      setDraftDirty(false)
+      setDraftHandled(true)
+      await window.youtrace.data.discardRecoveryDraft(draftKey)
+      await queryClient.invalidateQueries({ queryKey: ['recovery-drafts'] })
+      await props.onChanged()
+    }
   }
 
   const adjust = async (action: 'reschedule' | 'cancel' | 'split'): Promise<void> => {
@@ -202,10 +245,52 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
       </section>
 
       <section className="review-editor">
-        <label><span>重要成果</span><textarea value={importantOutcomes} onChange={(event) => setImportantOutcomes(event.target.value)} placeholder="这个周期真正完成了什么？" /></label>
-        <label><span>阻塞与延期原因</span><textarea value={blockers} onChange={(event) => setBlockers(event.target.value)} placeholder="记录事实，不把原因改写成结果。" /></label>
-        <label><span>下一周期第一步</span><textarea value={nextFirstStep} onChange={(event) => setNextFirstStep(event.target.value)} /></label>
-        <label><span>下一周期承诺</span><textarea value={nextCommitments} onChange={(event) => setNextCommitments(event.target.value)} /></label>
+        {recoveryDraft && !draftHandled ? (
+          <div className="memo-recovery-banner review-recovery-banner" role="status">
+            <div>
+              <RotateCcw size={16} />
+              <span>
+                <strong>发现这份复盘上次未提交的文字</strong>
+                <small>{new Date(recoveryDraft.updatedAt).toLocaleString('zh-CN')}</small>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={async () => {
+                await window.youtrace.data.discardRecoveryDraft(draftKey)
+                setDraftHandled(true)
+                await queryClient.invalidateQueries({ queryKey: ['recovery-drafts'] })
+              }}
+            >
+              放弃草稿
+            </button>
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => {
+                setImportantOutcomes(recoveryDraft.content)
+                if (typeof recoveryDraft.context.blockers === 'string') {
+                  setBlockers(recoveryDraft.context.blockers)
+                }
+                if (typeof recoveryDraft.context.nextFirstStep === 'string') {
+                  setNextFirstStep(recoveryDraft.context.nextFirstStep)
+                }
+                if (typeof recoveryDraft.context.nextCommitments === 'string') {
+                  setNextCommitments(recoveryDraft.context.nextCommitments)
+                }
+                setDraftHandled(true)
+                setDraftDirty(true)
+              }}
+            >
+              恢复草稿
+            </button>
+          </div>
+        ) : null}
+        <label><span>重要成果</span><textarea value={importantOutcomes} onChange={(event) => { setImportantOutcomes(event.target.value); setDraftDirty(true); setDraftHandled(true) }} placeholder="这个周期真正完成了什么？" /></label>
+        <label><span>阻塞与延期原因</span><textarea value={blockers} onChange={(event) => { setBlockers(event.target.value); setDraftDirty(true); setDraftHandled(true) }} placeholder="记录事实，不把原因改写成结果。" /></label>
+        <label><span>下一周期第一步</span><textarea value={nextFirstStep} onChange={(event) => { setNextFirstStep(event.target.value); setDraftDirty(true); setDraftHandled(true) }} /></label>
+        <label><span>下一周期承诺</span><textarea value={nextCommitments} onChange={(event) => { setNextCommitments(event.target.value); setDraftDirty(true); setDraftHandled(true) }} /></label>
       </section>
 
       {incomplete.length > 0 && (

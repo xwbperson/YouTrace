@@ -14,7 +14,7 @@ import {
   Tag,
   X
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { IpcResult, Memo, Project } from '../../../shared/contracts'
 
 function unwrap<T>(result: IpcResult<T>): T {
@@ -31,6 +31,8 @@ const kindLabels: Record<Memo['kind'], string> = {
   meeting: '会议记录'
 }
 
+const QUICK_MEMO_DRAFT_KEY = 'memo:quick-capture'
+
 export function MemosPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [body, setBody] = useState('')
@@ -40,6 +42,7 @@ export function MemosPage(): React.JSX.Element {
   const [tagIds, setTagIds] = useState<string[]>([])
   const [showArchived, setShowArchived] = useState(false)
   const [convertMemo, setConvertMemo] = useState<Memo | null>(null)
+  const [draftHandled, setDraftHandled] = useState(false)
 
   const memosQuery = useQuery({
     queryKey: ['memos', showArchived],
@@ -53,6 +56,44 @@ export function MemosPage(): React.JSX.Element {
     queryKey: ['tags'],
     queryFn: async () => unwrap(await window.youtrace.planning.listTags())
   })
+  const draftsQuery = useQuery({
+    queryKey: ['recovery-drafts'],
+    queryFn: async () => unwrap(await window.youtrace.data.listRecoveryDrafts())
+  })
+  const recoveryDraft = (draftsQuery.data ?? []).find(
+    (draft) => draft.key === QUICK_MEMO_DRAFT_KEY
+  )
+
+  useEffect(() => {
+    if (!draftsQuery.isSuccess || (recoveryDraft && !draftHandled)) return
+    const timer = window.setTimeout(() => {
+      if (!body.trim()) {
+        void window.youtrace.data.discardRecoveryDraft(QUICK_MEMO_DRAFT_KEY)
+        return
+      }
+      void window.youtrace.data.saveRecoveryDraft({
+        key: QUICK_MEMO_DRAFT_KEY,
+        label: '快速备忘',
+        content: body,
+        context: {
+          kind,
+          projectId,
+          sourceLink,
+          tagIds
+        }
+      })
+    }, 750)
+    return () => window.clearTimeout(timer)
+  }, [
+    body,
+    draftHandled,
+    draftsQuery.isSuccess,
+    kind,
+    projectId,
+    recoveryDraft,
+    sourceLink,
+    tagIds
+  ])
 
   const createMutation = useMutation({
     mutationFn: async (attachFile: boolean) => {
@@ -85,6 +126,8 @@ export function MemosPage(): React.JSX.Element {
       setBody('')
       setSourceLink('')
       setTagIds([])
+      setDraftHandled(true)
+      await window.youtrace.data.discardRecoveryDraft(QUICK_MEMO_DRAFT_KEY)
       await queryClient.invalidateQueries({ queryKey: ['memos'] })
     }
   })
@@ -106,12 +149,60 @@ export function MemosPage(): React.JSX.Element {
       </header>
 
       <section className="capture-panel panel">
+        {recoveryDraft && !draftHandled ? (
+          <div className="memo-recovery-banner" role="status">
+            <div>
+              <RotateCcw size={16} />
+              <span>
+                <strong>发现上次未保存的快速备忘</strong>
+                <small>{new Date(recoveryDraft.updatedAt).toLocaleString('zh-CN')}</small>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="button button-secondary"
+              onClick={async () => {
+                await window.youtrace.data.discardRecoveryDraft(QUICK_MEMO_DRAFT_KEY)
+                setDraftHandled(true)
+                await queryClient.invalidateQueries({ queryKey: ['recovery-drafts'] })
+              }}
+            >
+              放弃草稿
+            </button>
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={() => {
+                setBody(recoveryDraft.content)
+                if (typeof recoveryDraft.context.kind === 'string') {
+                  const recoveredKind = recoveryDraft.context.kind as Memo['kind']
+                  if (recoveredKind in kindLabels) setKind(recoveredKind)
+                }
+                if (typeof recoveryDraft.context.projectId === 'string') {
+                  setProjectId(recoveryDraft.context.projectId)
+                }
+                if (typeof recoveryDraft.context.sourceLink === 'string') {
+                  setSourceLink(recoveryDraft.context.sourceLink)
+                }
+                if (Array.isArray(recoveryDraft.context.tagIds)) {
+                  setTagIds(recoveryDraft.context.tagIds)
+                }
+                setDraftHandled(true)
+              }}
+            >
+              恢复草稿
+            </button>
+          </div>
+        ) : null}
         <div className="capture-icon"><Lightbulb size={20} /></div>
         <textarea
           aria-label="快速记录"
           autoFocus
           value={body}
-          onChange={(event) => setBody(event.target.value)}
+          onChange={(event) => {
+            setDraftHandled(true)
+            setBody(event.target.value)
+          }}
           placeholder="写下突然想到的事情、问题或下一步…"
         />
         <div className="capture-actions">

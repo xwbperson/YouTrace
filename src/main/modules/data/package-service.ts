@@ -28,6 +28,7 @@ export interface PackageManifest {
   schemaVersion: number
   applicationVersion: string
   createdAt: string
+  recordCounts?: Record<string, number>
   files: Array<{ path: string; size: number; sha256: string }>
 }
 
@@ -39,6 +40,17 @@ interface PackageSource {
 const EXCLUDED_TOP_LEVEL = new Set(['backups', 'exports', 'logs', 'temp'])
 
 export class PackageService {
+  async estimateSourceBytes(workspaceRoot: string): Promise<number> {
+    const sources = await this.collectSources(workspaceRoot)
+    const sourceBytes = await Promise.all(
+      sources.map(async (source) => (await stat(source.absolutePath)).size)
+    )
+    const databaseBytes = await stat(join(workspaceRoot, 'database', 'youtrace.sqlite3'))
+      .then((info) => info.size)
+      .catch(() => 0)
+    return sourceBytes.reduce((total, size) => total + size, databaseBytes)
+  }
+
   async create(
     workspaceRoot: string,
     database: Database.Database,
@@ -57,6 +69,7 @@ export class PackageService {
     await mkdir(dirname(snapshotPath), { recursive: true })
     await database.backup(snapshotPath)
     const snapshotIntegrity = new Database(snapshotPath, { readonly: true })
+    let recordCounts: Record<string, number>
     try {
       if (snapshotIntegrity.pragma('quick_check', { simple: true }) !== 'ok') {
         throw new YouTraceError({
@@ -64,6 +77,7 @@ export class PackageService {
           message: '备份数据库快照未通过完整性检查。'
         })
       }
+      recordCounts = collectRecordCounts(snapshotIntegrity)
     } finally {
       snapshotIntegrity.close()
     }
@@ -89,6 +103,7 @@ export class PackageService {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       applicationVersion,
       createdAt: new Date().toISOString(),
+      recordCounts,
       files
     }
     const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2), 'utf8')
@@ -224,6 +239,27 @@ export class PackageService {
       void archive.finalize()
     })
   }
+}
+
+export function collectRecordCounts(database: Database.Database): Record<string, number> {
+  const tables = database
+    .prepare(
+      `SELECT name
+         FROM sqlite_schema
+        WHERE type = 'table'
+          AND name NOT LIKE 'sqlite_%'
+        ORDER BY name`
+    )
+    .all() as Array<{ name: string }>
+  return Object.fromEntries(
+    tables.map(({ name }) => {
+      const quotedName = `"${name.replaceAll('"', '""')}"`
+      const row = database.prepare(`SELECT COUNT(*) AS count FROM ${quotedName}`).get() as {
+        count: number
+      }
+      return [name, row.count]
+    })
+  )
 }
 
 async function hashFile(path: string): Promise<string> {

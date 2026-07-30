@@ -26,6 +26,24 @@ export const stopEffortInputSchema = z.object({
   perceivedDifficulty: z.number().int().min(1).max(5).nullable().default(null)
 })
 
+export const interruptedEffortRecoverySchema = z.object({
+  workspaceId: z.string().uuid(),
+  effortId: z.string().uuid(),
+  entityTitle: z.string().nullable(),
+  startedAt: z.string().datetime(),
+  lastHeartbeatAt: z.string().datetime(),
+  detectedAt: z.string().datetime()
+})
+
+export const interruptedEffortRecoveryActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('retain') }),
+  z.object({ action: z.literal('resume') }),
+  z.object({
+    action: z.literal('stop'),
+    endedAt: z.string().datetime()
+  })
+])
+
 export const createManualEffortInputSchema = z.object({
   entityType: effortEntityTypeSchema,
   entityId: z.string().uuid(),
@@ -180,6 +198,10 @@ export interface Memo {
 
 export type StartEffortInput = z.infer<typeof startEffortInputSchema>
 export type StopEffortInput = z.infer<typeof stopEffortInputSchema>
+export type InterruptedEffortRecovery = z.infer<typeof interruptedEffortRecoverySchema>
+export type InterruptedEffortRecoveryAction = z.infer<
+  typeof interruptedEffortRecoveryActionSchema
+>
 export type CreateManualEffortInput = z.infer<typeof createManualEffortInputSchema>
 export type EffortListInput = z.infer<typeof effortListInputSchema>
 export type CorrectEffortInput = z.infer<typeof correctEffortInputSchema>

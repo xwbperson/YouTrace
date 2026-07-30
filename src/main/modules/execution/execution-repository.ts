@@ -176,6 +176,29 @@ export class ExecutionRepository {
     return result.changes > 0
   }
 
+  closeOpenSuspensionAt(id: string, at: string): boolean {
+    const database = this.database()
+    const result = database
+      .prepare(
+        `UPDATE effort_suspensions
+            SET suspended_at = ?, resumed_at = ?
+          WHERE effort_id = ? AND resumed_at IS NULL`
+      )
+      .run(at, at, id)
+    if (result.changes > 0) {
+      this.insertAudit(
+        database,
+        'effort',
+        id,
+        'interruption_end_confirmed',
+        null,
+        { endedAt: at },
+        at
+      )
+    }
+    return result.changes > 0
+  }
+
   pausedMilliseconds(id: string, through: string): number {
     const rows = this.database()
       .prepare(

@@ -50,6 +50,10 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
     queryKey: ['tags'],
     queryFn: async () => unwrap(await window.youtrace.planning.listTags())
   })
+  const backupStorageQuery = useQuery({
+    queryKey: ['backup-storage-status'],
+    queryFn: async () => unwrap(await window.youtrace.data.getBackupStorageStatus())
+  })
   useEffect(() => {
     if (settingsQuery.data) setSettings(settingsQuery.data)
   }, [settingsQuery.data])
@@ -117,8 +121,20 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
           </div>
           <div className="preference-grid">
             <label><span>自动备份间隔（小时）</span><input type="number" min="1" max="168" value={preferences.automaticBackupIntervalHours} onChange={(event) => setPreferences({ ...preferences, automaticBackupIntervalHours: Number(event.target.value) })} /></label>
-            <label><span>自动备份保留份数</span><input type="number" min="1" max="50" value={preferences.backupRetentionCount} onChange={(event) => setPreferences({ ...preferences, backupRetentionCount: Number(event.target.value) })} /></label>
+            <label><span>每日备份保留</span><input type="number" min="1" max="50" value={preferences.backupDailyRetention} onChange={(event) => setPreferences({ ...preferences, backupDailyRetention: Number(event.target.value) })} /></label>
+            <label><span>每周备份保留</span><input type="number" min="1" max="52" value={preferences.backupWeeklyRetention} onChange={(event) => setPreferences({ ...preferences, backupWeeklyRetention: Number(event.target.value) })} /></label>
+            <label><span>每月备份保留</span><input type="number" min="1" max="24" value={preferences.backupMonthlyRetention} onChange={(event) => setPreferences({ ...preferences, backupMonthlyRetention: Number(event.target.value) })} /></label>
           </div>
+          {backupStorageQuery.data ? (
+            <div className={`settings-note ${backupStorageQuery.data.canCreate ? '' : 'settings-note-warning'}`}>
+              <HardDrive size={14} />
+              <span>
+                {backupStorageQuery.data.backupCount} 份备份占用 {formatBytes(backupStorageQuery.data.totalBytes)}；
+                下一份预计 {formatBytes(backupStorageQuery.data.nextEstimatedBytes)}，磁盘可用 {formatBytes(backupStorageQuery.data.freeBytes)}。
+                {backupStorageQuery.data.canCreate ? '' : ' 空间不足时不会创建新备份，也不会先删除现有可恢复副本。'}
+              </span>
+            </div>
+          ) : null}
         </section>
       )}
 
@@ -176,7 +192,7 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
         <header><span><ShieldCheck size={17} /></span><div><h2>数据维护</h2><p>常用安全操作；完整恢复和回收站位于“更多”。</p></div></header>
         <div className="maintenance-actions">
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.checkWorkspace(); setMaintenanceMessage(result.ok ? `检查通过：${result.data.fileCount} 个文件` : result.error.message) }}><ShieldCheck size={14} />完整性检查</button>
-          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.createBackup('设置页手动备份'); setMaintenanceMessage(result.ok ? '已创建并校验备份' : result.error.message) }}><Database size={14} />立即备份</button>
+          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.createBackup('设置页手动备份'); setMaintenanceMessage(result.ok ? '已创建并校验备份' : result.error.message); await backupStorageQuery.refetch() }}><Database size={14} />立即备份</button>
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.exportReadable(); setMaintenanceMessage(result.ok ? '已导出 Markdown / CSV' : result.error.message) }}><Save size={14} />可读导出</button>
           <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.rebuildSearchIndex(); setMaintenanceMessage(result.ok ? `已从业务表重建 ${result.data.indexedCount} 条搜索索引` : result.error.message) }}><TimerReset size={14} />重建搜索索引</button>
         </div>
@@ -189,4 +205,16 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
 
 function ToggleSetting(props: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }): React.JSX.Element {
   return <label className="toggle-setting"><span><strong>{props.label}</strong><small>{props.description}</small></span><input type="checkbox" checked={props.checked} onChange={(event) => props.onChange(event.target.checked)} /><i aria-hidden="true" /></label>
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let value = bytes / 1024
+  let unit = units[0]
+  for (let index = 1; index < units.length && value >= 1024; index += 1) {
+    value /= 1024
+    unit = units[index]
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`
 }

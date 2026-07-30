@@ -12,7 +12,12 @@ import {
 } from 'node:fs/promises'
 import { basename, join, parse, resolve } from 'node:path'
 import { z } from 'zod'
-import type { AppBootstrapState, WorkspaceSummary } from '../../shared/contracts'
+import {
+  migrationRecoveryStateSchema,
+  type AppBootstrapState,
+  type MigrationRecoveryState,
+  type WorkspaceSummary
+} from '../../shared/contracts'
 import { YouTraceError } from '../../shared/errors'
 import { DatabaseManager } from '../database/database-manager'
 import type Database from 'better-sqlite3'
@@ -47,7 +52,8 @@ const markerSchema = z.object({
 const bootstrapSchema = z.object({
   workspacePath: z.string().min(1),
   workspaceId: z.string().uuid(),
-  lastOpenedAt: z.string().datetime()
+  lastOpenedAt: z.string().datetime(),
+  pendingMigration: migrationRecoveryStateSchema.nullable().optional()
 })
 
 const lockSchema = z.object({
@@ -95,7 +101,8 @@ export class WorkspaceManager {
         status: 'workspace-unavailable',
         workspace: null,
         lastPath: pointer.workspacePath,
-        reason: error instanceof Error ? error.message : '工作区无法打开'
+        reason: error instanceof Error ? error.message : '工作区无法打开',
+        code: error instanceof YouTraceError ? error.code : null
       }
     }
   }
@@ -188,6 +195,28 @@ export class WorkspaceManager {
         reason
       }
     }
+  }
+
+  async getPendingMigration(): Promise<MigrationRecoveryState | null> {
+    return (await this.readBootstrap())?.pendingMigration ?? null
+  }
+
+  async setPendingMigration(state: MigrationRecoveryState | null): Promise<void> {
+    const current = this.current?.summary
+    if (!current) {
+      throw new YouTraceError({
+        code: 'WORKSPACE_NOT_OPEN',
+        message: '当前没有打开的工作区。',
+        recovery: '请先创建或打开工作区。'
+      })
+    }
+    if (state && state.workspaceId !== current.id) {
+      throw new YouTraceError({
+        code: 'MIGRATION_RECOVERY_WORKSPACE_MISMATCH',
+        message: '迁移恢复状态不属于当前工作区。'
+      })
+    }
+    await this.writeBootstrap(current, state)
   }
 
   async create(rootPath: string, name: string): Promise<WorkspaceSummary> {
@@ -507,8 +536,18 @@ export class WorkspaceManager {
     }
   }
 
-  private async writeBootstrap(workspace: WorkspaceSummary): Promise<void> {
+  private async writeBootstrap(
+    workspace: WorkspaceSummary,
+    pendingMigrationOverride?: MigrationRecoveryState | null
+  ): Promise<void> {
     await mkdir(resolve(this.bootstrapPath, '..'), { recursive: true })
+    const existing = await this.readBootstrap()
+    const pendingMigration =
+      pendingMigrationOverride !== undefined
+        ? pendingMigrationOverride
+        : existing?.workspaceId === workspace.id
+          ? existing.pendingMigration ?? null
+          : null
     const temporaryPath = `${this.bootstrapPath}.tmp-${randomUUID()}`
     await writeFile(
       temporaryPath,
@@ -516,7 +555,8 @@ export class WorkspaceManager {
         {
           workspacePath: workspace.path,
           workspaceId: workspace.id,
-          lastOpenedAt: new Date().toISOString()
+          lastOpenedAt: new Date().toISOString(),
+          pendingMigration
         },
         null,
         2

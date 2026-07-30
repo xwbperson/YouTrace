@@ -98,6 +98,10 @@ export class ExecutionService {
   }
 
   suspendEffort(id: string): EffortEntry {
+    return this.suspendEffortAt(id, new Date().toISOString())
+  }
+
+  suspendEffortAt(id: string, suspendedAt: string): EffortEntry {
     const current = this.repository.getEffort(id)
     if (!current || current.endedAt) {
       throw new YouTraceError({
@@ -105,8 +109,14 @@ export class ExecutionService {
         message: '这段计时已经停止或不存在。'
       })
     }
+    if (Date.parse(suspendedAt) < Date.parse(current.startedAt)) {
+      throw new YouTraceError({
+        code: 'EFFORT_TIME_INVALID',
+        message: '暂停时间不能早于计时开始时间。'
+      })
+    }
     if (!current.suspendedAt) {
-      this.repository.suspendEffort(id, new Date().toISOString())
+      this.repository.suspendEffort(id, suspendedAt)
     }
     return this.requireEffort(id)
   }
@@ -126,6 +136,10 @@ export class ExecutionService {
   }
 
   stopEffort(input: StopEffortInput): EffortEntry {
+    return this.stopEffortAt(input, new Date().toISOString())
+  }
+
+  stopEffortAt(input: StopEffortInput, endedAt: string): EffortEntry {
     const current = this.repository.getEffort(input.id)
     if (!current || current.endedAt) {
       throw new YouTraceError({
@@ -133,7 +147,12 @@ export class ExecutionService {
         message: '这段计时已经停止或不存在。'
       })
     }
-    const endedAt = new Date().toISOString()
+    if (Date.parse(endedAt) < Date.parse(current.startedAt)) {
+      throw new YouTraceError({
+        code: 'EFFORT_TIME_INVALID',
+        message: '结束时间不能早于计时开始时间。'
+      })
+    }
     const pausedMilliseconds = this.repository.pausedMilliseconds(input.id, endedAt)
     const effectiveMinutes = Math.max(
       0,
@@ -148,6 +167,18 @@ export class ExecutionService {
       })
     }
     return this.requireEffort(input.id)
+  }
+
+  closeOpenSuspensionAt(id: string, at: string): EffortEntry {
+    const current = this.repository.getEffort(id)
+    if (!current || current.endedAt || !current.suspendedAt) {
+      throw new YouTraceError({
+        code: 'EFFORT_NOT_SUSPENDED',
+        message: '这段计时当前没有等待确认的暂停状态。'
+      })
+    }
+    this.repository.closeOpenSuspensionAt(id, at)
+    return this.requireEffort(id)
   }
 
   createManualEffort(input: CreateManualEffortInput): EffortEntry {

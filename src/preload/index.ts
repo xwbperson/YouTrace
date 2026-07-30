@@ -35,7 +35,12 @@ const api: YouTraceApi = {
       ipcRenderer.invoke('workspace:open', input) as Promise<IpcResult<WorkspaceSummary>>,
     reconnect: (input: ReconnectWorkspaceInput) =>
       ipcRenderer.invoke('workspace:reconnect', input) as Promise<IpcResult<WorkspaceSummary>>,
-    reveal: () => ipcRenderer.invoke('workspace:reveal') as Promise<IpcResult<void>>
+    reveal: () => ipcRenderer.invoke('workspace:reveal') as Promise<IpcResult<void>>,
+    getDatabaseRecovery: () => ipcRenderer.invoke('workspace:get-database-recovery'),
+    confirmDatabaseRecovery: (id) =>
+      ipcRenderer.invoke('workspace:confirm-database-recovery', id),
+    revealDatabaseRecoveryReport: () =>
+      ipcRenderer.invoke('workspace:reveal-database-recovery-report')
   },
   planning: {
     listAreas: (includeArchived) => ipcRenderer.invoke('planning:list-areas', includeArchived),
@@ -83,6 +88,9 @@ const api: YouTraceApi = {
     suspendEffort: (id) => ipcRenderer.invoke('execution:suspend-effort', id),
     resumeEffort: (id) => ipcRenderer.invoke('execution:resume-effort', id),
     stopEffort: (input) => ipcRenderer.invoke('execution:stop-effort', input),
+    getPendingRecovery: () => ipcRenderer.invoke('execution:get-pending-recovery'),
+    resolvePendingRecovery: (input) =>
+      ipcRenderer.invoke('execution:resolve-pending-recovery', input),
     createManualEffort: (input) => ipcRenderer.invoke('execution:create-manual-effort', input),
     listEfforts: (input) => ipcRenderer.invoke('execution:list-efforts', input),
     summarizeEfforts: (from, to) => ipcRenderer.invoke('execution:summarize-efforts', from, to),
@@ -165,10 +173,20 @@ const api: YouTraceApi = {
     rebuildSearchIndex: () => ipcRenderer.invoke('data:rebuild-search-index'),
     openEvidence: (id) => ipcRenderer.invoke('data:open-evidence', id),
     listBackups: () => ipcRenderer.invoke('data:list-backups'),
+    getBackupStorageStatus: () => ipcRenderer.invoke('data:get-backup-storage-status'),
     createBackup: (label) => ipcRenderer.invoke('data:create-backup', label),
     verifyBackup: (id) => ipcRenderer.invoke('data:verify-backup', id),
     restoreBackup: (input) => ipcRenderer.invoke('data:restore-backup', input),
     migrateWorkspace: (input) => ipcRenderer.invoke('data:migrate-workspace', input),
+    getPendingMigration: () => ipcRenderer.invoke('data:get-pending-migration'),
+    resolvePendingMigration: (action) =>
+      ipcRenderer.invoke('data:resolve-pending-migration', action),
+    revealPendingMigrationReport: () =>
+      ipcRenderer.invoke('data:reveal-pending-migration-report'),
+    saveRecoveryDraft: (input) => ipcRenderer.invoke('data:save-recovery-draft', input),
+    listRecoveryDrafts: () => ipcRenderer.invoke('data:list-recovery-drafts'),
+    discardRecoveryDraft: (key) =>
+      ipcRenderer.invoke('data:discard-recovery-draft', key),
     exportReadable: () => ipcRenderer.invoke('data:export-readable'),
     exportPortable: () => ipcRenderer.invoke('data:export-portable'),
     importPortable: (targetRoot) => ipcRenderer.invoke('data:import-portable', targetRoot),

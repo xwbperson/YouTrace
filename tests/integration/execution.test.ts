@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ExecutionRepository } from '../../src/main/modules/execution/execution-repository'
+import { EffortRecoveryService } from '../../src/main/modules/execution/effort-recovery-service'
 import { ExecutionService } from '../../src/main/modules/execution/execution-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
@@ -13,9 +14,10 @@ import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 let workspaceManager: WorkspaceManager
 let planning: PlanningService
 let execution: ExecutionService
+let fixtureRoot: string
 
 beforeEach(async () => {
-  const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-execution-test-'))
+  fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-execution-test-'))
   workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
   await workspaceManager.create(join(fixtureRoot, 'workspace'), '执行测试')
   const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
@@ -445,5 +447,85 @@ describe('execution and evidence application service', () => {
         offset: 0
       })
     ).toHaveLength(1)
+  })
+
+  it('freezes an interrupted effort at its last heartbeat and waits for confirmation', async () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '异常恢复',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '恢复未完成计时',
+      description: '',
+      status: 'ready',
+      difficulty: null,
+      priority: 'medium',
+      estimatedMinutes: 30,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    const started = execution.startEffort({
+      entityType: 'task',
+      entityId: task.id,
+      tagIds: []
+    })
+    const heartbeatAt = new Date(Date.parse(started.startedAt) + 5 * 60_000).toISOString()
+    const detectedAt = new Date(Date.parse(heartbeatAt) + 60 * 60_000).toISOString()
+    const confirmedEndAt = new Date(Date.parse(heartbeatAt) + 2 * 60_000).toISOString()
+    const recovery = new EffortRecoveryService(workspaceManager, execution)
+    await recovery.recordHeartbeat(heartbeatAt)
+
+    await workspaceManager.close()
+    workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
+    expect((await workspaceManager.bootstrap()).status).toBe('ready')
+    const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
+    planning = new PlanningService(planningRepository)
+    execution = new ExecutionService(
+      new ExecutionRepository(() => workspaceManager.getDatabase()),
+      planningRepository,
+      planning
+    )
+    const restartedRecovery = new EffortRecoveryService(workspaceManager, execution)
+
+    expect(await restartedRecovery.recoverInterruptedEffort(detectedAt)).toMatchObject({
+      effortId: started.id,
+      entityTitle: '恢复未完成计时',
+      lastHeartbeatAt: heartbeatAt,
+      detectedAt
+    })
+    expect(execution.getActiveEffort()).toMatchObject({
+      id: started.id,
+      suspendedAt: heartbeatAt
+    })
+    expect(await restartedRecovery.getPendingRecovery()).toMatchObject({
+      effortId: started.id,
+      lastHeartbeatAt: heartbeatAt
+    })
+
+    const stopped = await restartedRecovery.resolvePendingRecovery({
+      action: 'stop',
+      endedAt: confirmedEndAt
+    })
+    expect(stopped).toMatchObject({
+      id: started.id,
+      endedAt: confirmedEndAt,
+      effectiveMinutes: 7,
+      suspendedAt: null
+    })
+    expect(await restartedRecovery.getPendingRecovery()).toBeNull()
   })
 })

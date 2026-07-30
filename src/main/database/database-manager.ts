@@ -11,32 +11,40 @@ export class DatabaseManager {
     this.close()
     mkdirSync(dirname(databasePath), { recursive: true })
 
-    const database = new Database(databasePath, {
-      readonly: readOnly,
-      fileMustExist: readOnly
-    })
-
-    database.pragma('foreign_keys = ON')
-    database.pragma('busy_timeout = 5000')
-
-    if (!readOnly) {
-      database.pragma('journal_mode = WAL')
-      database.pragma('synchronous = NORMAL')
-      this.migrate(database)
-    }
-
-    const integrity = database.pragma('quick_check', { simple: true })
-    if (integrity !== 'ok') {
-      database.close()
-      throw new YouTraceError({
-        code: 'DATABASE_INTEGRITY_FAILED',
-        message: '工作区数据库未通过完整性检查，已停止写入。',
-        recovery: '请以只读方式打开或从已验证备份恢复。'
+    let database: Database.Database | null = null
+    try {
+      database = new Database(databasePath, {
+        readonly: readOnly,
+        fileMustExist: readOnly
       })
-    }
 
-    this.connection = database
-    return database
+      database.pragma('foreign_keys = ON')
+      database.pragma('busy_timeout = 5000')
+      const integrity = database.pragma('quick_check', { simple: true })
+      if (integrity !== 'ok') throw databaseIntegrityError()
+
+      if (!readOnly) {
+        database.pragma('journal_mode = WAL')
+        database.pragma('synchronous = NORMAL')
+        this.migrate(database)
+      }
+
+      this.connection = database
+      return database
+    } catch (error) {
+      database?.close()
+      if (error instanceof YouTraceError) throw error
+      const code = (error as { code?: string } | null)?.code ?? ''
+      const message = error instanceof Error ? error.message : ''
+      if (
+        code === 'SQLITE_CORRUPT' ||
+        code === 'SQLITE_NOTADB' ||
+        /malformed|not a database|corrupt/i.test(message)
+      ) {
+        throw databaseIntegrityError()
+      }
+      throw error
+    }
   }
 
   get(): Database.Database {
@@ -74,4 +82,12 @@ export class DatabaseManager {
 
     transaction()
   }
+}
+
+function databaseIntegrityError(): YouTraceError {
+  return new YouTraceError({
+    code: 'DATABASE_INTEGRITY_FAILED',
+    message: '工作区数据库未通过完整性检查，已停止写入。',
+    recovery: '有迹会保留损坏副本，并尝试从最近的已验证备份创建独立恢复副本。'
+  })
 }

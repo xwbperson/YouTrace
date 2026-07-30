@@ -10,22 +10,22 @@
 - **真实努力账本：** 支持计时、补录、困难、实际结果、下一步和不可覆盖的更正历史。
 - **学习与实践：** 管理习惯、指标、课程、教材、知识点、错题、测试和复习队列。
 - **跨模块整理：** 通过备忘、标签、全文搜索、组合筛选和保存视图连接不同对象。
-- **数据安全：** 提供工作区锁、只读打开、备份验证、恢复、迁移、回收站和可读导出。
+- **数据安全：** 提供工作区锁、异常草稿与计时恢复、分层备份、数据库损坏恢复、迁移、回收站和可读导出。
 - **桌面体验：** 提供浅色/深色主题、可调字号、自绘窗口、托盘后台和本地提醒。
 
 ## 下载
 
 Windows 10/11 x64 用户可直接下载：
 
-- [有迹 v1.0.2 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.2/YouTrace-1.0.2-Setup.exe)
-- [有迹 v1.0.2 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.2/YouTrace-1.0.2-Portable.exe)
+- [有迹 v1.0.3 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.3/YouTrace-1.0.3-Setup.exe)
+- [有迹 v1.0.3 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.3/YouTrace-1.0.3-Portable.exe)
 
 安装包目前没有 Authenticode 数字签名，Windows SmartScreen 可能显示“未知发布者”。
 
 | 文件 | SHA-256 |
 |---|---|
-| `YouTrace-1.0.2-Setup.exe` | `D825B374617D671855C73D84063DDEB2D95760524491E6AC7D090720B11ACDCD` |
-| `YouTrace-1.0.2-Portable.exe` | `32032492AE43515DC49D40E0B02EB81CD335B1CDA5C1AA4C2341A1EE391E7ED4` |
+| `YouTrace-1.0.3-Setup.exe` | `A19476C04121D70E53A67D01BEF2A34B4CA348F1368DB787C04DCC55293CDC8B` |
+| `YouTrace-1.0.3-Portable.exe` | `13AADF2884C4C46D8F7EE5885961BD982D2076256ACFA2707290CBBD2B35C261` |
 
 ## 快速开始
 
@@ -81,7 +81,7 @@ npm run dist:win
 
 ## 当前状态
 
-代码、45 项单元/集成测试、21 项 Electron 流程和本机 Windows 发布包已经验证。整体版本仍保持
+代码、55 项单元/集成测试、25 项 Electron 流程和本机 Windows 发布包已经验证。整体版本仍保持
 `PREPARED`：干净 Windows、真实移动盘、混合 DPI 多显示器、Windows Narrator、系统通知和
 最终用户体验仍需按 [人工验收清单](docs/09-v1人工验收清单.md) 确认。
 

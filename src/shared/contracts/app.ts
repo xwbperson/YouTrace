@@ -47,6 +47,8 @@ import type {
   EffortSummary,
   EffortListInput,
   Evidence,
+  InterruptedEffortRecovery,
+  InterruptedEffortRecoveryAction,
   Memo,
   StartEffortInput,
   StopEffortInput,
@@ -99,17 +101,24 @@ import type {
 } from './reminders'
 import type {
   BackupInfo,
+  BackupStorageStatus,
   BackupVerification,
+  DatabaseRecoveryState,
   ImportedEvidence,
   ImportEvidenceFileInput,
+  MigrationRecoveryAction,
+  MigrationRecoveryState,
   MigrateWorkspaceInput,
   ReadableExport,
+  RecoveryDraft,
   RestoreBackupInput,
   RestoreResult,
+  SaveRecoveryDraftInput,
   TrashActionInput,
   TrashItem,
   WorkspaceCheck
 } from './data'
+import { databaseRecoveryStateSchema } from './data'
 import type { UserPreferences } from './preferences'
 
 export const workspaceSummarySchema = z.object({
@@ -136,7 +145,15 @@ export const appBootstrapStateSchema = z.discriminatedUnion('status', [
     status: z.literal('workspace-unavailable'),
     workspace: z.null(),
     lastPath: z.string(),
-    reason: z.string()
+    reason: z.string(),
+    code: z.string().nullable().optional()
+  }),
+  z.object({
+    status: z.literal('database-recovery'),
+    workspace: z.null(),
+    lastPath: z.string(),
+    reason: z.string(),
+    recovery: databaseRecoveryStateSchema
   })
 ])
 
@@ -197,6 +214,9 @@ export interface YouTraceApi {
     open(input: OpenWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     reconnect(input: ReconnectWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     reveal(): Promise<IpcResult<void>>
+    getDatabaseRecovery(): Promise<IpcResult<DatabaseRecoveryState | null>>
+    confirmDatabaseRecovery(id: string): Promise<IpcResult<WorkspaceSummary>>
+    revealDatabaseRecoveryReport(): Promise<IpcResult<void>>
   }
   planning: {
     listAreas(includeArchived?: boolean): Promise<IpcResult<Area[]>>
@@ -242,6 +262,10 @@ export interface YouTraceApi {
     suspendEffort(id: string): Promise<IpcResult<EffortEntry>>
     resumeEffort(id: string): Promise<IpcResult<EffortEntry>>
     stopEffort(input: StopEffortInput): Promise<IpcResult<EffortEntry>>
+    getPendingRecovery(): Promise<IpcResult<InterruptedEffortRecovery | null>>
+    resolvePendingRecovery(
+      input: InterruptedEffortRecoveryAction
+    ): Promise<IpcResult<EffortEntry>>
     createManualEffort(input: CreateManualEffortInput): Promise<IpcResult<EffortEntry>>
     listEfforts(input: EffortListInput): Promise<IpcResult<EffortEntry[]>>
     summarizeEfforts(from: string | null, to: string | null): Promise<IpcResult<EffortSummary>>
@@ -309,10 +333,19 @@ export interface YouTraceApi {
     rebuildSearchIndex(): Promise<IpcResult<{ indexedCount: number }>>
     openEvidence(id: string): Promise<IpcResult<void>>
     listBackups(): Promise<IpcResult<BackupInfo[]>>
+    getBackupStorageStatus(): Promise<IpcResult<BackupStorageStatus>>
     createBackup(label: string): Promise<IpcResult<BackupInfo>>
     verifyBackup(id: string): Promise<IpcResult<BackupVerification>>
     restoreBackup(input: RestoreBackupInput): Promise<IpcResult<RestoreResult>>
     migrateWorkspace(input: MigrateWorkspaceInput): Promise<IpcResult<RestoreResult>>
+    getPendingMigration(): Promise<IpcResult<MigrationRecoveryState | null>>
+    resolvePendingMigration(
+      action: MigrationRecoveryAction
+    ): Promise<IpcResult<RestoreResult | null>>
+    revealPendingMigrationReport(): Promise<IpcResult<void>>
+    saveRecoveryDraft(input: SaveRecoveryDraftInput): Promise<IpcResult<RecoveryDraft>>
+    listRecoveryDrafts(): Promise<IpcResult<RecoveryDraft[]>>
+    discardRecoveryDraft(key: string): Promise<IpcResult<void>>
     exportReadable(): Promise<IpcResult<ReadableExport>>
     exportPortable(): Promise<IpcResult<BackupInfo>>
     importPortable(targetRoot: string): Promise<IpcResult<RestoreResult | null>>

@@ -20,6 +20,7 @@ import { PlanningRepository } from './modules/planning/planning-repository'
 import { PlanningService } from './modules/planning/planning-service'
 import { ExecutionRepository } from './modules/execution/execution-repository'
 import { ExecutionService } from './modules/execution/execution-service'
+import { EffortRecoveryService } from './modules/execution/effort-recovery-service'
 import { PracticeRepository } from './modules/practice/practice-repository'
 import { PracticeService } from './modules/practice/practice-service'
 import { TemporalRepository } from './modules/temporal/temporal-repository'
@@ -30,6 +31,7 @@ import { ReminderRepository } from './modules/reminders/reminder-repository'
 import { ReminderService } from './modules/reminders/reminder-service'
 import { DataRepository } from './modules/data/data-repository'
 import { DataService } from './modules/data/data-service'
+import { DatabaseRecoveryService } from './modules/data/database-recovery-service'
 import { SettingsRepository } from './modules/settings/settings-repository'
 import { SettingsService } from './modules/settings/settings-service'
 
@@ -57,6 +59,10 @@ let workspaceHealthTimer: NodeJS.Timeout | null = null
 let dataService: DataService | null = null
 let settingsService: SettingsService | null = null
 let executionService: ExecutionService | null = null
+let effortRecoveryService: EffortRecoveryService | null = null
+let effortHeartbeatTimer: NodeJS.Timeout | null = null
+let lastBackupMaintenanceError = ''
+let databaseRecoveryService: DatabaseRecoveryService
 
 if (process.env['YOUTRACE_E2E'] === '1') {
   ;(
@@ -79,6 +85,24 @@ app.whenReady().then(async () => {
   app.setAppUserModelId('com.youtrace.desktop')
   workspaceManager = new WorkspaceManager(app.getPath('userData'))
   bootstrapState = await workspaceManager.bootstrap()
+  databaseRecoveryService = new DatabaseRecoveryService(workspaceManager)
+  if (
+    bootstrapState.status === 'workspace-unavailable' &&
+    bootstrapState.code === 'DATABASE_INTEGRITY_FAILED'
+  ) {
+    try {
+      const recovery = await databaseRecoveryService.prepare(bootstrapState.lastPath)
+      bootstrapState = {
+        status: 'database-recovery',
+        workspace: null,
+        lastPath: recovery.sourcePath,
+        reason: bootstrapState.reason,
+        recovery
+      }
+    } catch {
+      // 保持“工作区不可用”状态；源数据库和备份都不会因此被改写或删除。
+    }
+  }
   const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
   const planningService = new PlanningService(planningRepository)
   const practiceRepository = new PracticeRepository(() => workspaceManager.getDatabase())
@@ -92,6 +116,10 @@ app.whenReady().then(async () => {
     planningService,
     practiceService
   )
+  effortRecoveryService = new EffortRecoveryService(workspaceManager, executionService)
+  if (bootstrapState.status === 'ready') {
+    await effortRecoveryService.recoverInterruptedEffort()
+  }
   const temporalService = new TemporalService(
     new TemporalRepository(() => workspaceManager.getDatabase()),
     planningRepository
@@ -117,11 +145,13 @@ app.whenReady().then(async () => {
     workspaceManager,
     planningService,
     executionService,
+    effortRecoveryService,
     practiceService,
     temporalService,
     workflowService,
     reminderService,
     dataService,
+    databaseRecoveryService,
     settingsService,
     getBootstrapState: () => bootstrapState,
     setBootstrapState: (state) => {
@@ -138,6 +168,11 @@ app.whenReady().then(async () => {
   workspaceHealthTimer = setInterval(
     () => void monitorWorkspaceAvailability(),
     process.env['YOUTRACE_E2E'] === '1' ? 250 : 2_000
+  )
+  void recordEffortHeartbeat()
+  effortHeartbeatTimer = setInterval(
+    () => void recordEffortHeartbeat(),
+    process.env['YOUTRACE_E2E'] === '1' ? 250 : 15_000
   )
   powerMonitor.on('resume', dispatchReminders)
 
@@ -163,6 +198,10 @@ app.on('will-quit', (event) => {
   if (workspaceHealthTimer) {
     clearInterval(workspaceHealthTimer)
     workspaceHealthTimer = null
+  }
+  if (effortHeartbeatTimer) {
+    clearInterval(effortHeartbeatTimer)
+    effortHeartbeatTimer = null
   }
   if (!workspaceManager) return
   event.preventDefault()
@@ -309,6 +348,7 @@ async function requestApplicationQuit(): Promise<void> {
     } else {
       executionService?.suspendEffort(active.id)
     }
+    await effortRecoveryService?.recordHeartbeat()
   } else {
     const options: MessageBoxOptions = {
       type: 'question',
@@ -327,6 +367,15 @@ async function requestApplicationQuit(): Promise<void> {
   }
   isQuitting = true
   app.quit()
+}
+
+async function recordEffortHeartbeat(): Promise<void> {
+  if (!effortRecoveryService || bootstrapState.status !== 'ready') return
+  try {
+    await effortRecoveryService.recordHeartbeat()
+  } catch {
+    // 工作区健康检查负责展示介质失联；心跳失败不能让应用退出。
+  }
 }
 
 function showMainWindow(): void {
@@ -371,10 +420,23 @@ async function runWorkspaceMaintenance(): Promise<void> {
     if (!preferences.automaticBackupEnabled || bootstrapState.workspace.readOnly) return
     await dataService.maybeCreateAutomaticBackup(
       preferences.automaticBackupIntervalHours,
-      preferences.backupRetentionCount
+      {
+        daily: preferences.backupDailyRetention,
+        weekly: preferences.backupWeeklyRetention,
+        monthly: preferences.backupMonthlyRetention
+      },
+      preferences.timezone
     )
-  } catch {
-    // 自动维护失败会在下个周期重试，不影响工作区正常写入。
+    lastBackupMaintenanceError = ''
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '自动备份暂时无法创建。'
+    if (message !== lastBackupMaintenanceError && Notification.isSupported()) {
+      new Notification({
+        title: '自动备份已暂停',
+        body: message
+      }).show()
+    }
+    lastBackupMaintenanceError = message
   }
 }
 

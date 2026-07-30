@@ -1,10 +1,15 @@
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DataRepository } from '../../src/main/modules/data/data-repository'
-import { DataService } from '../../src/main/modules/data/data-service'
+import { DatabaseRecoveryService } from '../../src/main/modules/data/database-recovery-service'
+import {
+  DataService,
+  selectAutomaticBackupsToRetain
+} from '../../src/main/modules/data/data-service'
 import { PackageService } from '../../src/main/modules/data/package-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
@@ -290,4 +295,360 @@ describe('workspace backup, restore and portable files', () => {
       ).toEqual({ title: `迁移失败保护-${systemCode}` })
     }
   )
+
+  it('keeps the source active when extracted database record counts do not match the package', async () => {
+    createProjectAndTask('迁移记录数量校验')
+    const source = workspaceManager.getCurrentPath()
+    class RecordTamperingPackageService extends PackageService {
+      override async extractVerified(archivePath: string, targetRoot: string) {
+        const manifest = await super.extractVerified(archivePath, targetRoot)
+        const targetDatabase = new Database(join(targetRoot, 'database', 'youtrace.sqlite3'))
+        targetDatabase.prepare("DELETE FROM tasks WHERE title = '迁移记录数量校验'").run()
+        targetDatabase.close()
+        return manifest
+      }
+    }
+    const guardedData = new DataService(
+      workspaceManager,
+      new DataRepository(() => workspaceManager.getDatabase()),
+      new RecordTamperingPackageService()
+    )
+
+    await expect(
+      guardedData.migrateWorkspace(join(fixtureRoot, 'record-count-mismatch'))
+    ).rejects.toMatchObject({
+      code: 'RESTORE_RECORD_COUNT_MISMATCH'
+    })
+    expect(await guardedData.getPendingMigration()).toMatchObject({
+      sourcePath: source,
+      targetPath: join(fixtureRoot, 'record-count-mismatch'),
+      stage: 'failed',
+      failureCode: 'RESTORE_RECORD_COUNT_MISMATCH'
+    })
+    expect(workspaceManager.getCurrentPath()).toBe(source)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT title FROM tasks WHERE title = '迁移记录数量校验'")
+        .get()
+    ).toEqual({ title: '迁移记录数量校验' })
+  })
+
+  it('rejects migration before extraction when the target volume lacks estimated free space', async () => {
+    createProjectAndTask('迁移空间预检')
+    const source = workspaceManager.getCurrentPath()
+    class OversizedPackageService extends PackageService {
+      override async verify(archivePath: string) {
+        const verification = await super.verify(archivePath)
+        return {
+          ...verification,
+          totalBytes: Number.MAX_SAFE_INTEGER
+        }
+      }
+    }
+    const guardedData = new DataService(
+      workspaceManager,
+      new DataRepository(() => workspaceManager.getDatabase()),
+      new OversizedPackageService()
+    )
+
+    await expect(
+      guardedData.migrateWorkspace(join(fixtureRoot, 'insufficient-space-target'))
+    ).rejects.toMatchObject({
+      code: 'TARGET_SPACE_INSUFFICIENT'
+    })
+    expect(workspaceManager.getCurrentPath()).toBe(source)
+  })
+
+  it('persists a failed migration and deletes only its recorded incomplete target', async () => {
+    createProjectAndTask('失败迁移恢复')
+    const source = workspaceManager.getCurrentPath()
+    const target = join(fixtureRoot, 'pending-migration-target')
+    const unrelated = join(fixtureRoot, 'unrelated-directory')
+    await mkdir(unrelated, { recursive: true })
+    await writeFile(join(unrelated, 'keep.txt'), 'keep', 'utf8')
+    class PendingMigrationPackageService extends PackageService {
+      override async extractVerified(archivePath: string, targetRoot: string) {
+        const manifest = await super.extractVerified(archivePath, targetRoot)
+        const targetDatabase = new Database(join(targetRoot, 'database', 'youtrace.sqlite3'))
+        targetDatabase.prepare("DELETE FROM tasks WHERE title = '失败迁移恢复'").run()
+        targetDatabase.close()
+        return manifest
+      }
+    }
+    const guardedData = new DataService(
+      workspaceManager,
+      new DataRepository(() => workspaceManager.getDatabase()),
+      new PendingMigrationPackageService()
+    )
+
+    await expect(guardedData.migrateWorkspace(target)).rejects.toMatchObject({
+      code: 'RESTORE_RECORD_COUNT_MISMATCH'
+    })
+    await workspaceManager.close()
+    workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
+    const bootstrap = await workspaceManager.bootstrap()
+    expect(bootstrap).toMatchObject({
+      status: 'ready',
+      workspace: { path: source }
+    })
+    data = new DataService(
+      workspaceManager,
+      new DataRepository(() => workspaceManager.getDatabase())
+    )
+    expect(await data.getPendingMigration()).toMatchObject({
+      sourcePath: source,
+      targetPath: target,
+      stage: 'failed'
+    })
+
+    await data.resolvePendingMigration('discard')
+    expect(await data.getPendingMigration()).toBeNull()
+    await expect(stat(target)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await readFile(join(unrelated, 'keep.txt'), 'utf8')).toBe('keep')
+    expect(workspaceManager.getCurrentPath()).toBe(source)
+  })
+
+  it('retries a recorded failed migration from a clean target copy', async () => {
+    createProjectAndTask('失败迁移重试')
+    const target = join(fixtureRoot, 'retry-migration-target')
+    vi.spyOn(PackageService.prototype, 'extractVerified').mockRejectedValueOnce(
+      new Error('simulated copy interruption')
+    )
+
+    await expect(data.migrateWorkspace(target)).rejects.toThrow(/simulated copy interruption/)
+    expect(await data.getPendingMigration()).toMatchObject({
+      targetPath: target,
+      stage: 'failed'
+    })
+
+    const retried = await data.resolvePendingMigration('retry')
+    expect(retried?.workspace.path).toBe(target)
+    expect(workspaceManager.getCurrentPath()).toBe(target)
+    expect(await data.getPendingMigration()).toBeNull()
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT title FROM tasks WHERE title = '失败迁移重试'")
+        .get()
+    ).toEqual({ title: '失败迁移重试' })
+  })
+
+  it('persists an unsaved long-text draft inside the workspace recovery directory', async () => {
+    const workspaceId = workspaceManager.getCurrent()!.id
+    await data.saveRecoveryDraft({
+      key: 'memo:quick-capture',
+      label: '快速备忘',
+      content: '程序异常退出后仍需恢复的长文本',
+      context: {
+        kind: 'idea',
+        projectId: '',
+        sourceLink: 'https://example.com/source',
+        tagIds: ['tag-a', 'tag-b']
+      }
+    })
+    await workspaceManager.close()
+    workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
+    await workspaceManager.bootstrap()
+    data = new DataService(
+      workspaceManager,
+      new DataRepository(() => workspaceManager.getDatabase())
+    )
+
+    expect(await data.listRecoveryDrafts()).toEqual([
+      expect.objectContaining({
+        workspaceId,
+        key: 'memo:quick-capture',
+        label: '快速备忘',
+        content: '程序异常退出后仍需恢复的长文本',
+        context: {
+          kind: 'idea',
+          projectId: '',
+          sourceLink: 'https://example.com/source',
+          tagIds: ['tag-a', 'tag-b']
+        }
+      })
+    ])
+    await data.discardRecoveryDraft('memo:quick-capture')
+    expect(await data.listRecoveryDrafts()).toEqual([])
+  })
+})
+
+describe('automatic backup retention', () => {
+  it('keeps daily, weekly and monthly recovery points as a union', () => {
+    const dates = [
+      '2026-07-30',
+      '2026-07-29',
+      '2026-07-28',
+      '2026-07-27',
+      '2026-07-26',
+      '2026-07-25',
+      '2026-07-24',
+      '2026-07-23',
+      '2026-07-15',
+      '2026-07-08',
+      '2026-07-01',
+      '2026-06-24',
+      '2026-06-17',
+      '2026-05-31',
+      '2026-04-30',
+      '2026-03-31',
+      '2026-02-28',
+      '2026-01-31',
+      '2025-12-31'
+    ]
+    const backups = dates.map((date) => ({
+      id: date,
+      relativePath: `backups/${date}.ytrace`,
+      kind: 'automatic' as const,
+      label: '自动备份',
+      createdAt: `${date}T12:00:00.000Z`,
+      verifiedAt: `${date}T12:01:00.000Z`,
+      manifestHash: date,
+      sizeBytes: 1,
+      sourceSchemaVersion: 9
+    }))
+
+    const retained = selectAutomaticBackupsToRetain(
+      backups,
+      { daily: 7, weekly: 4, monthly: 6 },
+      'Asia/Shanghai'
+    )
+
+    expect(retained).toEqual(
+      expect.arrayContaining([
+        '2026-07-30',
+        '2026-07-24',
+        '2026-07-15',
+        '2026-07-08',
+        '2026-06-24',
+        '2026-05-31',
+        '2026-04-30',
+        '2026-03-31',
+        '2026-02-28'
+      ])
+    )
+    expect(retained).not.toContain('2026-07-23')
+    expect(retained).not.toContain('2026-06-17')
+    expect(retained).not.toContain('2026-01-31')
+    expect(retained).not.toContain('2025-12-31')
+  })
+})
+
+describe('database corruption recovery', () => {
+  it('preserves the damaged database and switches only after confirming a verified backup copy', async () => {
+    createProjectAndTask('损坏前已备份任务')
+    await data.createBackup('损坏恢复点')
+    const databasePath = join(sourceRoot, 'database', 'youtrace.sqlite3')
+    await workspaceManager.close()
+    await writeFile(databasePath, 'not a sqlite database', 'utf8')
+
+    workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
+    const bootstrap = await workspaceManager.bootstrap()
+    expect(bootstrap).toMatchObject({
+      status: 'workspace-unavailable',
+      code: 'DATABASE_INTEGRITY_FAILED',
+      lastPath: sourceRoot
+    })
+    const recoveryService = new DatabaseRecoveryService(workspaceManager)
+    const recovery = await recoveryService.prepare(sourceRoot)
+
+    expect(recovery.candidateWorkspacePath).not.toBeNull()
+    expect(await readFile(recovery.preservedDatabasePath!, 'utf8')).toBe(
+      'not a sqlite database'
+    )
+    expect(await readFile(databasePath, 'utf8')).toBe('not a sqlite database')
+    expect(await stat(recovery.reportPath)).toMatchObject({ size: expect.any(Number) })
+
+    const restored = await recoveryService.confirm(recovery.id)
+    expect(restored.path).toBe(recovery.candidateWorkspacePath)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare("SELECT title FROM tasks WHERE title = '损坏前已备份任务'")
+        .get()
+    ).toEqual({ title: '损坏前已备份任务' })
+    expect(await readFile(databasePath, 'utf8')).toBe('not a sqlite database')
+    expect(await stat(join(sourceRoot, 'backups'))).toMatchObject({
+      isDirectory: expect.any(Function)
+    })
+  })
+})
+
+describe('trash relationship and file safety', () => {
+  it('keeps a shared attachment file when permanently deleting only one task reference', async () => {
+    const first = createProjectAndTask('共享附件任务一')
+    const second = planning.createTask({
+      parentTaskId: null,
+      projectId: first.projectId,
+      goalId: null,
+      milestoneId: null,
+      title: '共享附件任务二',
+      description: '',
+      status: 'ready',
+      difficulty: null,
+      priority: 'medium',
+      estimatedMinutes: 20,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    const attachmentId = randomUUID()
+    const relativePath = 'attachments/shared-proof.bin'
+    const attachmentPath = join(sourceRoot, relativePath)
+    await writeFile(attachmentPath, 'shared attachment bytes', 'utf8')
+    const now = new Date().toISOString()
+    const database = workspaceManager.getDatabase()
+    database
+      .prepare(
+        `INSERT INTO attachments(
+           id, relative_path, original_name, content_hash, size_bytes, mime_type, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(attachmentId, relativePath, 'shared-proof.bin', 'shared-hash', 23, null, now)
+    const link = database.prepare(
+      `INSERT INTO entity_attachments(attachment_id, entity_type, entity_id, created_at)
+       VALUES (?, 'task', ?, ?)`
+    )
+    link.run(attachmentId, first.taskId, now)
+    link.run(attachmentId, second.id, now)
+
+    planning.trashTask(first.taskId)
+    const trash = data.listTrash().find((item) => item.entityId === first.taskId)!
+    expect(trash).toMatchObject({ attachmentCount: 1, sharedAttachmentCount: 1 })
+    await data.createBackup('共享附件永久删除保护点')
+    await data.purgeTrash(trash.id, '永久删除')
+
+    expect(await readFile(attachmentPath, 'utf8')).toBe('shared attachment bytes')
+    expect(
+      database
+        .prepare(
+          `SELECT COUNT(*) AS count FROM entity_attachments
+            WHERE attachment_id = ? AND entity_type = 'task' AND entity_id = ?`
+        )
+        .get(attachmentId, second.id)
+    ).toEqual({ count: 1 })
+  })
+
+  it('restores a trashed task into recovered content after its project is purged', async () => {
+    const created = createProjectAndTask('父项目消失后恢复')
+    planning.trashTask(created.taskId)
+    planning.trashProject(created.projectId)
+    await data.createBackup('父对象永久删除保护点')
+    const projectTrash = data.listTrash().find((item) => item.entityId === created.projectId)!
+    await data.purgeTrash(projectTrash.id, '永久删除')
+
+    const taskTrash = data.listTrash().find((item) => item.entityId === created.taskId)!
+    expect(taskTrash.parentAvailable).toBe(false)
+    data.restoreTrash(taskTrash.id)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare('SELECT project_id, deleted_at FROM tasks WHERE id = ?')
+        .get(created.taskId)
+    ).toEqual({ project_id: null, deleted_at: null })
+  })
 })

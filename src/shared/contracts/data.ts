@@ -26,6 +26,59 @@ export const trashActionInputSchema = z.object({
   confirmation: z.string().max(200).default('')
 })
 
+export const migrationRecoveryStateSchema = z.object({
+  operationId: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  sourcePath: z.string().min(1),
+  targetPath: z.string().min(1),
+  stage: z.enum(['preflight', 'copying', 'verifying', 'opening', 'failed']),
+  startedAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  reportPath: z.string().min(1).nullable(),
+  failureCode: z.string().min(1).nullable(),
+  failureReason: z.string().min(1).nullable()
+})
+
+export type MigrationRecoveryState = z.infer<typeof migrationRecoveryStateSchema>
+
+export const migrationRecoveryActionSchema = z.enum(['return', 'retry', 'discard'])
+export type MigrationRecoveryAction = z.infer<typeof migrationRecoveryActionSchema>
+
+const recoveryDraftContextValueSchema = z.union([
+  z.string().max(20_000),
+  z.array(z.string().max(200)).max(100)
+])
+
+export const saveRecoveryDraftInputSchema = z.object({
+  key: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(120),
+  content: z.string().max(50_000),
+  context: z.record(z.string().max(80), recoveryDraftContextValueSchema).default({})
+})
+
+export const recoveryDraftSchema = saveRecoveryDraftInputSchema.extend({
+  workspaceId: z.string().uuid(),
+  updatedAt: z.string().datetime()
+})
+
+export type SaveRecoveryDraftInput = z.infer<typeof saveRecoveryDraftInputSchema>
+export type RecoveryDraft = z.infer<typeof recoveryDraftSchema>
+
+export const databaseRecoveryStateSchema = z.object({
+  id: z.string().uuid(),
+  workspaceId: z.string().uuid(),
+  sourcePath: z.string().min(1),
+  preservedDatabasePath: z.string().min(1).nullable(),
+  candidateBackupPath: z.string().min(1).nullable(),
+  candidateWorkspacePath: z.string().min(1).nullable(),
+  reportPath: z.string().min(1),
+  preparedAt: z.string().datetime(),
+  affectedScope: z.array(z.string()).min(1),
+  failures: z.array(z.string())
+})
+
+export type DatabaseRecoveryState = z.infer<typeof databaseRecoveryStateSchema>
+
 export interface BackupInfo {
   id: string
   relativePath: string
@@ -45,6 +98,15 @@ export interface BackupVerification {
   totalBytes: number
   workspaceId: string
   schemaVersion: number
+}
+
+export interface BackupStorageStatus {
+  backupCount: number
+  totalBytes: number
+  nextEstimatedBytes: number
+  freeBytes: number
+  requiredFreeBytes: number
+  canCreate: boolean
 }
 
 export interface WorkspaceCheck {

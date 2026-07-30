@@ -32,6 +32,9 @@ export function defaultPreferences(): UserPreferences {
     closeBehavior: 'tray',
     automaticBackupEnabled: true,
     automaticBackupIntervalHours: 24,
-    backupRetentionCount: 7
+    backupRetentionCount: 7,
+    backupDailyRetention: 7,
+    backupWeeklyRetention: 4,
+    backupMonthlyRetention: 6
   }
 }

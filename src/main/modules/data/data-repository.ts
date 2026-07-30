@@ -183,6 +183,13 @@ export class DataRepository {
                 END AS title,
                 CASE
                   WHEN tr.entity_type = 'project' THEN 1
+                  WHEN t.id IS NULL THEN 0
+                  WHEN EXISTS(
+                    SELECT 1 FROM audit_events ae
+                     WHERE ae.entity_type = 'task'
+                       AND ae.entity_id = tr.entity_id
+                       AND ae.action = 'parent_purged'
+                  ) THEN 0
                   WHEN t.project_id IS NULL THEN 1
                   WHEN EXISTS(SELECT 1 FROM projects parent WHERE parent.id = t.project_id AND parent.deleted_at IS NULL) THEN 1
                   ELSE 0
@@ -287,7 +294,7 @@ export class DataRepository {
         this.deleteRelations(database, 'task', [item.entityId])
         database.prepare('DELETE FROM tasks WHERE id = ?').run(item.entityId)
       } else {
-        this.purgeProject(database, item.entityId)
+        orphanPaths.push(...this.purgeProject(database, item.entityId, now))
       }
       database.prepare('UPDATE trash_entries SET purged_at = ? WHERE id = ?').run(now, id)
       this.insertAudit(database, item.entityType, item.entityId, 'purged', { trashId: id }, now)
@@ -413,15 +420,46 @@ export class DataRepository {
     }
   }
 
-  private purgeProject(database: Database.Database, projectId: string): void {
+  private purgeProject(
+    database: Database.Database,
+    projectId: string,
+    now: string
+  ): string[] {
     const taskIds = (
       database.prepare('SELECT id FROM tasks WHERE project_id = ?').all(projectId) as Array<{ id: string }>
     ).map((row) => row.id)
-    for (const taskId of taskIds) {
+    const protectedTaskIds = new Set(
+      (
+        database
+          .prepare(
+            `SELECT entity_id AS id
+               FROM trash_entries
+              WHERE entity_type = 'task'
+                AND purged_at IS NULL
+                AND entity_id IN (SELECT id FROM tasks WHERE project_id = ?)`
+          )
+          .all(projectId) as Array<{ id: string }>
+      ).map((row) => row.id)
+    )
+    const purgedTaskIds = taskIds.filter((taskId) => !protectedTaskIds.has(taskId))
+    for (const taskId of purgedTaskIds) {
       database.prepare('UPDATE time_blocks SET task_id = NULL WHERE task_id = ?').run(taskId)
       database.prepare('DELETE FROM task_dependencies WHERE task_id = ? OR prerequisite_task_id = ?').run(taskId, taskId)
+      database.prepare('UPDATE tasks SET parent_task_id = NULL WHERE parent_task_id = ?').run(taskId)
     }
-    this.deleteRelations(database, 'task', taskIds)
+    for (const taskId of protectedTaskIds) {
+      database
+        .prepare(
+          `UPDATE tasks
+              SET project_id = NULL, goal_id = NULL, milestone_id = NULL,
+                  parent_task_id = NULL, updated_at = ?
+            WHERE id = ?`
+        )
+        .run(now, taskId)
+      this.insertAudit(database, 'task', taskId, 'parent_purged', { projectId }, now)
+    }
+    const orphanPaths = this.detachAttachments(database, 'task', purgedTaskIds)
+    this.deleteRelations(database, 'task', purgedTaskIds)
     database.prepare('DELETE FROM tasks WHERE project_id = ?').run(projectId)
     database.prepare("DELETE FROM searchable_content WHERE entity_type IN ('milestone', 'goal') AND entity_id IN (SELECT id FROM milestones WHERE project_id = ? UNION SELECT id FROM goals WHERE project_id = ?)").run(projectId, projectId)
     database.prepare('DELETE FROM milestones WHERE project_id = ?').run(projectId)
@@ -439,9 +477,45 @@ export class DataRepository {
     database.prepare('DELETE FROM habit_rules WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM metric_entries WHERE metric_id IN (SELECT id FROM metrics WHERE project_id = ?)').run(projectId)
     database.prepare('DELETE FROM metrics WHERE project_id = ?').run(projectId)
+    orphanPaths.push(...this.detachAttachments(database, 'project', [projectId]))
     this.deleteRelations(database, 'project', [projectId])
     database.prepare("DELETE FROM searchable_content WHERE entity_type = 'project' AND entity_id = ?").run(projectId)
     database.prepare('DELETE FROM projects WHERE id = ?').run(projectId)
+    return orphanPaths
+  }
+
+  private detachAttachments(
+    database: Database.Database,
+    entityType: string,
+    entityIds: string[]
+  ): string[] {
+    const orphanPaths: string[] = []
+    for (const entityId of entityIds) {
+      const attachments = database
+        .prepare(
+          `SELECT a.id, a.relative_path,
+                  (SELECT COUNT(*) FROM entity_attachments shared
+                    WHERE shared.attachment_id = a.id) AS reference_count
+             FROM attachments a
+             JOIN entity_attachments ea ON ea.attachment_id = a.id
+            WHERE ea.entity_type = ? AND ea.entity_id = ?`
+        )
+        .all(entityType, entityId) as Array<{
+        id: string
+        relative_path: string
+        reference_count: number
+      }>
+      database
+        .prepare('DELETE FROM entity_attachments WHERE entity_type = ? AND entity_id = ?')
+        .run(entityType, entityId)
+      for (const attachment of attachments) {
+        if (attachment.reference_count === 1) {
+          orphanPaths.push(attachment.relative_path)
+          database.prepare('DELETE FROM attachments WHERE id = ?').run(attachment.id)
+        }
+      }
+    }
+    return orphanPaths
   }
 
   private deleteRelations(database: Database.Database, entityType: string, entityIds: string[]): void {

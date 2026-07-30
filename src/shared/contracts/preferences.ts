@@ -21,8 +21,10 @@ export const userPreferencesSchema = z.object({
   closeBehavior: z.enum(['tray', 'quit']),
   automaticBackupEnabled: z.boolean(),
   automaticBackupIntervalHours: z.number().int().min(1).max(168),
-  backupRetentionCount: z.number().int().min(1).max(50)
+  backupRetentionCount: z.number().int().min(1).max(50).default(7),
+  backupDailyRetention: z.number().int().min(1).max(50).default(7),
+  backupWeeklyRetention: z.number().int().min(1).max(52).default(4),
+  backupMonthlyRetention: z.number().int().min(1).max(24).default(6)
 })
 
 export type UserPreferences = z.infer<typeof userPreferencesSchema>
-

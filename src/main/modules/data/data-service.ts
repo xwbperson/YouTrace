@@ -6,30 +6,44 @@ import {
   readFile,
   readdir,
   rename,
+  rm,
   stat,
+  statfs,
   unlink,
   writeFile
 } from 'node:fs/promises'
 import { basename, dirname, extname, join, parse, relative, resolve, sep } from 'node:path'
 import Database from 'better-sqlite3'
 import packageMetadata from '../../../../package.json'
-import type {
-  BackupInfo,
-  BackupVerification,
-  ImportedEvidence,
-  ImportEvidenceFileInput,
-  ReadableExport,
-  RestoreResult,
-  TrashItem,
-  WorkspaceCheck
+import {
+  recoveryDraftSchema,
+  saveRecoveryDraftInputSchema,
+  type BackupInfo,
+  type BackupStorageStatus,
+  type BackupVerification,
+  type ImportedEvidence,
+  type ImportEvidenceFileInput,
+  type MigrationRecoveryAction,
+  type MigrationRecoveryState,
+  type ReadableExport,
+  type RecoveryDraft,
+  type RestoreResult,
+  type SaveRecoveryDraftInput,
+  type TrashItem,
+  type WorkspaceCheck
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
 import { CURRENT_SCHEMA_VERSION } from '../../database/schema'
 import type { WorkspaceManager } from '../../workspace/workspace-manager'
 import { DataRepository } from './data-repository'
-import { PackageService, type PackageManifest } from './package-service'
+import {
+  collectRecordCounts,
+  PackageService,
+  type PackageManifest
+} from './package-service'
 
 const APPLICATION_VERSION = packageMetadata.version
+const INCOMPLETE_MIGRATION_FILE = '.youtrace-incomplete-migration.json'
 const REQUIRED_DIRECTORIES = [
   'database',
   'attachments',
@@ -54,6 +68,119 @@ export class DataService {
 
   listBackups(): BackupInfo[] {
     return this.repository.listBackups()
+  }
+
+  async getPendingMigration(): Promise<MigrationRecoveryState | null> {
+    return this.workspaceManager.getPendingMigration()
+  }
+
+  async saveRecoveryDraft(input: SaveRecoveryDraftInput): Promise<RecoveryDraft> {
+    const value = saveRecoveryDraftInputSchema.parse(input)
+    const workspace = this.workspaceManager.getCurrent()
+    if (!workspace) {
+      throw new YouTraceError({
+        code: 'WORKSPACE_NOT_OPEN',
+        message: '当前没有打开的工作区。'
+      })
+    }
+    if (workspace.readOnly) {
+      throw new YouTraceError({
+        code: 'WORKSPACE_READ_ONLY',
+        message: '只读工作区不会保存草稿。'
+      })
+    }
+    this.workspaceManager.getDatabase()
+    const draft: RecoveryDraft = {
+      ...value,
+      workspaceId: workspace.id,
+      updatedAt: new Date().toISOString()
+    }
+    const path = recoveryDraftPath(workspace.path, value.key)
+    await mkdir(dirname(path), { recursive: true })
+    const temporaryPath = `${path}.tmp-${randomUUID()}`
+    await writeFile(temporaryPath, JSON.stringify(draft, null, 2), 'utf8')
+    await rename(temporaryPath, path)
+    return draft
+  }
+
+  async listRecoveryDrafts(): Promise<RecoveryDraft[]> {
+    const workspace = this.workspaceManager.getCurrent()
+    if (!workspace) return []
+    const directory = join(workspace.path, 'recovery', 'drafts')
+    let entries: string[]
+    try {
+      entries = await readdir(directory)
+    } catch {
+      return []
+    }
+    const drafts: RecoveryDraft[] = []
+    for (const entry of entries.filter((name) => name.endsWith('.json'))) {
+      try {
+        const draft = recoveryDraftSchema.parse(
+          JSON.parse(await readFile(join(directory, entry), 'utf8'))
+        )
+        if (draft.workspaceId === workspace.id) drafts.push(draft)
+      } catch {
+        // 损坏的单个草稿不会阻止其他可恢复草稿显示。
+      }
+    }
+    return drafts.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+  }
+
+  async discardRecoveryDraft(key: string): Promise<void> {
+    const value = saveRecoveryDraftInputSchema.shape.key.parse(key)
+    const root = this.workspaceManager.getCurrentPath()
+    await unlink(recoveryDraftPath(root, value)).catch((error) => {
+      if ((error as NodeJS.ErrnoException | null)?.code !== 'ENOENT') throw error
+    })
+  }
+
+  async getPendingMigrationReportDirectory(): Promise<string> {
+    const pending = await this.workspaceManager.getPendingMigration()
+    if (!pending) {
+      throw new YouTraceError({
+        code: 'MIGRATION_RECOVERY_NOT_FOUND',
+        message: '当前没有待处理的迁移恢复状态。'
+      })
+    }
+    return pending.reportPath
+      ? dirname(pending.reportPath)
+      : join(pending.sourcePath, 'migration-reports')
+  }
+
+  async resolvePendingMigration(
+    action: MigrationRecoveryAction
+  ): Promise<RestoreResult | null> {
+    const pending = await this.workspaceManager.getPendingMigration()
+    if (!pending) {
+      throw new YouTraceError({
+        code: 'MIGRATION_RECOVERY_NOT_FOUND',
+        message: '当前没有待处理的迁移恢复状态。'
+      })
+    }
+    const current = this.workspaceManager.getCurrent()
+    if (
+      !current ||
+      current.id !== pending.workspaceId ||
+      resolve(current.path) !== resolve(pending.sourcePath)
+    ) {
+      throw new YouTraceError({
+        code: 'MIGRATION_RECOVERY_SOURCE_MISMATCH',
+        message: '当前工作区不是失败迁移记录中的源工作区。',
+        recovery: '请先打开迁移记录中的源工作区。'
+      })
+    }
+    if (action === 'return') {
+      await this.workspaceManager.setPendingMigration(null)
+      return null
+    }
+
+    await removeIncompleteMigrationTarget(pending)
+    if (action === 'discard') {
+      await this.workspaceManager.setPendingMigration(null)
+      return null
+    }
+    return this.migrateWorkspace(pending.targetPath)
   }
 
   rebuildSearchIndex(): { indexedCount: number } {
@@ -95,7 +222,8 @@ export class DataService {
 
   async maybeCreateAutomaticBackup(
     intervalHours: number,
-    retentionCount: number
+    retention: BackupRetentionPolicy,
+    timezone: string
   ): Promise<BackupInfo | null> {
     const automatic = this.repository
       .listBackups()
@@ -110,16 +238,48 @@ export class DataService {
     }
     const created = await this.createBackup('自动备份', 'automatic')
     const root = this.workspaceManager.getCurrentPath()
-    const retained = this.repository
-      .listBackups()
+    const allBackups = this.repository.listBackups()
+    const automaticBackups = allBackups
       .filter((backup) => backup.kind === 'automatic')
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    for (const expired of retained.slice(retentionCount)) {
+    const retainedIds = new Set(
+      selectAutomaticBackupsToRetain(automaticBackups, retention, timezone)
+    )
+    const newestVerified = allBackups.find((backup) => backup.verifiedAt !== null)
+    if (newestVerified) retainedIds.add(newestVerified.id)
+    for (const expired of automaticBackups.filter((backup) => !retainedIds.has(backup.id))) {
       const path = resolveWithin(root, expired.relativePath)
-      await unlink(path).catch(() => undefined)
-      this.repository.deleteBackupRecord(expired.id)
+      try {
+        await unlink(path)
+        this.repository.deleteBackupRecord(expired.id)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') {
+          this.repository.deleteBackupRecord(expired.id)
+        }
+      }
     }
     return created
+  }
+
+  async getBackupStorageStatus(): Promise<BackupStorageStatus> {
+    const root = this.workspaceManager.getCurrentPath()
+    const backups = this.repository.listBackups()
+    const nextEstimatedBytes = Math.max(1, await this.packages.estimateSourceBytes(root))
+    const filesystem = await statfs(root, { bigint: true })
+    const freeBytes = bigintToSafeNumber(filesystem.bavail * filesystem.bsize)
+    const reserveBytes = Math.max(16 * 1024 * 1024, Math.ceil(nextEstimatedBytes * 0.1))
+    const requiredFreeBytes = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      nextEstimatedBytes * 2 + reserveBytes
+    )
+    return {
+      backupCount: backups.length,
+      totalBytes: backups.reduce((total, backup) => total + backup.sizeBytes, 0),
+      nextEstimatedBytes,
+      freeBytes,
+      requiredFreeBytes,
+      canCreate: freeBytes >= requiredFreeBytes
+    }
   }
 
   async createBackup(
@@ -128,6 +288,15 @@ export class DataService {
     directory = 'backups'
   ): Promise<BackupInfo> {
     const root = this.workspaceManager.getCurrentPath()
+    const storage = await this.getBackupStorageStatus()
+    if (!storage.canCreate) {
+      throw new YouTraceError({
+        code: 'BACKUP_SPACE_INSUFFICIENT',
+        message: '可用空间不足，未创建新备份。',
+        details: { ...storage },
+        recovery: '请释放工作区所在磁盘空间或迁移工作区；现有已验证备份没有被删除。'
+      })
+    }
     const id = randomUUID()
     const timestamp = fileTimestamp(new Date())
     const relativePath = `${directory}/${timestamp}-${id}.ytrace`
@@ -216,9 +385,46 @@ export class DataService {
 
   async migrateWorkspace(targetRoot: string): Promise<RestoreResult> {
     const sourceRoot = this.workspaceManager.getCurrentPath()
-    const backup = await this.createBackup('根目录迁移前恢复点', 'pre_migration')
-    const archivePath = resolveWithin(sourceRoot, backup.relativePath)
-    const result = await this.restoreArchive(archivePath, targetRoot, sourceRoot, 'migration')
+    const normalizedTarget = validateDestination(targetRoot, sourceRoot)
+    const startedAt = new Date().toISOString()
+    await this.workspaceManager.setPendingMigration({
+      operationId: randomUUID(),
+      workspaceId: this.workspaceManager.getCurrent()!.id,
+      sourcePath: sourceRoot,
+      targetPath: normalizedTarget,
+      stage: 'preflight',
+      startedAt,
+      updatedAt: startedAt,
+      reportPath: null,
+      failureCode: null,
+      failureReason: null
+    })
+    let result: RestoreResult
+    try {
+      const backup = await this.createBackup('根目录迁移前恢复点', 'pre_migration')
+      const archivePath = resolveWithin(sourceRoot, backup.relativePath)
+      result = await this.restoreArchive(
+        archivePath,
+        normalizedTarget,
+        sourceRoot,
+        'migration'
+      )
+    } catch (error) {
+      const pending = await this.workspaceManager.getPendingMigration()
+      if (pending && pending.stage !== 'failed') {
+        await this.workspaceManager
+          .setPendingMigration({
+            ...pending,
+            stage: 'failed',
+            updatedAt: new Date().toISOString(),
+            failureCode: storageErrorCode(error),
+            failureReason: error instanceof Error ? error.message : String(error)
+          })
+          .catch(() => undefined)
+      }
+      throw error
+    }
+    await this.workspaceManager.setPendingMigration(null).catch(() => undefined)
     await writeFile(
       join(sourceRoot, '.youtrace-migrated.json'),
       JSON.stringify(
@@ -233,7 +439,7 @@ export class DataService {
         2
       ),
       'utf8'
-    )
+    ).catch(() => undefined)
     return result
   }
 
@@ -403,13 +609,43 @@ export class DataService {
     await assertEmptyOrMissing(targetRoot)
     const reportName = `${operation}-${fileTimestamp(new Date())}-${randomUUID()}.json`
     try {
+      await preflightDestination(targetRoot, verification.totalBytes)
+      if (operation === 'migration') {
+        await this.writeIncompleteMigrationMarker(targetRoot)
+        await this.updateMigrationStage('copying')
+      }
       await this.packages.extractVerified(archivePath, targetRoot)
       for (const directory of REQUIRED_DIRECTORIES) {
         await mkdir(join(targetRoot, directory), { recursive: true })
       }
+      if (operation === 'migration') await this.updateMigrationStage('verifying')
       await validateExtractedWorkspace(targetRoot, verification.manifest)
-      const workspace = await this.workspaceManager.open(targetRoot, false)
       const reportPath = join(targetRoot, 'migration-reports', reportName)
+      await writeFile(
+        reportPath,
+        JSON.stringify(
+          {
+            operation,
+            status: 'validated',
+            validatedAt: new Date().toISOString(),
+            sourcePath: sourceRoot,
+            targetPath: targetRoot,
+            sourcePreserved: true,
+            packageManifestHash: verification.manifestHash,
+            filesVerified: verification.manifest.files.length
+          },
+          null,
+          2
+        ),
+        'utf8'
+      )
+      if (operation === 'migration') {
+        await this.updateMigrationStage('opening', reportPath)
+      }
+      const workspace = await this.workspaceManager.open(targetRoot, false)
+      if (operation === 'migration') {
+        await unlink(join(targetRoot, INCOMPLETE_MIGRATION_FILE)).catch(() => undefined)
+      }
       await writeFile(
         reportPath,
         JSON.stringify(
@@ -427,7 +663,7 @@ export class DataService {
           2
         ),
         'utf8'
-      )
+      ).catch(() => undefined)
       return { workspace, sourcePreservedAt: sourceRoot, reportPath }
     } catch (error) {
       const recoverableError = toRecoverableStorageError(error)
@@ -452,8 +688,63 @@ export class DataService {
         ),
         'utf8'
       ).catch(() => undefined)
+      if (operation === 'migration') {
+        const pending = await this.workspaceManager.getPendingMigration()
+        if (pending) {
+          await this.workspaceManager
+            .setPendingMigration({
+              ...pending,
+              stage: 'failed',
+              updatedAt: new Date().toISOString(),
+              reportPath: sourceReport,
+              failureCode: storageErrorCode(recoverableError),
+              failureReason:
+                recoverableError instanceof Error
+                  ? recoverableError.message
+                  : String(recoverableError)
+            })
+            .catch(() => undefined)
+        }
+      }
       throw recoverableError
     }
+  }
+
+  private async updateMigrationStage(
+    stage: MigrationRecoveryState['stage'],
+    reportPath: string | null = null
+  ): Promise<void> {
+    const pending = await this.workspaceManager.getPendingMigration()
+    if (!pending) return
+    await this.workspaceManager.setPendingMigration({
+      ...pending,
+      stage,
+      updatedAt: new Date().toISOString(),
+      reportPath: reportPath ?? pending.reportPath,
+      failureCode: null,
+      failureReason: null
+    })
+  }
+
+  private async writeIncompleteMigrationMarker(targetRoot: string): Promise<void> {
+    const pending = await this.workspaceManager.getPendingMigration()
+    if (!pending) return
+    await writeFile(
+      join(targetRoot, INCOMPLETE_MIGRATION_FILE),
+      JSON.stringify(
+        {
+          product: 'YouTrace',
+          operationId: pending.operationId,
+          workspaceId: pending.workspaceId,
+          sourcePath: pending.sourcePath,
+          targetPath: pending.targetPath,
+          startedAt: pending.startedAt
+        },
+        null,
+        2
+      ),
+      { encoding: 'utf8', flag: 'wx' }
+    )
   }
 
   private requireBackup(id: string): BackupInfo {
@@ -461,6 +752,85 @@ export class DataService {
     if (!backup) throw notFound('备份')
     return backup
   }
+}
+
+export interface BackupRetentionPolicy {
+  daily: number
+  weekly: number
+  monthly: number
+}
+
+export function selectAutomaticBackupsToRetain(
+  backups: BackupInfo[],
+  policy: BackupRetentionPolicy,
+  timezone: string
+): string[] {
+  const sorted = [...backups]
+    .filter((backup) => backup.kind === 'automatic' && backup.verifiedAt !== null)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+  const retained = new Set<string>()
+  retainNewestBuckets(sorted, policy.daily, (value) => calendarParts(value, timezone).day, retained)
+  retainNewestBuckets(sorted, policy.weekly, (value) => weekKey(value, timezone), retained)
+  retainNewestBuckets(
+    sorted,
+    policy.monthly,
+    (value) => calendarParts(value, timezone).month,
+    retained
+  )
+  if (sorted[0]) retained.add(sorted[0].id)
+  return [...retained]
+}
+
+function retainNewestBuckets(
+  backups: BackupInfo[],
+  limit: number,
+  keyFor: (createdAt: string) => string,
+  retained: Set<string>
+): void {
+  const buckets = new Set<string>()
+  for (const backup of backups) {
+    const key = keyFor(backup.createdAt)
+    if (buckets.has(key)) continue
+    if (buckets.size >= limit) break
+    buckets.add(key)
+    retained.add(backup.id)
+  }
+}
+
+function calendarParts(
+  value: string,
+  timezone: string
+): { year: number; monthNumber: number; dayNumber: number; day: string; month: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(new Date(value))
+  const get = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((part) => part.type === type)?.value ?? ''
+  const year = Number(get('year'))
+  const month = get('month')
+  const day = get('day')
+  return {
+    year,
+    monthNumber: Number(month),
+    dayNumber: Number(day),
+    day: `${year}-${month}-${day}`,
+    month: `${year}-${month}`
+  }
+}
+
+function weekKey(value: string, timezone: string): string {
+  const parts = calendarParts(value, timezone)
+  const date = new Date(Date.UTC(parts.year, parts.monthNumber - 1, parts.dayNumber))
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday)
+  return date.toISOString().slice(0, 10)
+}
+
+function bigintToSafeNumber(value: bigint): number {
+  return value > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(value)
 }
 
 async function validateExtractedWorkspace(root: string, manifest: PackageManifest): Promise<void> {
@@ -487,6 +857,49 @@ async function validateExtractedWorkspace(root: string, manifest: PackageManifes
         message: '恢复出的数据库未通过完整性检查。'
       })
     }
+    if (manifest.recordCounts) {
+      const actualCounts = collectRecordCounts(database)
+      const mismatches = Object.keys({ ...manifest.recordCounts, ...actualCounts })
+        .sort()
+        .filter((table) => manifest.recordCounts?.[table] !== actualCounts[table])
+        .map((table) => ({
+          table,
+          expected: manifest.recordCounts?.[table] ?? null,
+          actual: actualCounts[table] ?? null
+        }))
+      if (mismatches.length > 0) {
+        throw new YouTraceError({
+          code: 'RESTORE_RECORD_COUNT_MISMATCH',
+          message: '恢复出的数据库记录数量与备份清单不一致。',
+          details: { mismatches },
+          recovery: '请继续使用源工作区，并重新创建备份后重试。'
+        })
+      }
+    }
+    const references = database
+      .prepare(
+        `SELECT DISTINCT relative_path
+           FROM attachments
+          WHERE pending_cleanup_at IS NULL`
+      )
+      .all() as Array<{ relative_path: string }>
+    const missingReferences: string[] = []
+    for (const reference of references) {
+      try {
+        const referenceInfo = await stat(resolveWithin(root, reference.relative_path))
+        if (!referenceInfo.isFile()) missingReferences.push(reference.relative_path)
+      } catch {
+        missingReferences.push(reference.relative_path)
+      }
+    }
+    if (missingReferences.length > 0) {
+      throw new YouTraceError({
+        code: 'RESTORE_REFERENCE_MISSING',
+        message: '恢复出的工作区缺少数据库引用的文件。',
+        details: { missingReferences },
+        recovery: '请继续使用源工作区，并检查备份中的附件和证据文件。'
+      })
+    }
   } finally {
     database.close()
   }
@@ -507,6 +920,63 @@ function validateDestination(input: string, sourceRoot: string): string {
   return target
 }
 
+async function removeIncompleteMigrationTarget(
+  pending: MigrationRecoveryState
+): Promise<void> {
+  const targetRoot = validateDestination(pending.targetPath, pending.sourcePath)
+  try {
+    const targetInfo = await stat(targetRoot)
+    if (!targetInfo.isDirectory()) {
+      throw new YouTraceError({
+        code: 'MIGRATION_TARGET_IDENTITY_MISMATCH',
+        message: '失败迁移的目标路径现在不是文件夹，未执行清理。'
+      })
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException | null)?.code === 'ENOENT') return
+    throw error
+  }
+
+  const entries = await readdir(targetRoot)
+  if (entries.length === 0) {
+    await rm(targetRoot, { recursive: true, force: true })
+    return
+  }
+
+  let marker: {
+    product?: string
+    operationId?: string
+    workspaceId?: string
+    sourcePath?: string
+    targetPath?: string
+  }
+  try {
+    marker = JSON.parse(
+      await readFile(join(targetRoot, INCOMPLETE_MIGRATION_FILE), 'utf8')
+    ) as typeof marker
+  } catch {
+    throw new YouTraceError({
+      code: 'MIGRATION_TARGET_IDENTITY_MISMATCH',
+      message: '目标目录缺少匹配的失败迁移标识，未执行清理。',
+      recovery: '请检查目录内容；有迹不会删除无法确认身份的目录。'
+    })
+  }
+  if (
+    marker.product !== 'YouTrace' ||
+    marker.operationId !== pending.operationId ||
+    marker.workspaceId !== pending.workspaceId ||
+    resolve(marker.sourcePath ?? '') !== resolve(pending.sourcePath) ||
+    resolve(marker.targetPath ?? '') !== targetRoot
+  ) {
+    throw new YouTraceError({
+      code: 'MIGRATION_TARGET_IDENTITY_MISMATCH',
+      message: '目标目录与失败迁移记录不匹配，未执行清理。',
+      recovery: '请返回源工作区，或手动检查目标目录。'
+    })
+  }
+  await rm(targetRoot, { recursive: true, force: true })
+}
+
 function toRecoverableStorageError(error: unknown): unknown {
   if (error instanceof YouTraceError) return error
   const code = (error as NodeJS.ErrnoException | null)?.code
@@ -525,6 +995,47 @@ function toRecoverableStorageError(error: unknown): unknown {
     })
   }
   return error
+}
+
+function storageErrorCode(error: unknown): string {
+  if (error instanceof YouTraceError) return error.code
+  return (error as NodeJS.ErrnoException | null)?.code ?? 'MIGRATION_FAILED'
+}
+
+async function preflightDestination(targetRoot: string, packageBytes: number): Promise<void> {
+  await mkdir(targetRoot, { recursive: true })
+  const probePath = join(targetRoot, `.youtrace-target-probe-${randomUUID()}`)
+  try {
+    await writeFile(probePath, 'probe', { encoding: 'utf8', flag: 'wx' })
+    await unlink(probePath)
+  } catch (error) {
+    await unlink(probePath).catch(() => undefined)
+    throw toRecoverableStorageError(
+      Object.assign(error instanceof Error ? error : new Error(String(error)), {
+        code: (error as NodeJS.ErrnoException | null)?.code ?? 'EACCES'
+      })
+    )
+  }
+
+  const volume = await statfs(targetRoot, { bigint: true })
+  const extractedBytes = BigInt(Math.ceil(packageBytes))
+  const reserveBytes =
+    extractedBytes / 10n > 16n * 1024n * 1024n
+      ? extractedBytes / 10n
+      : 16n * 1024n * 1024n
+  const requiredBytes = extractedBytes + reserveBytes
+  const availableBytes = volume.bavail * volume.bsize
+  if (availableBytes < requiredBytes) {
+    throw new YouTraceError({
+      code: 'TARGET_SPACE_INSUFFICIENT',
+      message: '目标磁盘空间不足，工作区未切换。',
+      details: {
+        requiredBytes: requiredBytes.toString(),
+        availableBytes: availableBytes.toString()
+      },
+      recovery: '请释放目标磁盘空间或改选目录后重试；当前工作区仍可继续使用。'
+    })
+  }
 }
 
 async function assertEmptyOrMissing(path: string): Promise<void> {
@@ -552,6 +1063,11 @@ function resolveWithin(root: string, relativePath: string): string {
     })
   }
   return target
+}
+
+function recoveryDraftPath(root: string, key: string): string {
+  const fileName = `${createHash('sha256').update(key, 'utf8').digest('hex')}.json`
+  return join(root, 'recovery', 'drafts', fileName)
 }
 
 async function directorySummary(root: string): Promise<{ fileCount: number; totalBytes: number }> {
