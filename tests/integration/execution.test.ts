@@ -37,6 +37,137 @@ afterEach(async () => {
 })
 
 describe('execution and evidence application service', () => {
+  it('keeps project effort history visible after its task enters the trash', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '永久努力验收',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '整理章节笔记',
+      description: '',
+      status: 'ready',
+      difficulty: 3,
+      priority: 'medium',
+      estimatedMinutes: 45,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    const effort = execution.createManualEffort({
+      entityType: 'task',
+      entityId: task.id,
+      startedAt: '2026-07-30T01:00:00.000Z',
+      endedAt: '2026-07-30T01:45:00.000Z',
+      effectiveMinutes: 45,
+      result: '完成第一版笔记',
+      interruptions: '',
+      obstacles: '',
+      nextStep: '补充示意图',
+      energy: 4,
+      perceivedDifficulty: 3,
+      tagIds: []
+    })
+
+    planning.trashTask(task.id)
+
+    const history = planning.listProjectHistory(project.id)
+    expect(history).toMatchObject({
+      projectId: project.id,
+      effortCount: 1,
+      totalMinutes: 45
+    })
+    expect(history.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: effort.id,
+          kind: 'effort',
+          entityType: 'task',
+          entityId: task.id,
+          title: task.title,
+          action: 'manual',
+          summary: '完成第一版笔记',
+          minutes: 45
+        }),
+        expect.objectContaining({
+          kind: 'change',
+          entityType: 'task',
+          entityId: task.id,
+          title: task.title,
+          action: 'trashed'
+        })
+      ])
+    )
+  })
+
+  it('bounds project history rendering while keeping complete effort totals', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '大规模项目历史',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '批量投入任务',
+      description: '',
+      status: 'ready',
+      difficulty: 3,
+      priority: 'medium',
+      estimatedMinutes: null,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    for (let index = 0; index < 205; index += 1) {
+      execution.createManualEffort({
+        entityType: 'task',
+        entityId: task.id,
+        startedAt: new Date(Date.UTC(2026, 6, 30, 0, index)).toISOString(),
+        endedAt: new Date(Date.UTC(2026, 6, 30, 0, index + 1)).toISOString(),
+        effectiveMinutes: 1,
+        result: `投入 ${index + 1}`,
+        interruptions: '',
+        obstacles: '',
+        nextStep: '',
+        energy: null,
+        perceivedDifficulty: null,
+        tagIds: []
+      })
+    }
+
+    const history = planning.listProjectHistory(project.id)
+    expect(history).toMatchObject({
+      effortCount: 205,
+      totalMinutes: 205,
+      hasMore: true
+    })
+    expect(history.entries).toHaveLength(200)
+    expect(history.entries[0]).toMatchObject({ kind: 'effort', summary: '投入 205' })
+  })
+
   it('keeps effort, evidence and memo conversion as independent traceable facts', () => {
     const project = planning.createProject({
       areaId: null,

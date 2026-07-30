@@ -98,6 +98,21 @@ export function DataPage(): React.JSX.Element {
     }
   }
 
+  const restoreTrashItem = async (item: TrashItem): Promise<void> => {
+    if (
+      await run('恢复', () =>
+        window.youtrace.data.restoreTrash({ id: item.id, confirmation: '' })
+      )
+    ) {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['project-history'] }),
+        queryClient.invalidateQueries({ queryKey: ['all-tasks-for-records'] })
+      ])
+    }
+  }
+
   return (
     <div className="data-page">
       <header className="data-toolbar">
@@ -140,10 +155,10 @@ export function DataPage(): React.JSX.Element {
       ) : (
         <section className="trash-panel panel">
           <header><div><span className="section-label">软删除与可恢复关系</span><h2>回收站</h2><p>努力记录不会随任务或项目删除。</p></div></header>
-          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的项目和任务会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{item.entityType === 'project' ? '项目' : '任务'} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，恢复后进入未归属内容</em>}</div><div className="trash-relations"><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</div><button className="button button-secondary" type="button" onClick={() => void run('恢复', () => window.youtrace.data.restoreTrash({ id: item.id, confirmation: '' }))}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
+          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的项目和任务会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{item.entityType === 'project' ? '项目' : '任务'} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，恢复后进入未归属内容</em>}</div><div className="trash-relations"><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</div><button className="button button-secondary" type="button" onClick={() => void restoreTrashItem(item)}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
         </section>
       )}
-      {(message || error) && <div className={`data-feedback ${error ? 'error' : ''}`}>{error || message}<button aria-label="关闭提示" onClick={() => { setError(''); setMessage('') }}><X size={13} /></button></div>}
+      {(message || error) && <div className={`data-feedback ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'}>{error || message}<button aria-label="关闭提示" onClick={() => { setError(''); setMessage('') }}><X size={13} /></button></div>}
       <PurgeDialog item={purgeItem} onOpenChange={(open) => { if (!open) setPurgeItem(null) }} onPurged={async () => { setPurgeItem(null); await queryClient.invalidateQueries({ queryKey: ['trash'] }) }} />
     </div>
   )

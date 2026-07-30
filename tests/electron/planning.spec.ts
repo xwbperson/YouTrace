@@ -52,7 +52,9 @@ test('creates a project and completes a task through the real Electron UI', asyn
     await page.getByLabel('里程碑名称').fill('完成教材第一章')
     await page.getByLabel('手动权重').fill('1')
     await page.getByRole('button', { name: '创建里程碑' }).click()
-    await expect(page.getByText('完成教材第一章')).toBeVisible()
+    await expect(
+      page.locator('.milestone-section').getByText('完成教材第一章', { exact: true })
+    ).toBeVisible()
 
     await page.getByRole('button', { name: '新建任务' }).click()
     await page.getByLabel('下一步是什么？').fill('阅读第一章并整理分层模型')
@@ -63,7 +65,9 @@ test('creates a project and completes a task through the real Electron UI', asyn
     await page.getByRole('button', { name: '计算机网络' }).click()
     await page.getByRole('button', { name: '创建任务' }).click()
 
-    await expect(page.getByText('阅读第一章并整理分层模型')).toBeVisible()
+    await expect(
+      page.locator('.task-section').getByText('阅读第一章并整理分层模型', { exact: true })
+    ).toBeVisible()
     await page.getByRole('button', { name: '完成任务' }).click()
     await expect(page.getByText('已完成')).toBeVisible()
 

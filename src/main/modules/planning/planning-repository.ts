@@ -11,6 +11,8 @@ import type {
   Goal,
   Milestone,
   Project,
+  ProjectHistoryEntry,
+  ProjectHistoryReport,
   ParsedSearchInput,
   SavedView,
   SaveViewInput,
@@ -116,6 +118,31 @@ interface MilestoneRow {
   created_at: string
   updated_at: string
 }
+
+interface ProjectHistoryEffortRow {
+  id: string
+  entity_type: string
+  entity_id: string | null
+  source: 'timer' | 'manual'
+  effective_minutes: number
+  result: string
+  next_step: string
+  entity_title_snapshot: string | null
+  started_at: string
+}
+
+interface ProjectHistoryChangeRow {
+  id: string
+  entity_type: string
+  entity_id: string | null
+  action: string
+  title: string | null
+  reason: string | null
+  occurred_at: string
+  total_count: number
+}
+
+const PROJECT_HISTORY_ENTRY_LIMIT = 200
 
 export interface MilestoneProgressFact {
   milestoneId: string
@@ -227,6 +254,131 @@ export class PlanningRepository {
         )
         .get(id) as ProjectRow | undefined) ?? null
     )
+  }
+
+  listProjectHistory(projectId: string): ProjectHistoryReport {
+    const database = this.database()
+    const effortSummary = database
+      .prepare(
+        `SELECT COUNT(*) AS count, COALESCE(SUM(effective_minutes), 0) AS minutes
+           FROM effort_entries
+          WHERE project_id_snapshot = ?
+            AND voided_at IS NULL
+            AND deleted_at IS NULL`
+      )
+      .get(projectId) as { count: number; minutes: number }
+    const effortRows = database
+      .prepare(
+        `SELECT id, entity_type, entity_id, source, effective_minutes, result, next_step,
+                entity_title_snapshot, started_at
+           FROM effort_entries
+          WHERE project_id_snapshot = ?
+            AND voided_at IS NULL
+            AND deleted_at IS NULL
+          ORDER BY started_at DESC
+          LIMIT ?`
+      )
+      .all(projectId, PROJECT_HISTORY_ENTRY_LIMIT) as ProjectHistoryEffortRow[]
+    const changeRows = database
+      .prepare(
+        `SELECT a.id, a.entity_type, a.entity_id, a.action, a.reason, a.occurred_at,
+                COUNT(*) OVER() AS total_count,
+                CASE a.entity_type
+                  WHEN 'project' THEN p.name
+                  WHEN 'goal' THEN g.title
+                  WHEN 'milestone' THEN m.title
+                  WHEN 'task' THEN COALESCE(
+                    t.title,
+                    (SELECT e.entity_title_snapshot
+                       FROM effort_entries e
+                      WHERE e.entity_type = 'task'
+                        AND e.entity_id = a.entity_id
+                        AND e.project_id_snapshot = ?
+                      ORDER BY e.started_at DESC
+                      LIMIT 1)
+                  )
+                  WHEN 'effort' THEN effort.entity_title_snapshot
+                  ELSE NULL
+                END AS title
+           FROM audit_events a
+           LEFT JOIN projects p ON a.entity_type = 'project' AND p.id = a.entity_id
+           LEFT JOIN goals g ON a.entity_type = 'goal' AND g.id = a.entity_id
+           LEFT JOIN milestones m ON a.entity_type = 'milestone' AND m.id = a.entity_id
+           LEFT JOIN tasks t ON a.entity_type = 'task' AND t.id = a.entity_id
+           LEFT JOIN effort_entries effort
+             ON a.entity_type = 'effort' AND effort.id = a.entity_id
+          WHERE (a.entity_type = 'project' AND a.entity_id = ?)
+             OR (a.entity_type = 'goal' AND g.project_id = ?)
+             OR (a.entity_type = 'milestone' AND m.project_id = ?)
+             OR (
+               a.entity_type = 'task'
+               AND (
+                 t.project_id = ?
+                 OR EXISTS (
+                   SELECT 1
+                     FROM effort_entries task_effort
+                    WHERE task_effort.entity_type = 'task'
+                      AND task_effort.entity_id = a.entity_id
+                      AND task_effort.project_id_snapshot = ?
+                 )
+               )
+             )
+             OR (
+               a.entity_type = 'effort'
+               AND effort.project_id_snapshot = ?
+               AND a.action = 'corrected'
+             )
+          ORDER BY a.occurred_at DESC
+          LIMIT ?`
+      )
+      .all(
+        projectId,
+        projectId,
+        projectId,
+        projectId,
+        projectId,
+        projectId,
+        projectId,
+        PROJECT_HISTORY_ENTRY_LIMIT
+      ) as ProjectHistoryChangeRow[]
+
+    const effortEntries: ProjectHistoryEntry[] = effortRows.map((row) => ({
+      id: row.id,
+      kind: 'effort',
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      title: row.entity_title_snapshot ?? '未命名投入',
+      action: row.source,
+      summary: row.result || row.next_step || '未填写结果',
+      minutes: row.effective_minutes,
+      source: row.source,
+      occurredAt: row.started_at
+    }))
+    const changeEntries: ProjectHistoryEntry[] = changeRows.map((row) => ({
+      id: row.id,
+      kind: 'change',
+      entityType: row.entity_type,
+      entityId: row.entity_id,
+      title: row.title ?? entityTypeLabel(row.entity_type),
+      action: row.action,
+      summary: changeSummary(row.action, row.reason),
+      minutes: null,
+      source: null,
+      occurredAt: row.occurred_at
+    }))
+
+    const entries = [...effortEntries, ...changeEntries]
+      .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
+      .slice(0, PROJECT_HISTORY_ENTRY_LIMIT)
+    const changeCount = changeRows[0]?.total_count ?? 0
+    return {
+      projectId,
+      effortCount: effortSummary.count,
+      totalMinutes: effortSummary.minutes,
+      changeCount,
+      hasMore: effortSummary.count + changeCount > entries.length,
+      entries
+    }
   }
 
   insertProject(id: string, input: CreateProjectInput, now: string): void {
@@ -1505,4 +1657,30 @@ function mapSearchResult(row: unknown): SearchResult {
     title: result.title,
     snippet: result.snippet
   }
+}
+
+function entityTypeLabel(entityType: string): string {
+  return (
+    {
+      project: '项目',
+      goal: '目标',
+      milestone: '里程碑',
+      task: '任务',
+      effort: '投入记录'
+    }[entityType] ?? '项目活动'
+  )
+}
+
+function changeSummary(action: string, reason: string | null): string {
+  if (reason) return reason
+  return (
+    {
+      created: '已创建',
+      updated: '已更新',
+      trashed: '已移入回收站',
+      restored: '已从回收站恢复',
+      corrected: '已更正投入时间',
+      dependency_overridden: '已记录强制开始原因'
+    }[action] ?? action.replaceAll('_', ' ')
+  )
 }

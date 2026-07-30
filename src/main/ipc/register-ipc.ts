@@ -255,6 +255,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:list-project-history', (event, rawProjectId) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listProjectHistory(z.string().uuid().parse(rawProjectId))
+    })
+  )
+
   ipcMain.handle('planning:list-goals', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)

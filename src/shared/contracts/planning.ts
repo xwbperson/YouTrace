@@ -283,6 +283,28 @@ export interface Project {
   updatedAt: string
 }
 
+export interface ProjectHistoryEntry {
+  id: string
+  kind: 'effort' | 'change'
+  entityType: string
+  entityId: string | null
+  title: string
+  action: string
+  summary: string
+  minutes: number | null
+  source: 'timer' | 'manual' | null
+  occurredAt: string
+}
+
+export interface ProjectHistoryReport {
+  projectId: string
+  effortCount: number
+  totalMinutes: number
+  changeCount: number
+  hasMore: boolean
+  entries: ProjectHistoryEntry[]
+}
+
 export interface Task {
   id: string
   parentTaskId: string | null

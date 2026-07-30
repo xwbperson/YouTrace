@@ -13,6 +13,7 @@ import type {
   Goal,
   Milestone,
   Project,
+  ProjectHistoryReport,
   MergeTagsInput,
   SavedView,
   SaveViewInput,
@@ -101,6 +102,11 @@ export class PlanningService {
 
   trashProject(id: string): void {
     if (!this.repository.trashProject(id, new Date().toISOString())) throw notFound('项目')
+  }
+
+  listProjectHistory(projectId: string): ProjectHistoryReport {
+    this.requireProject(projectId)
+    return this.repository.listProjectHistory(projectId)
   }
 
   listGoals(projectId: string | null): Goal[] {

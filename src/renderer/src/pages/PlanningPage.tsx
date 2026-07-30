@@ -8,6 +8,7 @@ import {
   Archive,
   Flag,
   Gauge,
+  History,
   Link2,
   Layers3,
   ListChecks,
@@ -27,6 +28,7 @@ import type {
   IpcResult,
   Milestone,
   Project,
+  ProjectHistoryEntry,
   Task
 } from '../../../shared/contracts'
 import { PracticePage } from './PracticePage'
@@ -73,6 +75,7 @@ export function PlanningPage(): React.JSX.Element {
   const [areaDialogOpen, setAreaDialogOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [projectActionError, setProjectActionError] = useState('')
 
   const projectsQuery = useQuery({
     queryKey: ['projects', showArchived],
@@ -112,6 +115,12 @@ export function PlanningPage(): React.JSX.Element {
     enabled: selectedProjectId !== null,
     queryFn: async () => unwrap(await window.youtrace.planning.listGoals(selectedProjectId))
   })
+  const historyQuery = useQuery({
+    queryKey: ['project-history', selectedProjectId],
+    enabled: selectedProjectId !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.planning.listProjectHistory(selectedProjectId!))
+  })
 
   const projects = projectsQuery.data ?? []
   useEffect(() => {
@@ -133,7 +142,8 @@ export function PlanningPage(): React.JSX.Element {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
-        queryClient.invalidateQueries({ queryKey: ['projects'] })
+        queryClient.invalidateQueries({ queryKey: ['projects'] }),
+        queryClient.invalidateQueries({ queryKey: ['project-history'] })
       ])
     }
   })
@@ -247,9 +257,29 @@ export function PlanningPage(): React.JSX.Element {
                 <div>
                   <div className="project-meta">
                     <span>{projectStatusLabels[selectedProject.status]}</span>
-                    <span>
-                      {selectedProject.progressMode === 'equal' ? '等权进度' : '工作量进度'}
-                    </span>
+                    <select
+                      className="project-progress-mode"
+                      aria-label="主进度模式"
+                      value={selectedProject.progressMode}
+                      onChange={async (event) => {
+                        setProjectActionError('')
+                        const result = await window.youtrace.planning.updateProject({
+                          id: selectedProject.id,
+                          progressMode: event.target.value as Project['progressMode']
+                        })
+                        if (result.ok) {
+                          await Promise.all([
+                            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+                            queryClient.invalidateQueries({ queryKey: ['project-history'] })
+                          ])
+                        } else {
+                          setProjectActionError(result.error.message)
+                        }
+                      }}
+                    >
+                      <option value="equal">等权进度</option>
+                      <option value="workload">工作量进度</option>
+                    </select>
                   </div>
                   <h2>{selectedProject.name}</h2>
                   <p>{selectedProject.description || '还没有项目说明。'}</p>
@@ -434,6 +464,47 @@ export function PlanningPage(): React.JSX.Element {
                   </div>
                 )}
               </section>
+
+              <section className="project-history-section" data-testid="project-history">
+                <div className="task-section-heading">
+                  <div>
+                    <span className="section-label">永久记录</span>
+                    <h3>项目历史</h3>
+                  </div>
+                  {historyQuery.data ? (
+                    <div className="project-history-summary" aria-label="项目投入汇总">
+                      <span>{historyQuery.data.effortCount} 次投入</span>
+                      <span>累计 {historyQuery.data.totalMinutes} 分钟</span>
+                      {historyQuery.data.hasMore ? (
+                        <span>
+                          最近 {historyQuery.data.entries.length} / 共{' '}
+                          {historyQuery.data.effortCount + historyQuery.data.changeCount} 条
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {historyQuery.isPending ? (
+                  <p className="project-history-message" role="status">正在读取项目历史…</p>
+                ) : historyQuery.isError ? (
+                  <p className="project-history-message error" role="alert">项目历史暂时无法读取，请稍后重试。</p>
+                ) : !historyQuery.data || historyQuery.data.entries.length === 0 ? (
+                  <div className="project-history-empty">
+                    <History size={18} />
+                    <span>
+                      <strong>还没有项目活动</strong>
+                      <small>任务变更和投入记录会按时间出现在这里。</small>
+                    </span>
+                  </div>
+                ) : (
+                  <ol className="project-history-list">
+                    {historyQuery.data.entries.map((entry) => (
+                      <ProjectHistoryItem key={`${entry.kind}-${entry.id}`} entry={entry} />
+                    ))}
+                  </ol>
+                )}
+              </section>
             </>
           )}
         </main>
@@ -459,7 +530,8 @@ export function PlanningPage(): React.JSX.Element {
         onCreated={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['tasks'] }),
-            queryClient.invalidateQueries({ queryKey: ['projects'] })
+            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+            queryClient.invalidateQueries({ queryKey: ['project-history'] })
           ])
         }}
       />
@@ -471,7 +543,8 @@ export function PlanningPage(): React.JSX.Element {
         onCreated={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['milestones'] }),
-            queryClient.invalidateQueries({ queryKey: ['projects'] })
+            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+            queryClient.invalidateQueries({ queryKey: ['project-history'] })
           ])
         }}
       />
@@ -481,6 +554,7 @@ export function PlanningPage(): React.JSX.Element {
         project={selectedProject}
         onCreated={async () => {
           await queryClient.invalidateQueries({ queryKey: ['goals'] })
+          await queryClient.invalidateQueries({ queryKey: ['project-history'] })
         }}
       />
       <AreaDialog
@@ -501,12 +575,61 @@ export function PlanningPage(): React.JSX.Element {
         onChanged={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['tasks'] }),
-            queryClient.invalidateQueries({ queryKey: ['projects'] })
+            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+            queryClient.invalidateQueries({ queryKey: ['project-history'] })
           ])
         }}
       />
+      {projectActionError ? (
+        <div className="data-feedback error" role="alert">
+          {projectActionError}
+          <button type="button" aria-label="关闭提示" onClick={() => setProjectActionError('')}>
+            <X size={13} />
+          </button>
+        </div>
+      ) : null}
     </div>
   )
+}
+
+function ProjectHistoryItem({ entry }: { entry: ProjectHistoryEntry }): React.JSX.Element {
+  return (
+    <li className={entry.kind === 'effort' ? 'effort' : 'change'}>
+      <span className="project-history-marker">
+        {entry.kind === 'effort' ? <Gauge size={14} /> : <History size={14} />}
+      </span>
+      <div className="project-history-copy">
+        <strong>{entry.title}</strong>
+        <span>{entry.summary}</span>
+      </div>
+      <div className="project-history-meta">
+        {entry.minutes !== null ? <b>投入 {entry.minutes}m</b> : <b>{historyActionLabel(entry.action)}</b>}
+        <time dateTime={entry.occurredAt}>{formatHistoryTime(entry.occurredAt)}</time>
+      </div>
+    </li>
+  )
+}
+
+function historyActionLabel(action: string): string {
+  return (
+    {
+      created: '创建',
+      updated: '更新',
+      trashed: '回收站',
+      restored: '已恢复',
+      corrected: '已更正',
+      dependency_overridden: '强制开始'
+    }[action] ?? action.replaceAll('_', ' ')
+  )
+}
+
+function formatHistoryTime(value: string): string {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(value))
 }
 
 interface ProjectDialogProps {

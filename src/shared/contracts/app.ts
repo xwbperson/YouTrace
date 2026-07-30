@@ -13,6 +13,7 @@ import type {
   Goal,
   Milestone,
   Project,
+  ProjectHistoryReport,
   MergeTagsInput,
   SavedView,
   SaveViewInput,
@@ -198,6 +199,7 @@ export interface YouTraceApi {
     createProject(input: CreateProjectInput): Promise<IpcResult<Project>>
     updateProject(input: UpdateProjectInput): Promise<IpcResult<Project>>
     trashProject(id: string): Promise<IpcResult<void>>
+    listProjectHistory(projectId: string): Promise<IpcResult<ProjectHistoryReport>>
     listGoals(projectId: string | null): Promise<IpcResult<Goal[]>>
     createGoal(input: CreateGoalInput): Promise<IpcResult<Goal>>
     updateGoal(input: UpdateGoalInput): Promise<IpcResult<Goal>>

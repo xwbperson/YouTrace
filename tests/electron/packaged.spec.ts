@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { _electron as electron, chromium, expect, test, type Page } from '@playwright/test'
 
 const unpackedPath = resolve('release/win-unpacked/有迹.exe')
-const portablePath = resolve('release/YouTrace-1.0.0-Portable.exe')
+const portablePath = resolve('release/YouTrace-1.0.1-Portable.exe')
 
 async function createWorkspaceAndAssert(
   page: Page,

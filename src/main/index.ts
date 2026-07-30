@@ -57,6 +57,14 @@ let dataService: DataService | null = null
 let settingsService: SettingsService | null = null
 let executionService: ExecutionService | null = null
 
+if (process.env['YOUTRACE_E2E'] === '1') {
+  ;(
+    globalThis as unknown as {
+      __youtraceE2E: { requestApplicationQuit(): Promise<void> }
+    }
+  ).__youtraceE2E = { requestApplicationQuit }
+}
+
 const singleInstanceLock = app.requestSingleInstanceLock()
 if (!singleInstanceLock) {
   app.quit()

@@ -33,6 +33,8 @@ const api: YouTraceApi = {
     createProject: (input) => ipcRenderer.invoke('planning:create-project', input),
     updateProject: (input) => ipcRenderer.invoke('planning:update-project', input),
     trashProject: (id) => ipcRenderer.invoke('planning:trash-project', id),
+    listProjectHistory: (projectId) =>
+      ipcRenderer.invoke('planning:list-project-history', projectId),
     listGoals: (projectId) => ipcRenderer.invoke('planning:list-goals', projectId),
     createGoal: (input) => ipcRenderer.invoke('planning:create-goal', input),
     updateGoal: (input) => ipcRenderer.invoke('planning:update-goal', input),

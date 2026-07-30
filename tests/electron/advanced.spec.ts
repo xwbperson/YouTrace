@@ -121,8 +121,12 @@ test('connects advanced planning, saved search, learning and preferences in Elec
     await page.reload()
 
     await page.getByRole('button', { name: '计划', exact: true }).click()
-    await expect(page.getByText('掌握协议分析')).toBeVisible()
-    await expect(page.getByText('第一章 网络体系结构')).toBeVisible()
+    await expect(
+      page.locator('.goal-section').getByText('掌握协议分析', { exact: true })
+    ).toBeVisible()
+    await expect(
+      page.locator('.milestone-section').getByText('第一章 网络体系结构', { exact: true })
+    ).toBeVisible()
     await page.getByRole('button', { name: /梳理协议分层与封装/ }).click()
     await expect(page.getByText('检查清单', { exact: true })).toBeVisible()
     await expect(page.getByText('画出五层结构')).toBeVisible()
