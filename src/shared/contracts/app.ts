@@ -52,6 +52,7 @@ import type {
   Memo,
   StartEffortInput,
   StopEffortInput,
+  UpdateEvidenceInput,
   UpdateEvidenceStatusInput
 } from './execution'
 import type {
@@ -104,6 +105,7 @@ import type {
   BackupStorageStatus,
   BackupVerification,
   DatabaseRecoveryState,
+  EvidenceAttachment,
   ImportedEvidence,
   ImportEvidenceFileInput,
   MigrationRecoveryAction,
@@ -273,6 +275,8 @@ export interface YouTraceApi {
     listEffortHistory(id: string): Promise<IpcResult<EffortRevision[]>>
     createEvidence(input: CreateEvidenceInput): Promise<IpcResult<Evidence>>
     listEvidence(entityType: string | null, entityId: string | null): Promise<IpcResult<Evidence[]>>
+    updateEvidence(input: UpdateEvidenceInput): Promise<IpcResult<Evidence>>
+    trashEvidence(id: string): Promise<IpcResult<void>>
     updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<IpcResult<Evidence>>
     createMemo(input: CreateMemoInput): Promise<IpcResult<Memo>>
     listMemos(inboxOnly: boolean, includeArchived?: boolean): Promise<IpcResult<Memo[]>>
@@ -356,6 +360,12 @@ export interface YouTraceApi {
       file: File,
       input: ImportEvidenceFileInput
     ): Promise<IpcResult<ImportedEvidence>>
+    attachDroppedEvidenceFile(
+      file: File,
+      evidenceId: string
+    ): Promise<IpcResult<ImportedEvidence['attachment']>>
+    listEvidenceAttachments(evidenceId: string): Promise<IpcResult<EvidenceAttachment[]>>
+    openEvidenceAttachment(attachmentId: string): Promise<IpcResult<void>>
     listTrash(): Promise<IpcResult<TrashItem[]>>
     restoreTrash(input: TrashActionInput): Promise<IpcResult<TrashItem>>
     purgeTrash(input: TrashActionInput): Promise<IpcResult<void>>

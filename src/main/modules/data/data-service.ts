@@ -21,6 +21,7 @@ import {
   type BackupInfo,
   type BackupStorageStatus,
   type BackupVerification,
+  type EvidenceAttachment,
   type ImportedEvidence,
   type ImportEvidenceFileInput,
   type MigrationRecoveryAction,
@@ -218,6 +219,12 @@ export class DataService {
       code: 'EVIDENCE_SOURCE_NOT_OPENABLE',
       message: '这项成果没有可打开的文件或链接。'
     })
+  }
+
+  getEvidenceAttachmentOpenTarget(attachmentId: string): string {
+    const relativePath = this.repository.getEvidenceAttachmentPath(attachmentId)
+    if (!relativePath) throw notFound('成果附件')
+    return resolveWithin(this.workspaceManager.getCurrentPath(), relativePath)
   }
 
   async maybeCreateAutomaticBackup(
@@ -544,17 +551,71 @@ export class DataService {
         message: '成果关联类型和对象需要同时设置。'
       })
     }
+    const evidenceId = randomUUID()
+    const prepared = await this.prepareEvidenceAttachment(sourcePath)
+    try {
+      const evidence = this.repository.insertEvidenceFile(
+        evidenceId,
+        prepared.attachment,
+        input,
+        new Date().toISOString()
+      )
+      return { evidence, attachment: prepared.attachment }
+    } catch (error) {
+      if (prepared.createdFile) await unlink(prepared.destination).catch(() => undefined)
+      throw error
+    }
+  }
+
+  listEvidenceAttachments(evidenceId: string): EvidenceAttachment[] {
+    if (!this.repository.hasEvidence(evidenceId)) throw notFound('成果')
+    return this.repository.listEvidenceAttachments(evidenceId)
+  }
+
+  async attachEvidenceFile(
+    sourcePath: string,
+    evidenceId: string
+  ): Promise<ImportedEvidence['attachment']> {
+    if (!this.repository.hasEvidence(evidenceId)) throw notFound('成果')
+    const prepared = await this.prepareEvidenceAttachment(sourcePath)
+    try {
+      if (
+        !this.repository.attachEvidenceFile(
+          evidenceId,
+          prepared.attachment,
+          new Date().toISOString()
+        )
+      ) {
+        throw notFound('成果')
+      }
+      return prepared.attachment
+    } catch (error) {
+      if (prepared.createdFile) await unlink(prepared.destination).catch(() => undefined)
+      throw error
+    }
+  }
+
+  private async prepareEvidenceAttachment(sourcePath: string): Promise<{
+    attachment: ImportedEvidence['attachment'] & { mimeType: string | null }
+    destination: string
+    createdFile: boolean
+  }> {
     const sourceInfo = await stat(sourcePath)
-    if (!sourceInfo.isFile()) throw new YouTraceError({ code: 'FILE_NOT_REGULAR', message: '选择的内容不是普通文件。' })
+    if (!sourceInfo.isFile()) {
+      throw new YouTraceError({
+        code: 'FILE_NOT_REGULAR',
+        message: '选择的内容不是普通文件。'
+      })
+    }
     const hash = await hashFile(sourcePath)
     const existing = this.repository.findAttachmentByHash(hash)
     const root = this.workspaceManager.getCurrentPath()
-    const evidenceId = randomUUID()
     const attachmentId = existing?.id ?? randomUUID()
     const originalName = basename(sourcePath)
     const extension = safeExtension(extname(originalName))
     const month = new Date().toISOString().slice(0, 7).replace('-', '/')
-    const relativePath = existing?.relativePath ?? `evidence/${month}/${attachmentId}${extension}`
+    const relativePath =
+      existing?.relativePath ?? `evidence/${month}/${attachmentId}${extension}`
     const destination = resolveWithin(root, relativePath)
     let createdFile = false
     if (!existing) {
@@ -564,31 +625,26 @@ export class DataService {
       const copiedHash = await hashFile(temporary)
       if (copiedHash !== hash) {
         await unlink(temporary).catch(() => undefined)
-        throw new YouTraceError({ code: 'FILE_COPY_VERIFY_FAILED', message: '文件复制后的哈希不一致。' })
+        throw new YouTraceError({
+          code: 'FILE_COPY_VERIFY_FAILED',
+          message: '文件复制后的哈希不一致。'
+        })
       }
       await rename(temporary, destination)
       createdFile = true
     }
-    const attachment = {
-      id: attachmentId,
-      relativePath,
-      originalName: existing?.originalName ?? originalName,
-      contentHash: hash,
-      sizeBytes: existing?.sizeBytes ?? sourceInfo.size,
-      mimeType: mimeFromExtension(extension),
-      reused: Boolean(existing)
-    }
-    try {
-      const evidence = this.repository.insertEvidenceFile(
-        evidenceId,
-        attachment,
-        input,
-        new Date().toISOString()
-      )
-      return { evidence, attachment }
-    } catch (error) {
-      if (createdFile) await unlink(destination).catch(() => undefined)
-      throw error
+    return {
+      attachment: {
+        id: attachmentId,
+        relativePath,
+        originalName: existing?.originalName ?? originalName,
+        contentHash: hash,
+        sizeBytes: existing?.sizeBytes ?? sourceInfo.size,
+        mimeType: mimeFromExtension(extension),
+        reused: Boolean(existing)
+      },
+      destination,
+      createdFile
     }
   }
 

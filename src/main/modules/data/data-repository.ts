@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type {
   BackupInfo,
   Evidence,
+  EvidenceAttachment,
   ImportEvidenceFileInput,
   TrashItem
 } from '../../../shared/contracts'
@@ -136,6 +137,25 @@ export class DataRepository {
       : null
   }
 
+  getEvidenceAttachmentPath(attachmentId: string): string | null {
+    const row = this.database()
+      .prepare(
+        `SELECT a.relative_path
+           FROM attachments a
+          WHERE a.id = ?
+            AND a.pending_cleanup_at IS NULL
+            AND EXISTS(
+              SELECT 1
+                FROM entity_attachments ea
+                JOIN evidence e
+                  ON ea.entity_type = 'evidence' AND ea.entity_id = e.id
+               WHERE ea.attachment_id = a.id AND e.deleted_at IS NULL
+            )`
+      )
+      .get(attachmentId) as { relative_path: string } | undefined
+    return row?.relative_path ?? null
+  }
+
   rebuildSearchIndex(): number {
     const database = this.database()
     return database.transaction(() => {
@@ -181,10 +201,12 @@ export class DataRepository {
                   WHEN 'project' THEN COALESCE(p.name, '已删除项目')
                   WHEN 'task' THEN COALESCE(t.title, '已删除任务')
                   WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
+                  WHEN 'evidence' THEN COALESCE(e.title, '已删除成果')
                 END AS title,
                 CASE
                   WHEN tr.entity_type = 'project' THEN 1
                   WHEN tr.entity_type = 'review' THEN 1
+                  WHEN tr.entity_type = 'evidence' THEN 1
                   WHEN t.id IS NULL THEN 0
                   WHEN EXISTS(
                     SELECT 1 FROM audit_events ae
@@ -201,6 +223,10 @@ export class DataRepository {
                     SELECT COUNT(*) FROM entity_attachments ea
                      WHERE ea.entity_type = 'task' AND ea.entity_id = tr.entity_id
                   )
+                  WHEN 'evidence' THEN (
+                    SELECT COUNT(*) FROM entity_attachments ea
+                     WHERE ea.entity_type = 'evidence' AND ea.entity_id = tr.entity_id
+                  )
                   ELSE 0
                 END AS attachment_count,
                 CASE tr.entity_type
@@ -210,12 +236,19 @@ export class DataRepository {
                        AND (SELECT COUNT(*) FROM entity_attachments shared
                              WHERE shared.attachment_id = ea.attachment_id) > 1
                   )
+                  WHEN 'evidence' THEN (
+                    SELECT COUNT(*) FROM entity_attachments ea
+                     WHERE ea.entity_type = 'evidence' AND ea.entity_id = tr.entity_id
+                       AND (SELECT COUNT(*) FROM entity_attachments shared
+                             WHERE shared.attachment_id = ea.attachment_id) > 1
+                  )
                   ELSE 0
                 END AS shared_attachment_count
            FROM trash_entries tr
            LEFT JOIN projects p ON tr.entity_type = 'project' AND p.id = tr.entity_id
            LEFT JOIN tasks t ON tr.entity_type = 'task' AND t.id = tr.entity_id
            LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
+           LEFT JOIN evidence e ON tr.entity_type = 'evidence' AND e.id = tr.entity_id
           WHERE tr.purged_at IS NULL
           ORDER BY tr.deleted_at DESC`
       )
@@ -253,6 +286,14 @@ export class DataRepository {
           .prepare('SELECT title, description FROM tasks WHERE id = ?')
           .get(item.entityId) as { title: string; description: string }
         this.upsertSearch(database, 'task', item.entityId, task.title, task.description)
+      } else if (item.entityType === 'evidence') {
+        database
+          .prepare('UPDATE evidence SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+          .run(now, item.entityId)
+        const evidence = database
+          .prepare('SELECT title, note FROM evidence WHERE id = ?')
+          .get(item.entityId) as { title: string; note: string }
+        this.upsertSearch(database, 'evidence', item.entityId, evidence.title, evidence.note)
       } else {
         database
           .prepare('UPDATE reviews SET deleted_at = NULL, updated_at = ? WHERE id = ?')
@@ -302,6 +343,38 @@ export class DataRepository {
         database.prepare('DELETE FROM tasks WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'project') {
         orphanPaths.push(...this.purgeProject(database, item.entityId, now))
+      } else if (item.entityType === 'evidence') {
+        const attachments = database
+          .prepare(
+            `SELECT a.id, a.relative_path,
+                    (SELECT COUNT(*) FROM entity_attachments shared
+                      WHERE shared.attachment_id = a.id) AS reference_count
+               FROM attachments a
+               JOIN entity_attachments ea ON ea.attachment_id = a.id
+              WHERE ea.entity_type = 'evidence' AND ea.entity_id = ?`
+          )
+          .all(item.entityId) as Array<{
+          id: string
+          relative_path: string
+          reference_count: number
+        }>
+        database
+          .prepare("DELETE FROM entity_attachments WHERE entity_type = 'evidence' AND entity_id = ?")
+          .run(item.entityId)
+        for (const attachment of attachments) {
+          if (attachment.reference_count === 1) {
+            orphanPaths.push(attachment.relative_path)
+            database.prepare('DELETE FROM attachments WHERE id = ?').run(attachment.id)
+          }
+        }
+        database.prepare('DELETE FROM entity_evidence WHERE evidence_id = ?').run(item.entityId)
+        database
+          .prepare("DELETE FROM tag_assignments WHERE entity_type = 'evidence' AND entity_id = ?")
+          .run(item.entityId)
+        database
+          .prepare("DELETE FROM searchable_content WHERE entity_type = 'evidence' AND entity_id = ?")
+          .run(item.entityId)
+        database.prepare('DELETE FROM evidence WHERE id = ?').run(item.entityId)
       } else {
         database.prepare('DELETE FROM plan_adjustments WHERE review_id = ?').run(item.entityId)
         database.prepare('DELETE FROM review_snapshots WHERE review_id = ?').run(item.entityId)
@@ -342,6 +415,96 @@ export class DataRepository {
           contentHash: row.content_hash
         }
       : null
+  }
+
+  hasEvidence(id: string): boolean {
+    return Boolean(
+      this.database()
+        .prepare('SELECT id FROM evidence WHERE id = ? AND deleted_at IS NULL')
+        .get(id)
+    )
+  }
+
+  listEvidenceAttachments(evidenceId: string): EvidenceAttachment[] {
+    return (
+      this.database()
+        .prepare(
+          `SELECT a.id, a.original_name, a.relative_path, a.size_bytes, a.content_hash
+             FROM attachments a
+             JOIN entity_attachments ea ON ea.attachment_id = a.id
+            WHERE ea.entity_type = 'evidence' AND ea.entity_id = ?
+              AND a.pending_cleanup_at IS NULL
+            ORDER BY ea.created_at, a.original_name`
+        )
+        .all(evidenceId) as Array<{
+        id: string
+        original_name: string
+        relative_path: string
+        size_bytes: number
+        content_hash: string
+      }>
+    ).map((row) => ({
+      id: row.id,
+      originalName: row.original_name,
+      relativePath: row.relative_path,
+      sizeBytes: row.size_bytes,
+      contentHash: row.content_hash
+    }))
+  }
+
+  attachEvidenceFile(
+    evidenceId: string,
+    attachment: {
+      id: string
+      relativePath: string
+      originalName: string
+      contentHash: string
+      sizeBytes: number
+      mimeType: string | null
+      reused: boolean
+    },
+    now: string
+  ): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const evidence = database
+        .prepare('SELECT id FROM evidence WHERE id = ? AND deleted_at IS NULL')
+        .get(evidenceId)
+      if (!evidence) return false
+      if (!attachment.reused) {
+        database
+          .prepare(
+            `INSERT INTO attachments(
+               id, relative_path, original_name, content_hash, size_bytes, mime_type, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            attachment.id,
+            attachment.relativePath,
+            attachment.originalName,
+            attachment.contentHash,
+            attachment.sizeBytes,
+            attachment.mimeType,
+            now
+          )
+      }
+      database
+        .prepare(
+          `INSERT OR IGNORE INTO entity_attachments(
+             attachment_id, entity_type, entity_id, created_at
+           ) VALUES (?, 'evidence', ?, ?)`
+        )
+        .run(attachment.id, evidenceId, now)
+      this.insertAudit(
+        database,
+        'evidence',
+        evidenceId,
+        'attachment_added',
+        { attachmentId: attachment.id, originalName: attachment.originalName },
+        now
+      )
+      return true
+    })()
   }
 
   insertEvidenceFile(
@@ -388,7 +551,9 @@ export class DataRepository {
           input.kind,
           input.title,
           input.note,
-          attachment.originalName,
+          input.kind === 'file' || input.kind === 'image'
+            ? attachment.originalName
+            : input.source ?? null,
           input.verificationStatus,
           now,
           now
@@ -421,10 +586,14 @@ export class DataRepository {
       kind: input.kind,
       title: input.title,
       note: input.note,
-      source: attachment.originalName,
+      source:
+        input.kind === 'file' || input.kind === 'image'
+          ? attachment.originalName
+          : input.source ?? null,
       verificationStatus: input.verificationStatus,
       entityType: input.entityType,
       entityId: input.entityId,
+      attachmentCount: 1,
       tagIds: input.tagIds,
       createdAt: now,
       updatedAt: now

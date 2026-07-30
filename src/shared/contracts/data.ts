@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { WorkspaceSummary } from './app'
-import type { Evidence } from './execution'
+import { evidenceKindSchema, type Evidence } from './execution'
 
 export const restoreBackupInputSchema = z.object({
   backupId: z.string().uuid(),
@@ -12,9 +12,10 @@ export const migrateWorkspaceInputSchema = z.object({
 })
 
 export const importEvidenceFileInputSchema = z.object({
-  kind: z.enum(['file', 'image']).default('file'),
-  title: z.string().trim().min(1).max(300),
+  kind: evidenceKindSchema.default('file'),
+  title: z.string().trim().min(1).max(240),
   note: z.string().max(20_000).default(''),
+  source: z.string().max(4_000).nullable().optional(),
   verificationStatus: z.enum(['prepared', 'completed', 'verified', 'accepted']).default('prepared'),
   entityType: z.string().max(60).nullable().default(null),
   entityId: z.string().uuid().nullable().default(null),
@@ -126,7 +127,7 @@ export interface ReadableExport {
 
 export interface TrashItem {
   id: string
-  entityType: 'project' | 'task' | 'review'
+  entityType: 'project' | 'task' | 'review' | 'evidence'
   entityId: string
   title: string
   deletedAt: string
@@ -141,14 +142,17 @@ export interface RestoreResult {
   reportPath: string
 }
 
+export interface EvidenceAttachment {
+  id: string
+  originalName: string
+  relativePath: string
+  sizeBytes: number
+  contentHash: string
+}
+
 export interface ImportedEvidence {
   evidence: Evidence
-  attachment: {
-    id: string
-    originalName: string
-    relativePath: string
-    sizeBytes: number
-    contentHash: string
+  attachment: EvidenceAttachment & {
     reused: boolean
   }
 }

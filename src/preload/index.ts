@@ -99,6 +99,8 @@ const api: YouTraceApi = {
     createEvidence: (input) => ipcRenderer.invoke('execution:create-evidence', input),
     listEvidence: (entityType, entityId) =>
       ipcRenderer.invoke('execution:list-evidence', entityType, entityId),
+    updateEvidence: (input) => ipcRenderer.invoke('execution:update-evidence', input),
+    trashEvidence: (id) => ipcRenderer.invoke('execution:trash-evidence', id),
     updateEvidenceStatus: (input) =>
       ipcRenderer.invoke('execution:update-evidence-status', input),
     createMemo: (input) => ipcRenderer.invoke('execution:create-memo', input),
@@ -195,6 +197,16 @@ const api: YouTraceApi = {
     importEvidenceFile: (input) => ipcRenderer.invoke('data:import-evidence-file', input),
     importDroppedEvidenceFile: (file, input) =>
       ipcRenderer.invoke('data:import-dropped-evidence-file', webUtils.getPathForFile(file), input),
+    attachDroppedEvidenceFile: (file, evidenceId) =>
+      ipcRenderer.invoke(
+        'data:attach-dropped-evidence-file',
+        webUtils.getPathForFile(file),
+        evidenceId
+      ),
+    listEvidenceAttachments: (evidenceId) =>
+      ipcRenderer.invoke('data:list-evidence-attachments', evidenceId),
+    openEvidenceAttachment: (attachmentId) =>
+      ipcRenderer.invoke('data:open-evidence-attachment', attachmentId),
     listTrash: () => ipcRenderer.invoke('data:list-trash'),
     restoreTrash: (input) => ipcRenderer.invoke('data:restore-trash', input),
     purgeTrash: (input) => ipcRenderer.invoke('data:purge-trash', input)

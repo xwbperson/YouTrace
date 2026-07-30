@@ -5706,6 +5706,37 @@ kbd {
   border-radius: 8px;
 }
 
+.evidence-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.evidence-card-actions button {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.evidence-card-actions button:hover,
+.evidence-card-actions button:focus-visible {
+  color: var(--trace);
+  background: var(--trace-soft);
+  border-color: var(--border-strong);
+}
+
+.evidence-card-actions button.danger:hover,
+.evidence-card-actions button.danger:focus-visible {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+}
+
 .evidence-status {
   padding: 3px 6px;
   color: var(--muted);
@@ -5736,6 +5767,9 @@ kbd {
 
 .evidence-card footer {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   justify-content: space-between;
   margin-top: 14px;
   padding-top: 9px;
@@ -5757,6 +5791,10 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.evidence-card footer .evidence-attachment-count {
+  color: var(--muted);
 }
 
 .memo-count {
@@ -5960,6 +5998,47 @@ kbd {
 .evidence-attachment-dropzone > label {
   flex: 1;
   min-height: 72px;
+}
+
+.evidence-attachment-list {
+  display: grid;
+  gap: 6px;
+}
+
+.evidence-attachment-list > span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.evidence-attachment-list > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 10px;
+  color: var(--ink);
+  text-align: left;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.evidence-attachment-list > button:hover,
+.evidence-attachment-list > button:focus-visible {
+  color: var(--trace);
+  border-color: var(--trace);
+}
+
+.evidence-attachment-list > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.evidence-attachment-list > button small {
+  color: var(--faint);
 }
 
 .memo-capture-error {

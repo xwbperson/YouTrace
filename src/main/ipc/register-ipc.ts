@@ -55,6 +55,7 @@ import {
   taskListInputSchema,
   timeRangeInputSchema,
   updateEvidenceStatusInputSchema,
+  updateEvidenceInputSchema,
   updateAreaInputSchema,
   updateChecklistItemInputSchema,
   updateGoalInputSchema,
@@ -622,6 +623,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('execution:update-evidence', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.updateEvidence(updateEvidenceInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:trash-evidence', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.trashEvidence(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('execution:update-evidence-status', (event, rawInput) =>
     wrap(() => {
       trusted(event)
@@ -1156,6 +1171,41 @@ export function registerIpc(options: RegisterIpcOptions): void {
       const sourcePath = z.string().trim().min(1).max(32_767).parse(rawSourcePath)
       const input = importEvidenceFileInputSchema.parse(rawInput)
       return dataService.importEvidenceFile(sourcePath, input)
+    })
+  )
+
+  ipcMain.handle(
+    'data:attach-dropped-evidence-file',
+    (event, rawSourcePath, rawEvidenceId) =>
+      wrap(async () => {
+        trusted(event)
+        const sourcePath = z.string().trim().min(1).max(32_767).parse(rawSourcePath)
+        const evidenceId = z.string().uuid().parse(rawEvidenceId)
+        return dataService.attachEvidenceFile(sourcePath, evidenceId)
+      })
+  )
+
+  ipcMain.handle('data:list-evidence-attachments', (event, rawEvidenceId) =>
+    wrap(() => {
+      trusted(event)
+      return dataService.listEvidenceAttachments(z.string().uuid().parse(rawEvidenceId))
+    })
+  )
+
+  ipcMain.handle('data:open-evidence-attachment', (event, rawAttachmentId) =>
+    wrap(async () => {
+      trusted(event)
+      const target = dataService.getEvidenceAttachmentOpenTarget(
+        z.string().uuid().parse(rawAttachmentId)
+      )
+      const error = await shell.openPath(target)
+      if (error) {
+        throw new YouTraceError({
+          code: 'EVIDENCE_ATTACHMENT_OPEN_FAILED',
+          message: '无法打开成果附件。',
+          details: { reason: error }
+        })
+      }
     })
   )
 

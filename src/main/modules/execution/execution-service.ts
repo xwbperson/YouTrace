@@ -17,6 +17,7 @@ import type {
   StartEffortInput,
   StopEffortInput,
   Task,
+  UpdateEvidenceInput,
   UpdateEvidenceStatusInput
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
@@ -259,6 +260,25 @@ export class ExecutionService {
       throw entityNotFound('成果证据')
     }
     return this.requireEvidence(input.id)
+  }
+
+  updateEvidence(input: UpdateEvidenceInput): Evidence {
+    if ((input.entityType === null) !== (input.entityId === null)) {
+      throw new YouTraceError({
+        code: 'EVIDENCE_RELATION_INCOMPLETE',
+        message: '成果关联类型和对象需要同时设置。'
+      })
+    }
+    if (!this.repository.updateEvidence(input.id, input, new Date().toISOString())) {
+      throw entityNotFound('成果证据')
+    }
+    return this.requireEvidence(input.id)
+  }
+
+  trashEvidence(id: string): void {
+    if (!this.repository.trashEvidence(id, new Date().toISOString())) {
+      throw entityNotFound('成果证据')
+    }
   }
 
   createMemo(input: CreateMemoInput): Memo {

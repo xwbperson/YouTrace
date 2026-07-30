@@ -13,10 +13,17 @@ import {
   Pencil,
   Plus,
   TimerReset,
+  Trash2,
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import type { EffortEntry, Evidence, IpcResult, Task } from '../../../shared/contracts'
+import type {
+  EffortEntry,
+  Evidence,
+  EvidenceAttachment,
+  IpcResult,
+  Task
+} from '../../../shared/contracts'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -28,6 +35,8 @@ export function RecordsPage(): React.JSX.Element {
   const [tab, setTab] = useState<'effort' | 'evidence'>('effort')
   const [manualDialogOpen, setManualDialogOpen] = useState(false)
   const [evidenceDialogOpen, setEvidenceDialogOpen] = useState(false)
+  const [editingEvidence, setEditingEvidence] = useState<Evidence | null>(null)
+  const [deletingEvidence, setDeletingEvidence] = useState<Evidence | null>(null)
   const [selectedEffort, setSelectedEffort] = useState<EffortEntry | null>(null)
 
   const effortsQuery = useQuery({
@@ -81,7 +90,13 @@ export function RecordsPage(): React.JSX.Element {
           <p>投入是已经发生的事实，任务取消或归档也不会抹掉它。</p>
         </div>
         <div className="toolbar-actions">
-          <button className="button button-secondary" onClick={() => setEvidenceDialogOpen(true)}>
+          <button
+            className="button button-secondary"
+            onClick={() => {
+              setEditingEvidence(null)
+              setEvidenceDialogOpen(true)
+            }}
+          >
             <Award size={16} />
             添加成果
           </button>
@@ -176,10 +191,29 @@ export function RecordsPage(): React.JSX.Element {
                 <Award size={24} />
                 <strong>还没有成果证据</strong>
                 <p>添加链接、笔记、成绩或外部反馈，让完成状态能够被验证。</p>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={() => {
+                    setEditingEvidence(null)
+                    setEvidenceDialogOpen(true)
+                  }}
+                >
+                  <Plus size={14} />
+                  添加第一个成果
+                </button>
               </div>
             ) : (
               (evidenceQuery.data ?? []).map((evidence) => (
-                <EvidenceCard key={evidence.id} evidence={evidence} />
+                <EvidenceCard
+                  key={evidence.id}
+                  evidence={evidence}
+                  onEdit={() => {
+                    setEditingEvidence(evidence)
+                    setEvidenceDialogOpen(true)
+                  }}
+                  onDelete={() => setDeletingEvidence(evidence)}
+                />
               ))
             )}
           </div>
@@ -199,10 +233,30 @@ export function RecordsPage(): React.JSX.Element {
       />
       <EvidenceDialog
         open={evidenceDialogOpen}
-        onOpenChange={setEvidenceDialogOpen}
+        onOpenChange={(open) => {
+          setEvidenceDialogOpen(open)
+          if (!open) setEditingEvidence(null)
+        }}
+        evidence={editingEvidence}
         tasks={tasksQuery.data ?? []}
-        onCreated={async () => {
-          await queryClient.invalidateQueries({ queryKey: ['evidence'] })
+        onSaved={async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['evidence'] }),
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
+          ])
+        }}
+      />
+      <DeleteEvidenceDialog
+        evidence={deletingEvidence}
+        onOpenChange={(open) => {
+          if (!open) setDeletingEvidence(null)
+        }}
+        onDeleted={async () => {
+          setDeletingEvidence(null)
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['evidence'] }),
+            queryClient.invalidateQueries({ queryKey: ['trash'] })
+          ])
         }}
       />
       <CorrectEffortDialog
@@ -261,7 +315,15 @@ function CorrectEffortDialog({
   return <Dialog.Root open={effort !== null} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">原值永久保留在修改历史</span><Dialog.Title>更正努力时间</Dialog.Title><Dialog.Description>{effort?.entityTitle}</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><div className="form-row"><label><span>开始时间</span><input type="datetime-local" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} /></label><label><span>结束时间</span><input type="datetime-local" value={endedAt} onChange={(event) => setEndedAt(event.target.value)} /></label></div><label><span>有效分钟</span><input type="number" min="0" value={minutes} onChange={(event) => setMinutes(event.target.value)} /></label><label><span>更正原因（必填）</span><textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>{(historyQuery.data ?? []).length > 0 && <div className="effort-history"><strong><History size={12} />修改历史</strong>{(historyQuery.data ?? []).map((revision) => <span key={revision.id}>{new Date(revision.occurredAt).toLocaleString('zh-CN')} · {revision.before.effectiveMinutes} → {revision.after.effectiveMinutes} 分钟 · {revision.reason}</span>)}</div>}{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!startedAt || !endedAt || !reason.trim()} onClick={() => void submit()}>保存更正</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function EvidenceCard({ evidence }: { evidence: Evidence }): React.JSX.Element {
+function EvidenceCard({
+  evidence,
+  onEdit,
+  onDelete
+}: {
+  evidence: Evidence
+  onEdit: () => void
+  onDelete: () => void
+}): React.JSX.Element {
   const icon =
     evidence.kind === 'link' ? (
       <Link2 size={17} />
@@ -281,15 +343,34 @@ function EvidenceCard({ evidence }: { evidence: Evidence }): React.JSX.Element {
     <article className="evidence-card">
       <header>
         <span>{icon}</span>
-        <small className={`evidence-status status-${evidence.verificationStatus}`}>{status}</small>
+        <div className="evidence-card-actions">
+          <small className={`evidence-status status-${evidence.verificationStatus}`}>{status}</small>
+          <button type="button" aria-label={`编辑成果：${evidence.title}`} onClick={onEdit}>
+            <Pencil size={13} />
+          </button>
+          <button
+            className="danger"
+            type="button"
+            aria-label={`删除成果：${evidence.title}`}
+            onClick={onDelete}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </header>
       <strong>{evidence.title}</strong>
       <p>{evidence.note || '没有补充说明。'}</p>
       <footer>
         <span>{formatDate(evidence.createdAt)}</span>
-        {evidence.source && (
+        {evidence.attachmentCount > 0 && (
+          <span className="evidence-attachment-count">
+            <Paperclip size={11} />
+            {evidence.attachmentCount} 个附件
+          </span>
+        )}
+        {(evidence.attachmentCount > 0 || evidence.source) && (
           <button type="button" onClick={() => void window.youtrace.data.openEvidence(evidence.id)}>
-            查看来源
+            {evidence.attachmentCount > 0 ? '查看附件' : '查看来源'}
             <ExternalLink size={11} />
           </button>
         )}
@@ -392,68 +473,123 @@ function ManualEffortDialog({
 function EvidenceDialog({
   open,
   onOpenChange,
+  evidence,
   tasks,
-  onCreated
+  onSaved
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  evidence: Evidence | null
   tasks: Task[]
-  onCreated: () => Promise<void>
+  onSaved: () => Promise<void>
 }): React.JSX.Element {
-  const [kind, setKind] = useState<
-    'file' | 'image' | 'note' | 'link' | 'score' | 'feedback'
-  >('note')
+  const [kind, setKind] = useState<Evidence['kind']>('note')
   const [taskId, setTaskId] = useState('')
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [source, setSource] = useState('')
+  const [verificationStatus, setVerificationStatus] =
+    useState<Evidence['verificationStatus']>('prepared')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [fileDragging, setFileDragging] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const attachmentsQuery = useQuery({
+    queryKey: ['evidence-attachments', evidence?.id],
+    enabled: open && evidence !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.data.listEvidenceAttachments(evidence!.id))
+  })
+
+  useEffect(() => {
+    if (!open) return
+    setKind(evidence?.kind ?? 'note')
+    setTaskId(evidence?.entityType === 'task' ? evidence.entityId ?? '' : '')
+    setTitle(evidence?.title ?? '')
+    setNote(evidence?.note ?? '')
+    setSource(evidence?.source ?? '')
+    setVerificationStatus(evidence?.verificationStatus ?? 'prepared')
+    setSelectedFile(null)
+    setFileDragging(false)
+    setError('')
+  }, [evidence, open])
+
+  const isLocalFile = kind === 'file' || kind === 'image'
 
   const submit = async (): Promise<void> => {
+    if (isLocalFile && !evidence?.attachmentCount && !selectedFile) {
+      setError('本地文件和图片成果至少需要一个附件。')
+      return
+    }
     setBusy(true)
     setError('')
-    const isLocalFile = kind === 'file' || kind === 'image'
-    const response = isLocalFile
-      ? selectedFile
-        ? await window.youtrace.data.importDroppedEvidenceFile(selectedFile, {
+    if (evidence) {
+      const update = await window.youtrace.execution.updateEvidence({
+        id: evidence.id,
+        title,
+        note,
+        source: isLocalFile ? evidence.source : source || null,
+        verificationStatus,
+        entityType: taskId ? 'task' : null,
+        entityId: taskId || null,
+        tagIds: evidence.tagIds
+      })
+      if (!update.ok) {
+        setBusy(false)
+        setError(update.error.message)
+        return
+      }
+      if (selectedFile) {
+        const attachment = await window.youtrace.data.attachDroppedEvidenceFile(
+          selectedFile,
+          evidence.id
+        )
+        if (!attachment.ok) {
+          await onSaved()
+          setBusy(false)
+          setError(`成果内容已保存，但附件添加失败：${attachment.error.message}`)
+          return
+        }
+      }
+    } else if (selectedFile) {
+      const response = await window.youtrace.data.importDroppedEvidenceFile(selectedFile, {
           kind,
           title,
           note,
-          verificationStatus: 'prepared',
+          source: isLocalFile ? null : source || null,
+          verificationStatus,
           entityType: taskId ? 'task' : null,
           entityId: taskId || null,
           tagIds: []
         })
-        : null
-      : await window.youtrace.execution.createEvidence({
+      if (!response.ok) {
+        setBusy(false)
+        setError(response.error.message)
+        return
+      }
+    } else {
+      const response = await window.youtrace.execution.createEvidence({
           kind,
           title,
           note,
           source: source || null,
-          verificationStatus: 'prepared',
+          verificationStatus,
           entityType: taskId ? 'task' : null,
           entityId: taskId || null,
           tagIds: []
-    })
+        })
+      if (!response.ok) {
+        setBusy(false)
+        setError(response.error.message)
+        return
+      }
+    }
+    await onSaved()
     setBusy(false)
-    if (response === null) {
-      setError('请先点击选择文件，或将文件拖到上传区域。')
-      return
-    }
-    if (!response.ok) {
-      setError(response.error.message)
-      return
-    }
-    await onCreated()
-    setTitle('')
-    setNote('')
-    setSource('')
-    setSelectedFile(null)
     onOpenChange(false)
   }
+
+  const attachments = (attachmentsQuery.data ?? []) as EvidenceAttachment[]
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -463,8 +599,10 @@ function EvidenceDialog({
           <div className="dialog-heading">
             <div>
               <span className="section-label">完成不等于验证</span>
-              <Dialog.Title>添加成果证据</Dialog.Title>
-              <Dialog.Description>证据状态需要明确操作才能升级。</Dialog.Description>
+              <Dialog.Title>{evidence ? '编辑成果证据' : '添加成果证据'}</Dialog.Title>
+              <Dialog.Description>
+                所有证据类型都能附带真实文件，文件会复制到当前工作区。
+              </Dialog.Description>
             </div>
             <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
           </div>
@@ -472,10 +610,14 @@ function EvidenceDialog({
             <div className="form-row">
               <label>
                 <span>证据类型</span>
-                <select value={kind} onChange={(event) => {
-                  setKind(event.target.value as typeof kind)
-                  setSelectedFile(null)
-                }}>
+                <select
+                  value={kind}
+                  disabled={evidence !== null}
+                  onChange={(event) => {
+                    setKind(event.target.value as Evidence['kind'])
+                    setSelectedFile(null)
+                  }}
+                >
                   <option value="file">本地文件</option>
                   <option value="image">图片</option>
                   <option value="note">文本笔记</option>
@@ -494,60 +636,195 @@ function EvidenceDialog({
             </div>
             <label><span>标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
             <label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>
-            {kind === 'file' || kind === 'image' ? (
-              <div
-                className={`attachment-dropzone evidence-attachment-dropzone ${fileDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
-                onDragEnter={(event) => {
-                  event.preventDefault()
-                  setFileDragging(true)
-                }}
-                onDragOver={(event) => event.preventDefault()}
-                onDragLeave={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                    setFileDragging(false)
-                  }
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  setFileDragging(false)
-                  setSelectedFile(event.dataTransfer.files[0] ?? null)
-                }}
-              >
-                <label>
-                  <input
-                    className="visually-hidden"
-                    aria-label="选择成果附件"
-                    type="file"
-                    accept={kind === 'image' ? 'image/*' : undefined}
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                  />
-                  <Paperclip size={17} />
-                  <span>
-                    <strong>{selectedFile ? selectedFile.name : '点击选择文件，或将文件拖到这里'}</strong>
-                    <small>应用会校验哈希，并复制一份到当前工作区。</small>
-                  </span>
-                </label>
-                {selectedFile && (
-                  <button type="button" aria-label="移除待上传成果附件" onClick={() => setSelectedFile(null)}>
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-            ) : (
+            {kind !== 'file' && kind !== 'image' && (
               <label><span>来源或链接</span><input value={source} onChange={(event) => setSource(event.target.value)} /></label>
             )}
+            <label>
+              <span>验证状态</span>
+              <select
+                value={verificationStatus}
+                onChange={(event) =>
+                  setVerificationStatus(event.target.value as Evidence['verificationStatus'])
+                }
+              >
+                <option value="prepared">已准备</option>
+                <option value="completed">已完成</option>
+                <option value="verified">已验证</option>
+                <option value="accepted">已认可</option>
+              </select>
+            </label>
+            {attachments.length > 0 && (
+              <div className="evidence-attachment-list">
+                <span>已有附件</span>
+                {attachments.map((attachment) => (
+                  <button
+                    key={attachment.id}
+                    type="button"
+                    onClick={() => {
+                      void (async () => {
+                        const result =
+                          await window.youtrace.data.openEvidenceAttachment(attachment.id)
+                        if (!result.ok) setError(result.error.message)
+                      })()
+                    }}
+                  >
+                    <Paperclip size={13} />
+                    <span>{attachment.originalName}</span>
+                    <small>{formatBytes(attachment.sizeBytes)}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            {attachmentsQuery.isError && (
+              <div className="inline-error" role="alert">
+                无法读取已有附件。
+                <button type="button" onClick={() => void attachmentsQuery.refetch()}>
+                  重试
+                </button>
+              </div>
+            )}
+            <div
+              className={`attachment-dropzone evidence-attachment-dropzone ${fileDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+              onDragEnter={(event) => {
+                event.preventDefault()
+                setFileDragging(true)
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setFileDragging(false)
+                }
+              }}
+              onDrop={(event) => {
+                event.preventDefault()
+                setFileDragging(false)
+                setSelectedFile(event.dataTransfer.files[0] ?? null)
+              }}
+            >
+              <label>
+                <input
+                  className="visually-hidden"
+                  aria-label="选择成果附件"
+                  type="file"
+                  accept={kind === 'image' ? 'image/*' : undefined}
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                />
+                <Paperclip size={17} />
+                <span>
+                  <strong>
+                    {selectedFile
+                      ? selectedFile.name
+                      : evidence
+                        ? '点击或拖拽，为成果追加附件'
+                        : '点击选择附件，或将文件拖到这里'}
+                  </strong>
+                  <small>
+                    {isLocalFile
+                      ? '此证据类型必须有附件；应用会校验哈希并复制到工作区。'
+                      : '附件可选；应用会校验哈希并复制一份到当前工作区。'}
+                  </small>
+                </span>
+              </label>
+              {selectedFile && (
+                <button
+                  type="button"
+                  aria-label="移除待上传成果附件"
+                  onClick={() => setSelectedFile(null)}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
             {error && <div className="inline-error">{error}</div>}
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
-            <button className="button button-primary" disabled={!title.trim() || busy || ((kind === 'file' || kind === 'image') && !selectedFile)} onClick={() => void submit()}>
-              {busy ? '正在保存…' : kind === 'file' || kind === 'image' ? '上传并保存证据' : '保存证据'}
+            <button
+              className="button button-primary"
+              disabled={
+                !title.trim() ||
+                busy ||
+                (isLocalFile && !evidence?.attachmentCount && !selectedFile)
+              }
+              onClick={() => void submit()}
+            >
+              {busy ? '正在保存…' : evidence ? '保存修改' : '保存成果'}
             </button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   )
+}
+
+function DeleteEvidenceDialog({
+  evidence,
+  onOpenChange,
+  onDeleted
+}: {
+  evidence: Evidence | null
+  onOpenChange: (open: boolean) => void
+  onDeleted: () => Promise<void>
+}): React.JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (evidence) setError('')
+  }, [evidence])
+
+  const submit = async (): Promise<void> => {
+    if (!evidence) return
+    setBusy(true)
+    setError('')
+    const result = await window.youtrace.execution.trashEvidence(evidence.id)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error.message)
+      return
+    }
+    await onDeleted()
+  }
+
+  return (
+    <Dialog.Root open={evidence !== null} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content destructive-dialog">
+          <div className="dialog-heading">
+            <div>
+              <span className="section-label">可从回收站恢复</span>
+              <Dialog.Title>删除“{evidence?.title}”</Dialog.Title>
+              <Dialog.Description>
+                成果会进入回收站，附件文件不会立即清理；永久删除仍需备份与二次确认。
+              </Dialog.Description>
+            </div>
+            <Dialog.Close className="dialog-close" aria-label="关闭">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+          <div className="dialog-actions">
+            <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+            <button
+              className="button button-danger"
+              disabled={busy}
+              onClick={() => void submit()}
+            >
+              <Trash2 size={14} />
+              {busy ? '正在删除…' : '移入回收站'}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`
+  return `${Math.round((bytes / 1024 ** 2) * 10) / 10} MB`
 }
 
 function formatMinutes(minutes: number): string {

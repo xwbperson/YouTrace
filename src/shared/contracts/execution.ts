@@ -96,6 +96,17 @@ export const updateEvidenceStatusInputSchema = z.object({
   reason: z.string().max(2_000).default('')
 })
 
+export const updateEvidenceInputSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().trim().min(1).max(240),
+  note: z.string().max(20_000).default(''),
+  source: z.string().max(4_000).nullable().default(null),
+  verificationStatus: evidenceStatusSchema,
+  entityType: z.string().max(60).nullable().default(null),
+  entityId: z.string().uuid().nullable().default(null),
+  tagIds: z.array(z.string().uuid()).max(50).default([])
+})
+
 export const memoKindSchema = z.enum(['memo', 'knowledge', 'question', 'mistake', 'idea', 'meeting'])
 export const createMemoInputSchema = z.object({
   kind: memoKindSchema.default('memo'),
@@ -151,6 +162,7 @@ export interface Evidence {
   verificationStatus: z.infer<typeof evidenceStatusSchema>
   entityType: string | null
   entityId: string | null
+  attachmentCount: number
   tagIds: string[]
   createdAt: string
   updatedAt: string
@@ -206,6 +218,7 @@ export type CreateManualEffortInput = z.infer<typeof createManualEffortInputSche
 export type EffortListInput = z.infer<typeof effortListInputSchema>
 export type CorrectEffortInput = z.infer<typeof correctEffortInputSchema>
 export type CreateEvidenceInput = z.infer<typeof createEvidenceInputSchema>
+export type UpdateEvidenceInput = z.infer<typeof updateEvidenceInputSchema>
 export type UpdateEvidenceStatusInput = z.infer<typeof updateEvidenceStatusInputSchema>
 export type CreateMemoInput = z.infer<typeof createMemoInputSchema>
 export type ConvertMemoToTaskInput = z.infer<typeof convertMemoToTaskInputSchema>

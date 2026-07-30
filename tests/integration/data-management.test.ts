@@ -11,8 +11,12 @@ import {
   selectAutomaticBackupsToRetain
 } from '../../src/main/modules/data/data-service'
 import { PackageService } from '../../src/main/modules/data/package-service'
+import { ExecutionRepository } from '../../src/main/modules/execution/execution-repository'
+import { ExecutionService } from '../../src/main/modules/execution/execution-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
+import { PracticeRepository } from '../../src/main/modules/practice/practice-repository'
+import { PracticeService } from '../../src/main/modules/practice/practice-service'
 import { WorkflowRepository } from '../../src/main/modules/workflow/workflow-repository'
 import { WorkflowService } from '../../src/main/modules/workflow/workflow-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
@@ -22,14 +26,24 @@ let sourceRoot: string
 let workspaceManager: WorkspaceManager
 let planning: PlanningService
 let data: DataService
+let execution: ExecutionService
 
 beforeEach(async () => {
   fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-data-test-'))
   sourceRoot = join(fixtureRoot, 'workspace')
   workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
   await workspaceManager.create(sourceRoot, '数据安全测试')
-  planning = new PlanningService(
-    new PlanningRepository(() => workspaceManager.getDatabase())
+  const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
+  planning = new PlanningService(planningRepository)
+  const practice = new PracticeService(
+    new PracticeRepository(() => workspaceManager.getDatabase()),
+    planningRepository
+  )
+  execution = new ExecutionService(
+    new ExecutionRepository(() => workspaceManager.getDatabase()),
+    planningRepository,
+    planning,
+    practice
   )
   data = new DataService(
     workspaceManager,
@@ -75,6 +89,79 @@ function createProjectAndTask(taskTitle: string): { projectId: string; taskId: s
 }
 
 describe('workspace backup, restore and portable files', () => {
+  it('imports an optional attachment for text evidence without losing its source', async () => {
+    const sourceFile = join(fixtureRoot, 'reading-note.md')
+    await writeFile(sourceFile, '# reading note', 'utf8')
+
+    const imported = await data.importEvidenceFile(sourceFile, {
+      kind: 'note',
+      title: '带原稿的文本笔记',
+      note: '正文摘要',
+      source: 'https://example.com/source',
+      verificationStatus: 'prepared',
+      entityType: null,
+      entityId: null,
+      tagIds: []
+    })
+
+    expect(imported.evidence).toMatchObject({
+      kind: 'note',
+      source: 'https://example.com/source',
+      attachmentCount: 1
+    })
+    expect(data.listEvidenceAttachments(imported.evidence.id)).toEqual([
+      expect.objectContaining({ originalName: 'reading-note.md' })
+    ])
+    expect(data.getEvidenceAttachmentOpenTarget(imported.attachment.id)).toBe(
+      join(sourceRoot, imported.attachment.relativePath)
+    )
+  })
+
+  it('attaches a workspace file to text evidence and restores both from the trash', async () => {
+    const evidence = execution.createEvidence({
+      kind: 'note',
+      title: '带附件的文本成果',
+      note: '正文和原始文件共同构成成果',
+      source: null,
+      verificationStatus: 'completed',
+      entityType: null,
+      entityId: null,
+      tagIds: []
+    })
+    const sourceFile = join(fixtureRoot, 'experiment-output.txt')
+    await writeFile(sourceFile, 'experiment output bytes', 'utf8')
+
+    const attachment = await data.attachEvidenceFile(sourceFile, evidence.id)
+
+    expect(attachment).toMatchObject({
+      originalName: 'experiment-output.txt',
+      reused: false
+    })
+    expect(data.listEvidenceAttachments(evidence.id)).toEqual([
+      expect.objectContaining({
+        id: attachment.id,
+        originalName: 'experiment-output.txt'
+      })
+    ])
+
+    execution.trashEvidence(evidence.id)
+    const trash = data.listTrash().find((item) => item.entityId === evidence.id)!
+    expect(trash).toMatchObject({
+      entityType: 'evidence',
+      title: '带附件的文本成果',
+      attachmentCount: 1
+    })
+
+    data.restoreTrash(trash.id)
+
+    expect(execution.listEvidence(null, null)).toContainEqual(
+      expect.objectContaining({ id: evidence.id, title: '带附件的文本成果' })
+    )
+    expect(
+      await readFile(join(sourceRoot, attachment.relativePath), 'utf8')
+    ).toBe('experiment output bytes')
+  })
+
   it('round-trips a WAL database and evidence file without mixing later writes', async () => {
     const first = createProjectAndTask('备份时间点任务')
     const sourceFile = join(fixtureRoot, 'evidence.txt')

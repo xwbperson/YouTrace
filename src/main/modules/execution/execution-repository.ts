@@ -46,6 +46,7 @@ interface EvidenceRow {
   verification_status: Evidence['verificationStatus']
   entity_type: string | null
   entity_id: string | null
+  attachment_count: number
   tag_ids: string | null
   created_at: string
   updated_at: string
@@ -455,6 +456,79 @@ export class ExecutionRepository {
     return result.changes > 0
   }
 
+  updateEvidence(
+    id: string,
+    input: {
+      title: string
+      note: string
+      source: string | null
+      verificationStatus: Evidence['verificationStatus']
+      entityType: string | null
+      entityId: string | null
+      tagIds: string[]
+    },
+    now: string
+  ): boolean {
+    const database = this.database()
+    const before = this.getEvidence(id)
+    if (!before) return false
+    return database.transaction(() => {
+      const result = database
+        .prepare(
+          `UPDATE evidence
+              SET title = ?, note = ?, source = ?, verification_status = ?, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`
+        )
+        .run(
+          input.title,
+          input.note,
+          input.source,
+          input.verificationStatus,
+          now,
+          id
+        )
+      if (result.changes === 0) return false
+      database.prepare('DELETE FROM entity_evidence WHERE evidence_id = ?').run(id)
+      if (input.entityType && input.entityId) {
+        database
+          .prepare(
+            `INSERT INTO entity_evidence(evidence_id, entity_type, entity_id, created_at)
+             VALUES (?, ?, ?, ?)`
+          )
+          .run(id, input.entityType, input.entityId, now)
+      }
+      this.replaceTags(database, 'evidence', id, input.tagIds, now)
+      this.upsertSearch(database, 'evidence', id, input.title, input.note)
+      this.insertAudit(database, 'evidence', id, 'updated', before, input, now)
+      return true
+    })()
+  }
+
+  trashEvidence(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const before = this.getEvidence(id)
+      if (!before) return false
+      const result = database
+        .prepare(
+          'UPDATE evidence SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL'
+        )
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare(
+          `INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at)
+           VALUES (?, 'evidence', ?, ?)`
+        )
+        .run(crypto.randomUUID(), id, now)
+      database
+        .prepare("DELETE FROM searchable_content WHERE entity_type = 'evidence' AND entity_id = ?")
+        .run(id)
+      this.insertAudit(database, 'evidence', id, 'trashed', before, null, now)
+      return true
+    })()
+  }
+
   insertMemo(id: string, input: CreateMemoInput, now: string): void {
     const database = this.database()
     const transaction = database.transaction(() => {
@@ -609,6 +683,10 @@ export class ExecutionRepository {
       .prepare(
         `SELECT e.id, e.kind, e.title, e.note, e.source, e.verification_status,
                 ee.entity_type, ee.entity_id, e.created_at, e.updated_at,
+                (
+                  SELECT COUNT(*) FROM entity_attachments ea
+                   WHERE ea.entity_type = 'evidence' AND ea.entity_id = e.id
+                ) AS attachment_count,
                 GROUP_CONCAT(DISTINCT ta.tag_id) AS tag_ids
            FROM evidence e
            LEFT JOIN entity_evidence ee ON ee.evidence_id = e.id
@@ -756,6 +834,7 @@ function mapEvidence(row: EvidenceRow): Evidence {
     verificationStatus: row.verification_status,
     entityType: row.entity_type,
     entityId: row.entity_id,
+    attachmentCount: row.attachment_count,
     tagIds: row.tag_ids ? row.tag_ids.split(',') : [],
     createdAt: row.created_at,
     updatedAt: row.updated_at

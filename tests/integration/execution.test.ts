@@ -333,6 +333,44 @@ describe('execution and evidence application service', () => {
     )
   })
 
+  it('updates evidence details and hides it after moving it to the trash', () => {
+    const evidence = execution.createEvidence({
+      kind: 'note',
+      title: '第一版实验结论',
+      note: '数据尚未复核',
+      source: 'https://example.com/draft',
+      verificationStatus: 'prepared',
+      entityType: null,
+      entityId: null,
+      tagIds: []
+    })
+
+    const updated = execution.updateEvidence({
+      id: evidence.id,
+      title: '复核后的实验结论',
+      note: '已经按固定环境重新运行',
+      source: 'https://example.com/verified',
+      verificationStatus: 'verified',
+      entityType: null,
+      entityId: null,
+      tagIds: []
+    })
+
+    expect(updated).toMatchObject({
+      id: evidence.id,
+      title: '复核后的实验结论',
+      note: '已经按固定环境重新运行',
+      source: 'https://example.com/verified',
+      verificationStatus: 'verified'
+    })
+
+    execution.trashEvidence(evidence.id)
+
+    expect(execution.listEvidence(null, null)).not.toContainEqual(
+      expect.objectContaining({ id: evidence.id })
+    )
+  })
+
   it('permanently deletes only an archived memo while preserving its converted task', () => {
     const memo = execution.createMemo({
       kind: 'idea',
