@@ -14,11 +14,17 @@
   --time: #b95d1b;
   --time-soft: #f7e7d9;
   --border: #d8e1de;
+  --border-strong: #b9c8c3;
   --danger: #b63e3e;
   --danger-soft: #fae8e8;
   --titlebar: #eaf0ee;
   --shadow-popover: 0 18px 46px rgb(25 45 39 / 14%);
   --user-font-scale: 1;
+  --text-xs: max(12px, calc(13px * var(--user-font-scale)));
+  --text-sm: max(13px, calc(14px * var(--user-font-scale)));
+  --text-md: max(14px, calc(15px * var(--user-font-scale)));
+  --text-base: max(15px, calc(16px * var(--user-font-scale)));
+  --text-body: max(15px, calc(16px * var(--user-font-scale)));
   font-family:
     "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, -apple-system, sans-serif;
   font-synthesis: none;
@@ -39,6 +45,7 @@
   --time: #f1a85a;
   --time-soft: #3b2c1e;
   --border: #2b3834;
+  --border-strong: #485c55;
   --danger: #ff8585;
   --danger-soft: #402525;
   --titlebar: #141b19;
@@ -59,6 +66,7 @@
   --time: #b95d1b;
   --time-soft: #f7e7d9;
   --border: #d8e1de;
+  --border-strong: #b9c8c3;
   --danger: #b63e3e;
   --danger-soft: #fae8e8;
   --titlebar: #eaf0ee;
@@ -80,6 +88,7 @@
     --time: #f1a85a;
     --time-soft: #3b2c1e;
     --border: #2b3834;
+    --border-strong: #485c55;
     --danger: #ff8585;
     --danger-soft: #402525;
     --titlebar: #141b19;
@@ -103,7 +112,9 @@ body,
 body {
   color: var(--ink);
   background: var(--canvas);
-  font-size: calc(14px * var(--user-font-scale));
+  font-size: var(--text-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 :root[data-density="comfortable"] .panel {
@@ -118,6 +129,21 @@ select {
   font: inherit;
 }
 
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]),
+textarea,
+select {
+  min-height: 36px;
+  padding: 7px 10px;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: var(--text-base);
+}
+
+textarea {
+  line-height: 1.5;
+}
+
 button {
   border: 0;
 }
@@ -129,9 +155,18 @@ input {
 
 button:focus-visible,
 input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--trace);
   outline-offset: 2px;
+}
+
+input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--trace);
+  box-shadow: 0 0 0 3px var(--trace-soft);
 }
 
 button:disabled {
@@ -270,7 +305,7 @@ button:disabled {
 
 .titlebar-product {
   font-family: "Segoe UI Variable Display", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 650;
   letter-spacing: 0.06em;
 }
@@ -286,7 +321,7 @@ button:disabled {
   overflow: hidden;
   max-width: 260px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -363,7 +398,7 @@ button:disabled {
 .setup-step,
 .sidebar-label {
   color: var(--trace);
-  font-size: 11px;
+  font-size: var(--text-md);
   font-weight: 720;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -403,7 +438,7 @@ button:disabled {
 
 .fatal-screen h1 {
   margin: 10px 0 8px;
-  font-size: 26px;
+  font-size: calc(26px * var(--user-font-scale));
 }
 
 .fatal-screen p {
@@ -440,7 +475,7 @@ button:disabled {
   align-items: center;
   gap: 11px;
   font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
-  font-size: 15px;
+  font-size: var(--text-base);
   font-weight: 680;
   letter-spacing: 0.04em;
 }
@@ -475,7 +510,7 @@ button:disabled {
   max-width: 570px;
   margin: 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: var(--text-base);
   line-height: 1.8;
 }
 
@@ -515,7 +550,7 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 50%;
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .trace-preview-item > span.active {
@@ -528,13 +563,13 @@ button:disabled {
 .trace-preview-item strong {
   display: block;
   margin-bottom: 4px;
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .trace-preview-item small {
   display: block;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .workspace-setup {
@@ -550,7 +585,7 @@ button:disabled {
 .setup-header h2 {
   margin: 9px 0 9px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 30px;
+  font-size: calc(30px * var(--user-font-scale));
   font-weight: 650;
   letter-spacing: -0.03em;
 }
@@ -599,7 +634,7 @@ button:disabled {
 .setup-form label > span,
 .field-label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
   font-weight: 620;
 }
 
@@ -658,13 +693,13 @@ button:disabled {
 
 .folder-picker-copy strong {
   margin-bottom: 5px;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 620;
 }
 
 .folder-picker-copy small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .inline-error {
@@ -675,7 +710,7 @@ button:disabled {
   color: var(--danger);
   background: var(--danger-soft);
   border-radius: 8px;
-  font-size: 12px;
+  font-size: var(--text-md);
   line-height: 1.5;
 }
 
@@ -694,7 +729,7 @@ button:disabled {
   margin-top: 23px;
   gap: 22px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .readonly-workspace-option {
@@ -716,7 +751,7 @@ button:disabled {
 .readonly-workspace-option small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .workspace-promises div {
@@ -785,13 +820,13 @@ button:disabled {
 
 .workspace-switcher strong {
   margin-bottom: 2px;
-  font-size: 12px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 
 .workspace-switcher small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .primary-navigation,
@@ -835,7 +870,7 @@ button:disabled {
 .primary-navigation button small {
   margin-left: auto;
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .sidebar-section {
@@ -845,7 +880,7 @@ button:disabled {
 .sidebar-label {
   margin: 0 10px 7px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .sidebar-footer {
@@ -872,7 +907,7 @@ button:disabled {
 
 .storage-indicator small {
   overflow: hidden;
-  font-size: 10px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -896,7 +931,7 @@ button:disabled {
 .global-toolbar h1 {
   margin: 6px 0 0;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 25px;
+  font-size: calc(25px * var(--user-font-scale));
   font-weight: 620;
   letter-spacing: -0.025em;
 }
@@ -936,7 +971,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 4px;
   font-family: "Segoe UI", sans-serif;
-  font-size: 9px;
+  font-size: var(--text-sm);
   box-shadow: 0 1px 0 var(--border);
 }
 
@@ -975,7 +1010,7 @@ kbd {
 .panel-heading h2 {
   margin: 5px 0 0;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 17px;
+  font-size: calc(17px * var(--user-font-scale));
   font-weight: 650;
   letter-spacing: -0.012em;
 }
@@ -992,7 +1027,7 @@ kbd {
 .text-action {
   gap: 3px;
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .text-action:hover {
@@ -1053,13 +1088,13 @@ kbd {
 
 .empty-focus strong {
   margin-bottom: 5px;
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .empty-focus p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .capacity-line {
@@ -1069,7 +1104,7 @@ kbd {
   gap: 12px;
   margin-top: 17px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .capacity-line > span {
@@ -1113,14 +1148,14 @@ kbd {
 .countdown-number {
   color: var(--time);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 38px;
+  font-size: calc(38px * var(--user-font-scale));
   font-weight: 500;
 }
 
 .countdown-empty p {
   margin: 5px 0 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
   line-height: 1.6;
 }
 
@@ -1189,17 +1224,17 @@ kbd {
 .trace-copy small {
   margin-bottom: 3px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .trace-copy strong {
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .trace-copy p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1231,12 +1266,12 @@ kbd {
 
 .timer-button strong {
   margin-top: 3px;
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .timer-button small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .weekly-panel {
@@ -1247,7 +1282,7 @@ kbd {
 .weekly-total {
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 22px;
+  font-size: calc(22px * var(--user-font-scale));
   font-weight: 500;
 }
 
@@ -1278,7 +1313,7 @@ kbd {
 
 .weekly-bars small {
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .inbox-panel {
@@ -1311,7 +1346,7 @@ kbd {
   max-width: 300px;
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.5;
 }
 
@@ -1347,14 +1382,14 @@ kbd {
 .settings-toolbar h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .settings-toolbar p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .settings-section {
@@ -1382,13 +1417,13 @@ kbd {
 
 .settings-section > header h2 {
   margin: 1px 0 3px;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 
 .settings-section > header p {
   margin: 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .workspace-setting-card {
@@ -1419,7 +1454,7 @@ kbd {
 }
 
 .workspace-setting-card strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .workspace-setting-card small {
@@ -1427,14 +1462,14 @@ kbd {
   margin: 4px 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .workspace-setting-card em {
   color: var(--trace);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -1444,11 +1479,80 @@ kbd {
   gap: 7px;
   margin-top: 10px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .settings-note svg {
   color: var(--trace);
+}
+
+.preference-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  padding-top: 16px;
+}
+
+.preference-grid label,
+.difficulty-settings label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.preference-grid label > span,
+.difficulty-settings label > span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.preference-grid input,
+.preference-grid select,
+.difficulty-settings input {
+  width: 100%;
+  min-width: 0;
+}
+
+.working-days {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.working-days > span {
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.working-days button {
+  display: inline-grid;
+  min-width: 36px;
+  min-height: 36px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.working-days button.active {
+  border-color: var(--trace);
+  background: var(--trace-soft);
+  color: var(--trace);
+  font-weight: 700;
+}
+
+.difficulty-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
 }
 
 .settings-grid {
@@ -1475,13 +1579,13 @@ kbd {
 }
 
 .toggle-setting strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .toggle-setting small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .toggle-setting input {
@@ -1541,7 +1645,7 @@ kbd {
   align-items: center;
   gap: 6px;
   align-self: center;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
@@ -1552,23 +1656,23 @@ kbd {
 
 .quiet-hours label span {
   color: var(--muted);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .quiet-hours input {
   height: 34px;
   padding: 0 8px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: var(--text-base);
 }
 
 .quiet-hours p {
   margin: 0;
   align-self: center;
   color: var(--muted);
-  font-size: 7px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
@@ -1600,7 +1704,7 @@ kbd {
 .muted-tags-setting > span {
   gap: 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .muted-tags-setting > div {
@@ -1611,16 +1715,16 @@ kbd {
 .muted-tags-setting button {
   gap: 5px;
   padding: 5px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
 }
 
 .muted-tags-setting button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
+  border-color: var(--trace);
+  background: var(--trace-soft);
+  color: var(--trace);
 }
 
 .muted-tags-setting i {
@@ -1634,7 +1738,7 @@ kbd {
   align-items: center;
   gap: 4px;
   padding: 4px 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
   background: var(--surface);
   color: var(--muted);
@@ -1642,7 +1746,7 @@ kbd {
 
 .upcoming-reminders h3 {
   margin: 0 0 7px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .upcoming-reminders article {
@@ -1657,12 +1761,12 @@ kbd {
 
 .upcoming-reminders strong {
   color: var(--ink);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .upcoming-reminders span {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .data-page {
@@ -1679,14 +1783,14 @@ kbd {
 .data-toolbar h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .data-toolbar p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .data-tabs {
@@ -1710,7 +1814,7 @@ kbd {
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -1726,7 +1830,7 @@ kbd {
   place-items: center;
   background: var(--surface);
   border-radius: 999px;
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .data-safety-grid {
@@ -1764,14 +1868,14 @@ kbd {
 .backup-panel h2,
 .trash-panel h2 {
   margin: 2px 0 3px;
-  font-size: 14px;
+  font-size: var(--text-base);
 }
 
 .data-actions-panel header p,
 .trash-panel header p {
   margin: 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .data-operation {
@@ -1798,13 +1902,13 @@ kbd {
 }
 
 .data-operation strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .data-operation small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .backup-panel > header {
@@ -1813,7 +1917,7 @@ kbd {
 
 .backup-panel > header > strong {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 17px;
+  font-size: calc(17px * var(--user-font-scale));
 }
 
 .workspace-check {
@@ -1838,12 +1942,12 @@ kbd {
 }
 
 .workspace-check strong {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .workspace-check span {
   margin-top: 3px;
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .backup-list {
@@ -1882,18 +1986,18 @@ kbd {
 }
 
 .backup-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .backup-list small {
   margin-top: 3px;
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .backup-list em {
   color: var(--trace);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -1913,11 +2017,11 @@ kbd {
 
 .backup-empty strong {
   color: var(--ink);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .backup-empty p {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .backup-panel > footer {
@@ -1948,11 +2052,11 @@ kbd {
 
 .trash-empty strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .trash-empty p {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .trash-list article {
@@ -1982,19 +2086,19 @@ kbd {
 }
 
 .trash-list strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .trash-list small {
   margin-top: 3px;
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .trash-list em {
   margin-top: 4px;
   color: var(--time);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -2002,14 +2106,14 @@ kbd {
   display: grid;
   gap: 3px;
   color: var(--muted);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .trash-purge {
   color: var(--danger);
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .data-feedback {
@@ -2027,7 +2131,7 @@ kbd {
   border: 1px solid var(--trace);
   border-radius: 7px;
   box-shadow: var(--shadow-popover);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .data-feedback.error {
@@ -2074,7 +2178,7 @@ kbd {
 .templates-toolbar h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
@@ -2082,7 +2186,7 @@ kbd {
 .templates-toolbar p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .review-empty {
@@ -2099,14 +2203,14 @@ kbd {
 }
 
 .review-empty > strong {
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .review-empty > p {
   max-width: 370px;
   margin: 7px 0 17px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .reviews-layout {
@@ -2138,17 +2242,17 @@ kbd {
 
 .review-rail button > span {
   color: var(--trace);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .review-rail button > strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .review-rail button > small {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .review-rail button > em {
@@ -2158,7 +2262,7 @@ kbd {
   width: max-content;
   margin-top: 3px;
   color: var(--trace);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -2175,7 +2279,7 @@ kbd {
 
 .review-workspace > header h2 {
   margin: 5px 0 0;
-  font-size: 20px;
+  font-size: calc(20px * var(--user-font-scale));
 }
 
 .review-status {
@@ -2183,7 +2287,7 @@ kbd {
   color: var(--time);
   background: var(--time-soft);
   border-radius: 999px;
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -2217,12 +2321,12 @@ kbd {
 
 .snapshot-metrics span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .snapshot-metrics strong {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .snapshot-section,
@@ -2242,13 +2346,13 @@ kbd {
 }
 
 .review-section-heading span {
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
 .review-section-heading small {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .snapshot-list {
@@ -2281,19 +2385,19 @@ kbd {
 
 .snapshot-list strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .snapshot-list small {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .snapshot-list > p {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .review-editor {
@@ -2312,7 +2416,7 @@ kbd {
 .adjustment-form label > span,
 .template-preview > label > span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 
@@ -2321,9 +2425,9 @@ kbd {
   padding: 9px;
   resize: vertical;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-base);
 }
 
 .adjustment-form {
@@ -2340,14 +2444,14 @@ kbd {
   max-height: 150px;
   padding: 10px 12px;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 9px;
 }
 
 .review-task-selection legend {
   padding: 0 5px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .review-task-selection label {
@@ -2366,9 +2470,9 @@ kbd {
   height: 34px;
   padding: 0 8px;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: var(--text-base);
 }
 
 .adjustment-reason {
@@ -2391,7 +2495,7 @@ kbd {
   background: var(--trace-soft);
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 
@@ -2462,24 +2566,24 @@ kbd {
 
 .template-gallery small {
   color: var(--trace);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .template-gallery strong {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .template-gallery p {
   margin: 4px 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.4;
 }
 
 .template-gallery em {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -2508,11 +2612,11 @@ kbd {
 
 .preview-empty strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .preview-empty p {
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .template-preview > header {
@@ -2525,7 +2629,7 @@ kbd {
 
 .template-preview > header h2 {
   margin: 5px 0 0;
-  font-size: 19px;
+  font-size: calc(19px * var(--user-font-scale));
 }
 
 .template-preview > header > span {
@@ -2534,7 +2638,7 @@ kbd {
   background: var(--trace-soft);
   border-radius: 5px;
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .template-preview > label {
@@ -2547,9 +2651,9 @@ kbd {
   height: 36px;
   padding: 0 9px;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-base);
 }
 
 .preview-structure {
@@ -2573,16 +2677,16 @@ kbd {
 .preview-structure article > header > span {
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-structure article > header strong {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .preview-structure article > header small {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .preview-structure article > div {
@@ -2596,13 +2700,13 @@ kbd {
   padding: 5px 7px;
   background: var(--canvas);
   border-radius: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .preview-structure article > div small {
   margin-left: 5px;
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .template-preview > footer {
@@ -2614,7 +2718,7 @@ kbd {
 
 .template-preview > footer > span {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .template-success {
@@ -2626,7 +2730,7 @@ kbd {
   color: var(--trace);
   background: var(--trace-soft);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 @media (max-width: 1180px) {
@@ -2656,14 +2760,14 @@ kbd {
 .calendar-toolbar h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .calendar-toolbar p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .calendar-tabs {
@@ -2684,7 +2788,7 @@ kbd {
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -2729,13 +2833,13 @@ kbd {
 }
 
 .week-calendar > header strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .week-calendar > header span {
   margin-top: 3px;
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .week-grid {
@@ -2830,7 +2934,7 @@ kbd {
 .calendar-day > header span,
 .calendar-day > header small {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .calendar-day > header strong {
@@ -2840,7 +2944,7 @@ kbd {
   place-items: center;
   border-radius: 50%;
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .calendar-day.today > header strong {
@@ -2883,12 +2987,12 @@ kbd {
 .day-blocks article > span,
 .day-blocks article > small {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .day-blocks article > strong {
   overflow: hidden;
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2906,7 +3010,7 @@ kbd {
   color: var(--faint);
   border: 1px dashed var(--border);
   border-radius: 5px;
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .calendar-warning {
@@ -2918,7 +3022,7 @@ kbd {
   color: var(--time);
   background: var(--time-soft);
   border-top: 1px solid color-mix(in srgb, var(--time) 20%, transparent);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .plan-board,
@@ -2939,25 +3043,25 @@ kbd {
 
 .plan-card > header span {
   color: var(--trace);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
 .plan-card h2 {
   margin: 4px 0 0;
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .plan-card > header > strong {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 500;
 }
 
 .plan-card > p {
   margin: 13px 0 10px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .plan-capacity {
@@ -2983,7 +3087,7 @@ kbd {
   gap: 18px;
   margin-top: 8px;
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .plan-card > footer strong {
@@ -3011,7 +3115,7 @@ kbd {
   padding: 5px 7px;
   background: var(--canvas);
   border-radius: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .plan-task-picker {
@@ -3027,7 +3131,7 @@ kbd {
 .plan-task-picker legend {
   padding: 0 4px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .plan-task-picker button {
@@ -3041,7 +3145,7 @@ kbd {
   border: 1px solid transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .plan-task-picker button.active {
@@ -3052,7 +3156,7 @@ kbd {
 
 .plan-task-picker button span {
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .countdown-board {
@@ -3073,7 +3177,7 @@ kbd {
 
 .countdown-board > header h2 {
   margin: 5px 0 0;
-  font-size: 20px;
+  font-size: calc(20px * var(--user-font-scale));
 }
 
 .countdown-list {
@@ -3105,7 +3209,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   color: var(--trace);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -3127,18 +3231,18 @@ kbd {
 
 .countdown-days strong {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 30px;
+  font-size: calc(30px * var(--user-font-scale));
   line-height: 1;
 }
 
 .countdown-days span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .countdown-card h3 {
   margin: 7px 0 13px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .countdown-facts {
@@ -3151,7 +3255,7 @@ kbd {
   align-items: center;
   gap: 5px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .countdown-card > p {
@@ -3159,7 +3263,7 @@ kbd {
   padding-top: 9px;
   color: var(--faint);
   border-top: 1px solid var(--border);
-  font-size: 8px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
@@ -3177,14 +3281,14 @@ kbd {
 }
 
 .calendar-empty > strong {
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .calendar-empty > p {
   max-width: 370px;
   margin: 7px 0 16px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -3216,7 +3320,7 @@ kbd {
 }
 
 .home-countdown-list .countdown-card.compact .countdown-days strong {
-  font-size: 22px;
+  font-size: calc(22px * var(--user-font-scale));
 }
 
 .home-countdown-list .countdown-card.compact .countdown-days span {
@@ -3287,7 +3391,7 @@ kbd {
 .planning-toolbar h1 {
   margin: 4px 0 2px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
   letter-spacing: -0.025em;
 }
@@ -3295,7 +3399,7 @@ kbd {
 .planning-toolbar p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .planning-layout {
@@ -3315,7 +3419,7 @@ kbd {
   justify-content: space-between;
   padding: 4px 7px 12px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
   font-weight: 650;
 }
 
@@ -3335,7 +3439,7 @@ kbd {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .rail-heading button:hover,
@@ -3348,7 +3452,7 @@ kbd {
   padding: 24px 10px;
   color: var(--muted);
   text-align: center;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .project-empty,
@@ -3370,13 +3474,13 @@ kbd {
 
 .project-empty strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .project-empty p {
   max-width: 210px;
   margin: 7px 0 17px;
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -3445,12 +3549,12 @@ kbd {
 .project-list-copy strong {
   margin-bottom: 4px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .project-list-copy small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .project-workspace {
@@ -3467,13 +3571,13 @@ kbd {
 .large-empty h2 {
   margin: 16px 0 7px;
   color: var(--ink);
-  font-size: 20px;
+  font-size: calc(20px * var(--user-font-scale));
 }
 
 .large-empty p {
   max-width: 390px;
   margin: 0;
-  font-size: 11px;
+  font-size: var(--text-md);
   line-height: 1.6;
 }
 
@@ -3496,14 +3600,14 @@ kbd {
   color: var(--trace-strong);
   background: var(--trace-soft);
   border-radius: 5px;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
 .project-header h2 {
   margin: 10px 0 6px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 25px;
+  font-size: calc(25px * var(--user-font-scale));
   font-weight: 650;
   letter-spacing: -0.022em;
 }
@@ -3512,7 +3616,7 @@ kbd {
   max-width: 610px;
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
   line-height: 1.6;
 }
 
@@ -3528,18 +3632,18 @@ kbd {
   display: block;
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 34px;
+  font-size: calc(34px * var(--user-font-scale));
   font-weight: 500;
 }
 
 .project-progress-summary strong small {
   margin-left: 2px;
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .project-progress-summary > span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .project-archive-action {
@@ -3553,7 +3657,7 @@ kbd {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .project-archive-action:hover {
@@ -3589,14 +3693,14 @@ kbd {
 
 .project-facts span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .project-facts strong {
   margin-bottom: 2px;
   color: var(--ink);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 12px;
+  font-size: var(--text-md);
   font-weight: 520;
 }
 
@@ -3640,12 +3744,12 @@ kbd {
 
 .goal-empty strong {
   color: var(--ink);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .goal-empty small {
   margin-top: 3px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .goal-strip {
@@ -3674,14 +3778,14 @@ kbd {
 }
 
 .goal-strip strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .goal-strip span,
 .goal-strip small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .goal-strip article > small {
@@ -3715,11 +3819,11 @@ kbd {
 .milestone-empty strong {
   margin-bottom: 3px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .milestone-empty small {
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .milestone-track {
@@ -3785,18 +3889,18 @@ kbd {
 
 .milestone-track article strong {
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .milestone-track article span,
 .milestone-track article > small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .task-section-heading h3 {
   margin: 3px 0 0;
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .task-empty {
@@ -3822,12 +3926,12 @@ kbd {
 .task-empty strong {
   margin-bottom: 3px;
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .task-empty small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .task-list {
@@ -3877,7 +3981,7 @@ kbd {
 .task-copy > strong {
   display: block;
   margin-bottom: 5px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .task-detail-trigger {
@@ -3905,7 +4009,7 @@ kbd {
   align-items: center;
   gap: 3px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .task-copy .priority-critical {
@@ -3929,7 +4033,7 @@ kbd {
   color: var(--tag-color);
   background: color-mix(in srgb, var(--tag-color) 11%, transparent);
   border-radius: 5px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .dialog-overlay {
@@ -3969,14 +4073,14 @@ kbd {
 .dialog-heading h2 {
   margin: 5px 0 5px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 21px;
+  font-size: calc(21px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .dialog-heading p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .dialog-close {
@@ -4010,7 +4114,7 @@ kbd {
 .dialog-form label > span,
 .tag-picker legend {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -4021,7 +4125,7 @@ kbd {
   min-height: 39px;
   padding: 8px 10px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
 }
 
@@ -4043,7 +4147,7 @@ kbd {
   border-radius: 9px;
   background: var(--surface-soft);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
   line-height: 1.6;
   padding: 12px 14px;
 }
@@ -4083,13 +4187,13 @@ kbd {
 }
 
 .area-list strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .area-list small {
   margin-top: 2px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .area-list button {
@@ -4101,7 +4205,7 @@ kbd {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .area-list button:hover {
@@ -4140,13 +4244,13 @@ kbd {
 }
 
 .task-inspector-body section > header strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .task-inspector-body section > header small {
   margin-left: auto;
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .checklist-items,
@@ -4161,7 +4265,7 @@ kbd {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .checklist-progress-mode input {
@@ -4178,7 +4282,7 @@ kbd {
   padding: 0 8px;
   background: var(--surface);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .checklist-items label > span {
@@ -4198,7 +4302,7 @@ kbd {
 .dependency-list em {
   margin-left: auto;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -4214,9 +4318,9 @@ kbd {
   min-height: 32px;
   padding: 6px 8px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-base);
 }
 
 .inline-create button,
@@ -4230,7 +4334,7 @@ kbd {
   background: var(--trace-soft);
   border-radius: 0 6px 6px 0;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .inspector-actions,
@@ -4252,7 +4356,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .task-quick-actions button:hover {
@@ -4336,7 +4440,7 @@ kbd {
 
 .section-placeholder h1 {
   margin: 8px 0;
-  font-size: 28px;
+  font-size: calc(28px * var(--user-font-scale));
 }
 
 .section-placeholder p {
@@ -4368,7 +4472,7 @@ kbd {
 .memos-header h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
   letter-spacing: -0.025em;
 }
@@ -4378,7 +4482,7 @@ kbd {
 .memos-header p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .today-capacity {
@@ -4390,19 +4494,19 @@ kbd {
   display: block;
   margin-bottom: 3px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .today-capacity strong {
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 22px;
+  font-size: calc(22px * var(--user-font-scale));
   font-weight: 500;
 }
 
 .today-capacity small {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .active-session {
@@ -4442,19 +4546,19 @@ kbd {
 
 .session-copy > span {
   color: var(--trace);
-  font-size: 10px;
+  font-size: var(--text-sm);
   font-weight: 700;
 }
 
 .session-copy h2 {
   margin: 4px 0 4px;
-  font-size: 18px;
+  font-size: calc(18px * var(--user-font-scale));
 }
 
 .session-copy p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .session-time {
@@ -4472,14 +4576,14 @@ kbd {
 
 .session-time > strong {
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 30px;
+  font-size: calc(30px * var(--user-font-scale));
   font-weight: 430;
   letter-spacing: 0.05em;
 }
 
 .session-time > span {
   color: var(--faint);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .stop-button {
@@ -4503,7 +4607,7 @@ kbd {
 .task-count {
   color: var(--muted);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .today-empty {
@@ -4525,7 +4629,7 @@ kbd {
 
 .today-empty p {
   margin: 6px 0 0;
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .today-task-list {
@@ -4558,7 +4662,7 @@ kbd {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .today-task-quick button:hover,
@@ -4576,7 +4680,7 @@ kbd {
 .today-backlog summary {
   color: var(--muted);
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .today-backlog > div {
@@ -4594,12 +4698,12 @@ kbd {
   color: var(--muted);
   background: var(--canvas);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .today-backlog strong {
   color: var(--ink);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .today-task-list article.current {
@@ -4632,13 +4736,13 @@ kbd {
 .today-task-list article > div > strong {
   display: block;
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .today-task-list article > div > p {
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .start-task,
@@ -4650,7 +4754,7 @@ kbd {
   justify-content: center;
   gap: 6px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .start-task {
@@ -4685,7 +4789,7 @@ kbd {
 .today-schedule > p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .today-schedule article {
@@ -4697,7 +4801,7 @@ kbd {
   background: var(--canvas);
   border-left: 2px solid var(--trace);
   border-radius: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .today-schedule article strong {
@@ -4735,14 +4839,14 @@ kbd {
 .today-summary strong {
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 17px;
+  font-size: calc(17px * var(--user-font-scale));
   font-weight: 500;
 }
 
 .today-summary small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .execution-note {
@@ -4757,12 +4861,12 @@ kbd {
 .execution-note strong {
   display: block;
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .execution-note p {
   margin: 7px 0 0;
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -4795,14 +4899,14 @@ kbd {
 
 .record-stats span {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .record-stats strong {
   margin-bottom: 3px;
   color: var(--ink);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 16px;
+  font-size: var(--text-base);
   font-weight: 500;
 }
 
@@ -4852,7 +4956,7 @@ kbd {
 
 .record-empty p {
   margin: 7px 0 0;
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .effort-timeline {
@@ -4905,13 +5009,13 @@ kbd {
 }
 
 .effort-time strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .effort-time small {
   margin-top: 3px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .effort-card {
@@ -4934,18 +5038,18 @@ kbd {
 
 .effort-card header strong {
   margin-bottom: 3px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .effort-card header span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .effort-card header b {
   color: var(--trace);
   font-family: Bahnschrift, "Segoe UI", sans-serif;
-  font-size: 13px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
@@ -4964,7 +5068,7 @@ kbd {
   background: transparent;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .effort-card-actions button:hover {
@@ -4984,17 +5088,17 @@ kbd {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .effort-history span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .effort-card > p {
   margin: 10px 0 0;
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .effort-card footer {
@@ -5005,7 +5109,7 @@ kbd {
   padding-top: 8px;
   color: var(--muted);
   border-top: 1px solid var(--border);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .evidence-grid {
@@ -5044,7 +5148,7 @@ kbd {
   color: var(--muted);
   background: var(--surface);
   border-radius: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .evidence-status.status-verified,
@@ -5056,14 +5160,14 @@ kbd {
 .evidence-card > strong {
   display: block;
   margin: 13px 0 6px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .evidence-card > p {
   min-height: 42px;
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -5074,7 +5178,7 @@ kbd {
   padding-top: 9px;
   color: var(--faint);
   border-top: 1px solid var(--border);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .evidence-card footer button {
@@ -5083,7 +5187,7 @@ kbd {
   gap: 4px;
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--trace);
 }
 
 .evidence-card footer span {
@@ -5126,15 +5230,19 @@ kbd {
 }
 
 .capture-panel textarea {
+  width: 100%;
+  min-width: 0;
   min-height: 72px;
-  padding: 8px 10px;
-  background: transparent;
-  border: 0;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
   resize: vertical;
 }
 
-.capture-panel textarea:focus {
-  outline: 0;
+.capture-panel textarea:focus-visible {
+  border-color: var(--trace);
+  box-shadow: 0 0 0 3px var(--trace-soft);
 }
 
 .capture-actions {
@@ -5148,7 +5256,7 @@ kbd {
   min-width: 220px;
   gap: 7px;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 9px;
   background: var(--surface);
   color: var(--muted);
@@ -5162,6 +5270,7 @@ kbd {
 }
 
 .memo-capture-tags {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -5174,16 +5283,16 @@ kbd {
   align-items: center;
   gap: 5px;
   padding: 5px 9px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
   background: var(--surface);
   color: var(--muted);
 }
 
 .memo-capture-tags > button:not(.button).active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
+  border-color: var(--trace);
+  background: var(--trace-soft);
+  color: var(--trace);
 }
 
 .memo-capture-tags > button span {
@@ -5201,16 +5310,16 @@ kbd {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .capture-actions select {
   height: 32px;
   padding: 0 8px;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
-  font-size: 10px;
+  font-size: var(--text-base);
 }
 
 .memo-list-section {
@@ -5226,12 +5335,12 @@ kbd {
 
 .memo-list-heading h2 {
   margin: 4px 0 0;
-  font-size: 18px;
+  font-size: calc(18px * var(--user-font-scale));
 }
 
 .memo-list-heading > span {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .memo-grid {
@@ -5255,25 +5364,25 @@ kbd {
 
 .memo-card header span {
   color: var(--trace);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
 .memo-card header small {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .memo-card > strong {
   margin-top: 13px;
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .memo-card > p {
   overflow: hidden;
   flex: 1;
   margin: 12px 0 16px;
-  font-size: 11px;
+  font-size: var(--text-md);
   line-height: 1.7;
   display: -webkit-box;
   -webkit-line-clamp: 4;
@@ -5288,7 +5397,7 @@ kbd {
 .memo-card footer > span {
   padding: 3px 6px;
   border-radius: 5px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .memo-card footer > span.inbox {
@@ -5307,7 +5416,7 @@ kbd {
   gap: 4px;
   color: var(--trace);
   background: transparent;
-  font-size: 9px;
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -5329,16 +5438,16 @@ kbd {
   justify-content: center;
   gap: 6px;
   padding: 9px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-strong);
   border-radius: 9px;
   background: var(--surface);
   color: var(--muted);
 }
 
 .memo-convert-targets button.active {
-  border-color: var(--primary);
-  background: var(--primary-soft);
-  color: var(--primary);
+  border-color: var(--trace);
+  background: var(--trace-soft);
+  color: var(--trace);
 }
 
 .source-memo {
@@ -5350,7 +5459,7 @@ kbd {
   background: var(--canvas);
   border-left: 3px solid var(--trace);
   border-radius: 0 7px 7px 0;
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -5390,7 +5499,7 @@ kbd {
   height: 54px;
   background: transparent;
   border: 0;
-  font-size: 15px;
+  font-size: var(--text-base);
 }
 
 .search-saved-views {
@@ -5415,7 +5524,7 @@ kbd {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .search-saved-views span button + button {
@@ -5447,9 +5556,9 @@ kbd {
   height: 28px;
   padding: 0 7px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-base);
 }
 
 .search-filter-label,
@@ -5459,7 +5568,7 @@ kbd {
   gap: 5px;
   min-height: 28px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .search-filter-grid > label input {
@@ -5481,7 +5590,7 @@ kbd {
   background: var(--trace);
   border-radius: 0 6px 6px 0;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .global-search-results {
@@ -5501,7 +5610,7 @@ kbd {
   max-width: 440px;
   margin: 9px 0 20px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -5518,7 +5627,7 @@ kbd {
   color: var(--muted);
   background: var(--canvas);
   border-radius: 6px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .search-state {
@@ -5528,18 +5637,18 @@ kbd {
   gap: 6px;
   color: var(--muted);
   text-align: center;
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .search-state strong {
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .search-result-count {
   padding: 5px 9px 8px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .search-result {
@@ -5585,17 +5694,17 @@ kbd {
 
 .search-result strong {
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .search-result small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .search-result em {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -5608,7 +5717,7 @@ kbd {
   color: var(--faint);
   background: var(--canvas);
   border-top: 1px solid var(--border);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .search-footer span {
@@ -5625,7 +5734,7 @@ kbd {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .tags-page {
@@ -5645,14 +5754,14 @@ kbd {
 .tags-header h1 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .tags-header p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .tags-empty {
@@ -5689,14 +5798,14 @@ kbd {
 }
 
 .tag-card header strong {
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .tag-card > p {
   min-height: 44px;
   margin: 13px 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -5706,7 +5815,7 @@ kbd {
   padding-top: 10px;
   color: var(--faint);
   border-top: 1px solid var(--border);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .tag-card footer button {
@@ -5738,7 +5847,7 @@ kbd {
 
 .tag-stats-panel h2 {
   margin: 4px 0 0;
-  font-size: 17px;
+  font-size: calc(17px * var(--user-font-scale));
 }
 
 .tag-stats-panel > header button {
@@ -5765,19 +5874,19 @@ kbd {
   color: var(--muted);
   background: var(--canvas);
   border-radius: 8px;
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .tag-stats-panel > div strong {
   color: var(--ink);
   font-family: var(--font-numeric);
-  font-size: 20px;
+  font-size: calc(20px * var(--user-font-scale));
 }
 
 .tag-stats-panel > p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .tag-stats-panel > footer {
@@ -5794,7 +5903,7 @@ kbd {
   color: var(--muted);
   background: var(--trace-soft);
   border-radius: 6px;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .tag-color-field {
@@ -5816,7 +5925,7 @@ kbd {
   padding: 0 10px;
   background: var(--canvas);
   border-radius: 7px;
-  font-size: 10px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -5854,7 +5963,7 @@ kbd {
   background: transparent;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 650;
 }
 
@@ -5895,14 +6004,14 @@ kbd {
 .practice-section > header h2 {
   margin: 5px 0 3px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 21px;
+  font-size: calc(21px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .practice-section > header p {
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .practice-actions {
@@ -5918,7 +6027,7 @@ kbd {
 
 .practice-scope span {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .practice-scope select {
@@ -5926,9 +6035,9 @@ kbd {
   height: 34px;
   padding: 0 28px 0 9px;
   background: var(--canvas);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 7px;
-  font-size: 9px;
+  font-size: var(--text-base);
 }
 
 .practice-empty {
@@ -5951,14 +6060,14 @@ kbd {
 }
 
 .practice-empty > strong {
-  font-size: 12px;
+  font-size: var(--text-md);
 }
 
 .practice-empty > p {
   max-width: 330px;
   margin: 7px 0 17px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -6009,12 +6118,12 @@ kbd {
 
 .habit-card > div:nth-child(2) strong {
   margin-bottom: 5px;
-  font-size: 11px;
+  font-size: var(--text-md);
 }
 
 .habit-card > div:nth-child(2) span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .habit-streak {
@@ -6026,13 +6135,13 @@ kbd {
 }
 
 .habit-streak strong {
-  font-size: 13px;
+  font-size: var(--text-md);
 }
 
 .habit-streak span {
   grid-column: 1 / -1;
   color: var(--faint);
-  font-size: 7px;
+  font-size: var(--text-xs);
   text-align: right;
 }
 
@@ -6041,7 +6150,7 @@ kbd {
   color: var(--faint);
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .metric-grid {
@@ -6067,28 +6176,28 @@ kbd {
 
 .metric-card > header {
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .metric-card > strong {
   display: block;
   margin-top: 19px;
   font-family: "Segoe UI Variable Display", "Microsoft YaHei UI", sans-serif;
-  font-size: 27px;
+  font-size: calc(27px * var(--user-font-scale));
   font-weight: 650;
 }
 
 .metric-card > strong small {
   margin-left: 5px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--text-sm);
   font-weight: 500;
 }
 
 .metric-card > p {
   margin: 3px 0 13px;
   color: var(--ink);
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .metric-track {
@@ -6108,7 +6217,7 @@ kbd {
 .metric-card > footer {
   margin-top: 11px;
   color: var(--faint);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .metric-card > footer button {
@@ -6118,7 +6227,7 @@ kbd {
   color: var(--trace);
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
+  font-size: var(--text-xs);
   font-weight: 650;
 }
 
@@ -6150,12 +6259,12 @@ kbd {
 }
 
 .course-rail strong {
-  font-size: 10px;
+  font-size: var(--text-sm);
 }
 
 .course-rail span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .course-rail em {
@@ -6164,7 +6273,7 @@ kbd {
   color: var(--time);
   background: var(--time-soft);
   border-radius: 4px;
-  font-size: 7px;
+  font-size: var(--text-xs);
   font-style: normal;
 }
 
@@ -6180,12 +6289,12 @@ kbd {
 
 .course-workspace > header span {
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .course-workspace > header h3 {
   margin: 4px 0 0;
-  font-size: 16px;
+  font-size: var(--text-base);
 }
 
 .course-workspace > header > div:last-child {
@@ -6213,7 +6322,7 @@ kbd {
   padding-bottom: 9px;
   color: var(--muted);
   border-bottom: 1px solid var(--border);
-  font-size: 9px;
+  font-size: var(--text-sm);
 }
 
 .learning-columns article {
@@ -6233,7 +6342,7 @@ kbd {
 .learning-columns article strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6242,7 +6351,7 @@ kbd {
 .learning-columns > section > p {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .learning-followup {
@@ -6277,7 +6386,7 @@ kbd {
 .learning-followup article strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: 9px;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -6286,7 +6395,7 @@ kbd {
 .learning-followup > section > p {
   margin: 4px 0 0;
   color: var(--muted);
-  font-size: 8px;
+  font-size: var(--text-xs);
 }
 
 .learning-followup .review-queue-row {
@@ -6305,7 +6414,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 7px;
+  font-size: var(--text-xs);
 }
 
 .review-queue-row button:hover {
