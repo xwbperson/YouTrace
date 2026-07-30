@@ -190,6 +190,18 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('workspace:reconnect', (event, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const input = openWorkspaceInputSchema
+        .pick({ rootPath: true })
+        .parse(rawInput)
+      const workspace = await workspaceManager.reconnect(input.rootPath)
+      setBootstrapState({ status: 'ready', workspace })
+      return workspace
+    })
+  )
+
   ipcMain.handle('workspace:reveal', (event) =>
     wrap(async () => {
       trusted(event)

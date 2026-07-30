@@ -2,6 +2,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DataRepository } from '../../src/main/modules/data/data-repository'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
@@ -203,5 +204,123 @@ describe('planning application service', () => {
         overrideReason: null
       })
     ).toThrow(/依赖环/)
+  })
+
+  it('covers short, mixed, punctuated and rebuilt search with combined task filters', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '搜索验收项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const otherProject = planning.createProject({
+      areaId: null,
+      name: '其他项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const networking = planning.createTag({
+      name: '网络',
+      color: '#216E65',
+      icon: null,
+      description: ''
+    })
+    const exam = planning.createTag({
+      name: '考试',
+      color: '#B95D1B',
+      icon: null,
+      description: ''
+    })
+    const target = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '网络 C++ 协议状态机',
+      description: 'TLS 认证失败；重试路径',
+      status: 'ready',
+      difficulty: 4,
+      priority: 'high',
+      estimatedMinutes: 90,
+      progressWeight: null,
+      startDate: null,
+      dueAt: '2026-08-15T12:00:00.000Z',
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: [networking.id, exam.id]
+    })
+    planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '网络基础',
+      description: '无关内容',
+      status: 'ready',
+      difficulty: 2,
+      priority: 'low',
+      estimatedMinutes: 30,
+      progressWeight: null,
+      startDate: null,
+      dueAt: '2026-09-01T12:00:00.000Z',
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: [networking.id]
+    })
+    planning.createTask({
+      parentTaskId: null,
+      projectId: otherProject.id,
+      goalId: null,
+      milestoneId: null,
+      title: '其他协议状态机',
+      description: '',
+      status: 'ready',
+      difficulty: 4,
+      priority: 'high',
+      estimatedMinutes: 60,
+      progressWeight: null,
+      startDate: null,
+      dueAt: '2026-08-15T12:00:00.000Z',
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: [networking.id, exam.id]
+    })
+
+    const ids = (query: string): string[] =>
+      planning.search({ query, entityTypes: ['task'], limit: 100 }).map((result) => result.entityId)
+    expect(ids('网')).toContain(target.id)
+    expect(ids('认证')).toEqual([target.id])
+    expect(ids('协议状态机')).toContain(target.id)
+    expect(ids('TLS 认证失败')).toEqual([target.id])
+    expect(ids('C++')).toEqual([target.id])
+    expect(ids('不存在的搜索词')).toEqual([])
+    expect(
+      planning.search({
+        query: '',
+        entityTypes: ['task'],
+        statuses: ['ready'],
+        tagIds: [networking.id, exam.id],
+        projectId: project.id,
+        dueFrom: '2026-08-01',
+        dueTo: '2026-08-31',
+        difficulties: [4],
+        priorities: ['high'],
+        limit: 100
+      }).map((result) => result.entityId)
+    ).toEqual([target.id])
+
+    planning.trashTask(target.id)
+    expect(ids('协议状态机')).not.toContain(target.id)
+    new DataRepository(() => workspaceManager.getDatabase()).rebuildSearchIndex()
+    expect(ids('协议状态机')).not.toContain(target.id)
+    expect(ids('其他协议状态机')).toHaveLength(1)
   })
 })

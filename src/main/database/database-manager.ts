@@ -53,8 +53,9 @@ export class DatabaseManager {
 
   close(): void {
     if (!this.connection) return
-    this.connection.close()
+    const connection = this.connection
     this.connection = null
+    connection.close()
   }
 
   private migrate(database: Database.Database): void {

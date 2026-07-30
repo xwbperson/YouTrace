@@ -4,15 +4,25 @@ import type {
   CreateWorkspaceInput,
   IpcResult,
   OpenWorkspaceInput,
+  ReconnectWorkspaceInput,
   WindowState,
   WorkspaceSummary,
+  WorkspaceUnavailableState,
   YouTraceApi
 } from '../shared/contracts'
 
 const api: YouTraceApi = {
   app: {
     getBootstrapState: () =>
-      ipcRenderer.invoke('app:get-bootstrap-state') as Promise<IpcResult<AppBootstrapState>>
+      ipcRenderer.invoke('app:get-bootstrap-state') as Promise<IpcResult<AppBootstrapState>>,
+    onWorkspaceUnavailable: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        state: WorkspaceUnavailableState
+      ): void => callback(state)
+      ipcRenderer.on('workspace:unavailable', listener)
+      return () => ipcRenderer.removeListener('workspace:unavailable', listener)
+    }
   },
   dialog: {
     selectDirectory: () =>
@@ -23,6 +33,8 @@ const api: YouTraceApi = {
       ipcRenderer.invoke('workspace:create', input) as Promise<IpcResult<WorkspaceSummary>>,
     open: (input: OpenWorkspaceInput) =>
       ipcRenderer.invoke('workspace:open', input) as Promise<IpcResult<WorkspaceSummary>>,
+    reconnect: (input: ReconnectWorkspaceInput) =>
+      ipcRenderer.invoke('workspace:reconnect', input) as Promise<IpcResult<WorkspaceSummary>>,
     reveal: () => ipcRenderer.invoke('workspace:reveal') as Promise<IpcResult<void>>
   },
   planning: {

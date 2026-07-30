@@ -37,6 +37,69 @@ test('starts the production Electron shell with the isolated preload API', async
       requireType: 'undefined',
       apiKeys: ['app', 'dialog', 'workspace', 'planning', 'execution', 'practice', 'temporal', 'workflow', 'reminders', 'data', 'settings', 'window']
     })
+    const webPreferences = await electronApp.evaluate(({ BrowserWindow }) => {
+      const webContents = BrowserWindow.getAllWindows()[0]!.webContents as typeof BrowserWindow.prototype.webContents & {
+        getLastWebPreferences(): {
+          contextIsolation?: boolean
+          sandbox?: boolean
+          nodeIntegration?: boolean
+          webSecurity?: boolean
+        }
+      }
+      const preferences = webContents.getLastWebPreferences()
+      return {
+        contextIsolation: preferences.contextIsolation,
+        sandbox: preferences.sandbox,
+        nodeIntegration: preferences.nodeIntegration,
+        webSecurity: preferences.webSecurity
+      }
+    })
+    expect(webPreferences).toEqual({
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webSecurity: true
+    })
+    expect(
+      await page
+        .locator('meta[http-equiv="Content-Security-Policy"]')
+        .getAttribute('content')
+    ).toContain("script-src 'self'")
+    expect(
+      await page.evaluate(() => {
+        const script = document.createElement('script')
+        script.textContent = 'globalThis.__youtraceInlineScriptExecuted = true'
+        document.head.append(script)
+        return (globalThis as typeof globalThis & {
+          __youtraceInlineScriptExecuted?: boolean
+        }).__youtraceInlineScriptExecuted ?? false
+      })
+    ).toBe(false)
+    const initialUrl = page.url()
+    expect(await page.evaluate(() => window.open('https://example.com'))).toBeNull()
+    expect(await electronApp.windows()).toHaveLength(1)
+    await page.evaluate(() => window.location.assign('https://example.com'))
+    await page.waitForTimeout(100)
+    expect(page.url()).toBe(initialUrl)
+    expect(
+      await page.evaluate(async () =>
+        (
+          globalThis as unknown as {
+            youtrace: {
+              planning: {
+                createProject(input: unknown): Promise<{
+                  ok: boolean
+                  error?: { code: string }
+                }>
+              }
+            }
+          }
+        ).youtrace.planning.createProject({})
+      )
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'INVALID_INPUT' }
+    })
     const beforeResize = await electronApp.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()[0]!.getBounds()
     )

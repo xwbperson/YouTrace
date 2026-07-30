@@ -6,6 +6,8 @@ import { ExecutionRepository } from '../../src/main/modules/execution/execution-
 import { ExecutionService } from '../../src/main/modules/execution/execution-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
+import { SettingsRepository } from '../../src/main/modules/settings/settings-repository'
+import { SettingsService } from '../../src/main/modules/settings/settings-service'
 import { TemporalRepository } from '../../src/main/modules/temporal/temporal-repository'
 import { TemporalService } from '../../src/main/modules/temporal/temporal-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
@@ -14,6 +16,7 @@ let workspaceManager: WorkspaceManager
 let planning: PlanningService
 let temporal: TemporalService
 let execution: ExecutionService
+let settings: SettingsService
 
 beforeEach(async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-temporal-test-'))
@@ -29,6 +32,9 @@ beforeEach(async () => {
     new ExecutionRepository(() => workspaceManager.getDatabase()),
     planningRepository,
     planning
+  )
+  settings = new SettingsService(
+    new SettingsRepository(() => workspaceManager.getDatabase())
   )
 })
 
@@ -182,5 +188,125 @@ describe('plans, calendar and countdowns', () => {
       risk: 'normal'
     })
     expect(countdown.expectedCompletionAt).toBe('2026-08-03')
+  })
+
+  it('keeps calendar dates and instants stable across a daylight-saving transition', () => {
+    const plan = temporal.createPlan({
+      periodType: 'day',
+      startDate: '2026-03-08',
+      endDate: '2026-03-08',
+      title: '夏令时当天计划',
+      focusResult: '',
+      capacityMinutes: 60,
+      items: []
+    })
+    expect(plan).toMatchObject({
+      startDate: '2026-03-08',
+      endDate: '2026-03-08'
+    })
+
+    const block = temporal.createTimeBlock({
+      taskId: null,
+      title: '跨越夏令时跳时',
+      note: '',
+      startsAt: '2026-03-08T06:30:00.000Z',
+      endsAt: '2026-03-08T07:30:00.000Z',
+      timezone: 'America/New_York'
+    })
+    expect(Date.parse(block.endsAt) - Date.parse(block.startsAt)).toBe(60 * 60 * 1_000)
+
+    temporal.createCountdown({
+      title: '夏令时后的目标',
+      targetAt: '2026-03-09T04:00:00.000Z',
+      timezone: 'America/New_York',
+      workingDays: [0, 1, 2, 3, 4, 5, 6],
+      bufferDays: 0,
+      importance: 'normal',
+      entityType: null,
+      entityId: null,
+      remainingMinutes: 120,
+      tagIds: []
+    })
+    expect(temporal.listCountdowns('2026-03-07T17:00:00.000Z')[0]).toMatchObject({
+      naturalDays: 2,
+      effectiveWorkdays: 2,
+      suggestedDailyMinutes: 60
+    })
+  })
+
+  it('does not rewrite completed task or effort instants when the workspace timezone changes', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '时区变更项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: null,
+      milestoneId: null,
+      title: '已完成记录',
+      description: '',
+      status: 'ready',
+      difficulty: null,
+      priority: 'medium',
+      estimatedMinutes: 60,
+      progressWeight: null,
+      startDate: '2026-03-08',
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+    const completed = planning.updateTask({ id: task.id, status: 'completed' })
+    const effort = execution.createManualEffort({
+      entityType: 'task',
+      entityId: task.id,
+      startedAt: '2026-03-08T06:30:00.000Z',
+      endedAt: '2026-03-08T07:30:00.000Z',
+      effectiveMinutes: 60,
+      result: '保留原始时刻',
+      interruptions: '',
+      obstacles: '',
+      nextStep: '',
+      energy: null,
+      perceivedDifficulty: null,
+      tagIds: []
+    })
+
+    settings.updatePreferences({
+      ...settings.getPreferences(),
+      timezone: 'America/New_York'
+    })
+
+    const storedTask = planning.listTasks({
+      projectId: project.id,
+      statuses: [],
+      tagIds: [],
+      includeDeleted: false,
+      limit: 100,
+      offset: 0
+    })[0]!
+    const storedEffort = execution.listEfforts({
+      entityType: 'task',
+      entityId: task.id,
+      from: null,
+      to: null,
+      limit: 100,
+      offset: 0
+    })[0]!
+    expect(storedTask).toMatchObject({
+      startDate: '2026-03-08',
+      completedAt: completed.completedAt
+    })
+    expect(storedEffort).toMatchObject({
+      startedAt: effort.startedAt,
+      endedAt: effort.endedAt
+    })
   })
 })

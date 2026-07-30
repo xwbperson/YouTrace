@@ -53,6 +53,7 @@ let workspaceManager: WorkspaceManager
 let reminderService: ReminderService | null = null
 let reminderTimer: NodeJS.Timeout | null = null
 let maintenanceTimer: NodeJS.Timeout | null = null
+let workspaceHealthTimer: NodeJS.Timeout | null = null
 let dataService: DataService | null = null
 let settingsService: SettingsService | null = null
 let executionService: ExecutionService | null = null
@@ -134,6 +135,10 @@ app.whenReady().then(async () => {
   reminderTimer = setInterval(dispatchReminders, 60_000)
   void runWorkspaceMaintenance()
   maintenanceTimer = setInterval(() => void runWorkspaceMaintenance(), 5 * 60_000)
+  workspaceHealthTimer = setInterval(
+    () => void monitorWorkspaceAvailability(),
+    process.env['YOUTRACE_E2E'] === '1' ? 250 : 2_000
+  )
   powerMonitor.on('resume', dispatchReminders)
 
   app.on('activate', () => {
@@ -154,6 +159,10 @@ app.on('will-quit', (event) => {
   if (maintenanceTimer) {
     clearInterval(maintenanceTimer)
     maintenanceTimer = null
+  }
+  if (workspaceHealthTimer) {
+    clearInterval(workspaceHealthTimer)
+    workspaceHealthTimer = null
   }
   if (!workspaceManager) return
   event.preventDefault()
@@ -366,5 +375,23 @@ async function runWorkspaceMaintenance(): Promise<void> {
     )
   } catch {
     // 自动维护失败会在下个周期重试，不影响工作区正常写入。
+  }
+}
+
+async function monitorWorkspaceAvailability(): Promise<void> {
+  if (!workspaceManager || bootstrapState.status !== 'ready') return
+  try {
+    const availability = await workspaceManager.checkAvailability()
+    if (availability.available) return
+    const state: AppBootstrapState = {
+      status: 'workspace-unavailable',
+      workspace: null,
+      lastPath: availability.path,
+      reason: availability.reason ?? '工作区介质不可访问，有迹已停止写入。'
+    }
+    bootstrapState = state
+    mainWindow?.webContents.send('workspace:unavailable', state)
+  } catch {
+    // 工作区尚未打开时不发送失联事件。
   }
 }

@@ -17,15 +17,15 @@
 
 Windows 10/11 x64 用户可直接下载：
 
-- [有迹 v1.0.1 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.1/YouTrace-1.0.1-Setup.exe)
-- [有迹 v1.0.1 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.1/YouTrace-1.0.1-Portable.exe)
+- [有迹 v1.0.2 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.2/YouTrace-1.0.2-Setup.exe)
+- [有迹 v1.0.2 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.2/YouTrace-1.0.2-Portable.exe)
 
 安装包目前没有 Authenticode 数字签名，Windows SmartScreen 可能显示“未知发布者”。
 
 | 文件 | SHA-256 |
 |---|---|
-| `YouTrace-1.0.1-Setup.exe` | `5A62E08957586A06C3DEEDF29D2406C36A01A8FA6384D95E7673E319687CA340` |
-| `YouTrace-1.0.1-Portable.exe` | `C27BDFAE3F7714CD4F11A7212525F32A4120B469CEE0A02E659E23C55C03B1D3` |
+| `YouTrace-1.0.2-Setup.exe` | `D825B374617D671855C73D84063DDEB2D95760524491E6AC7D090720B11ACDCD` |
+| `YouTrace-1.0.2-Portable.exe` | `32032492AE43515DC49D40E0B02EB81CD335B1CDA5C1AA4C2341A1EE391E7ED4` |
 
 ## 快速开始
 
@@ -77,10 +77,13 @@ npm run dist:win
 - [v1 验收标准](docs/06-v1验收标准.md)
 - [v1 实现与验收报告](docs/07-v1实现与验收报告.md)
 - [v1 发布说明](docs/08-v1发布说明.md)
+- [v1 人工验收清单](docs/09-v1人工验收清单.md)
 
 ## 当前状态
 
-代码、自动化测试和本机 Windows 发布包已经验证。整体版本仍保持 `PREPARED`：干净 Windows、真实移动盘、多显示器 DPI、Windows Narrator、系统通知和最终用户体验仍需按验收报告人工确认。
+代码、45 项单元/集成测试、21 项 Electron 流程和本机 Windows 发布包已经验证。整体版本仍保持
+`PREPARED`：干净 Windows、真实移动盘、混合 DPI 多显示器、Windows Narrator、系统通知和
+最终用户体验仍需按 [人工验收清单](docs/09-v1人工验收清单.md) 确认。
 
 ## 许可
 

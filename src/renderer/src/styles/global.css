@@ -180,6 +180,166 @@ button:disabled {
   background: var(--canvas);
 }
 
+.workspace-interaction-layer {
+  width: 100%;
+  height: 100%;
+}
+
+.workspace-disconnect-banner {
+  position: fixed;
+  z-index: 180;
+  top: 46px;
+  right: 18px;
+  left: 250px;
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 12px;
+  color: var(--time);
+  background: var(--time-soft);
+  border: 1px solid color-mix(in srgb, var(--time) 45%, var(--border));
+  border-radius: 7px;
+  box-shadow: var(--shadow-popover);
+  font-size: var(--text-md);
+}
+
+.workspace-disconnect-banner svg {
+  flex: none;
+}
+
+.workspace-disconnect-banner span {
+  flex: 1;
+}
+
+.workspace-disconnect-banner button {
+  min-height: 30px;
+  padding: 4px 9px;
+  color: inherit;
+  background: color-mix(in srgb, var(--time-soft) 65%, var(--surface));
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.workspace-disconnect-overlay {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(10 19 18 / 62%);
+  backdrop-filter: blur(3px);
+}
+
+.workspace-disconnect-dialog {
+  display: grid;
+  width: min(620px, 100%);
+  gap: 18px;
+  padding: 25px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-popover);
+}
+
+.workspace-disconnect-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--time);
+  background: var(--time-soft);
+  border: 1px solid color-mix(in srgb, var(--time) 40%, var(--border));
+  border-radius: 10px;
+}
+
+.workspace-disconnect-dialog h1 {
+  margin: 5px 0 7px;
+  font-size: var(--text-2xl);
+}
+
+.workspace-disconnect-dialog p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-md);
+  line-height: 1.65;
+}
+
+.workspace-disconnect-reason {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  color: var(--time);
+  background: var(--time-soft);
+  border: 1px solid color-mix(in srgb, var(--time) 34%, var(--border));
+  border-radius: 7px;
+}
+
+.workspace-disconnect-reason strong,
+.workspace-disconnect-reason span {
+  overflow-wrap: anywhere;
+}
+
+.workspace-disconnect-reason strong,
+.workspace-disconnect-dialog label > span {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.workspace-disconnect-reason span {
+  font-size: var(--text-md);
+}
+
+.workspace-disconnect-dialog label {
+  display: grid;
+  gap: 7px;
+}
+
+.workspace-disconnect-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.workspace-disconnect-path input,
+.workspace-disconnect-path button {
+  min-height: 40px;
+  font-size: var(--text-md);
+}
+
+.workspace-disconnect-path input {
+  min-width: 0;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px 0 0 7px;
+}
+
+.workspace-disconnect-path button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+  border: 1px solid var(--trace);
+  border-left: 0;
+  border-radius: 0 7px 7px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.workspace-disconnect-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
 .titlebar {
   position: fixed;
   z-index: 100;

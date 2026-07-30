@@ -1,8 +1,10 @@
-import { mkdtemp, readFile, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
+import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
+import { PlanningService } from '../../src/main/modules/planning/planning-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 
 const managers: WorkspaceManager[] = []
@@ -93,5 +95,77 @@ describe('workspace lifecycle', () => {
       path: workspaceRoot,
       readOnly: true
     })
+  })
+
+  it('blocks writes after identity loss and reconnects only the original complete workspace', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-disconnect-test-'))
+    const workspaceRoot = join(fixtureRoot, 'workspace')
+    const relocatedRoot = join(fixtureRoot, 'workspace-relocated')
+    const manager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
+    managers.push(manager)
+    const workspace = await manager.create(workspaceRoot, '失联保护工作区')
+    const planning = new PlanningService(
+      new PlanningRepository(() => manager.getDatabase())
+    )
+    planning.createProject({
+      areaId: null,
+      name: '失联前项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+
+    const markerPath = join(workspaceRoot, '.youtrace-workspace.json')
+    const markerContents = await readFile(markerPath, 'utf8')
+    await unlink(markerPath)
+
+    const availability = await manager.checkAvailability()
+    expect(availability).toMatchObject({
+      available: false,
+      workspaceId: workspace.id,
+      path: workspaceRoot
+    })
+    expect(() => manager.getDatabase()).toThrow('工作区连接已中断')
+    expect(() =>
+      planning.createProject({
+        areaId: null,
+        name: '不应写入',
+        description: '',
+        status: 'active',
+        startDate: null,
+        targetDate: null,
+        successCriteria: '',
+        progressMode: 'equal'
+      })
+    ).toThrow('工作区连接已中断')
+
+    await rename(workspaceRoot, relocatedRoot)
+    await writeFile(join(relocatedRoot, '.youtrace-workspace.json'), markerContents, 'utf8')
+    await mkdir(workspaceRoot)
+
+    await expect(manager.reconnect(workspaceRoot)).rejects.toMatchObject({
+      code: 'WORKSPACE_MARKER_MISSING'
+    })
+    const reconnected = await manager.reconnect(relocatedRoot)
+    expect(reconnected).toMatchObject({
+      id: workspace.id,
+      path: relocatedRoot,
+      readOnly: false
+    })
+    expect(planning.listProjects(false).map((project) => project.name)).toContain('失联前项目')
+    planning.createProject({
+      areaId: null,
+      name: '重新连接后项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    expect((await manager.checkAvailability()).available).toBe(true)
   })
 })

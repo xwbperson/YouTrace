@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
 
-const setupPath = resolve('release/YouTrace-1.0.1-Setup.exe')
+const setupPath = resolve('release/YouTrace-1.0.2-Setup.exe')
 
 function runExecutable(
   executablePath: string,

@@ -253,4 +253,41 @@ describe('workspace backup, restore and portable files', () => {
         .get()
     ).toEqual({ title: '恢复中断保护任务' })
   })
+
+  it.each([
+    {
+      systemCode: 'ENOSPC',
+      appCode: 'TARGET_SPACE_INSUFFICIENT',
+      message: '目标磁盘空间不足，工作区未切换。'
+    },
+    {
+      systemCode: 'EACCES',
+      appCode: 'TARGET_NOT_WRITABLE',
+      message: '目标目录不可写，工作区未切换。'
+    }
+  ])(
+    'preserves the source when migration extraction fails with $systemCode',
+    async ({ systemCode, appCode, message }) => {
+      createProjectAndTask(`迁移失败保护-${systemCode}`)
+      const source = workspaceManager.getCurrentPath()
+      const systemError = Object.assign(new Error(`simulated ${systemCode}`), {
+        code: systemCode
+      })
+      vi.spyOn(PackageService.prototype, 'extractVerified').mockRejectedValueOnce(systemError)
+
+      await expect(
+        data.migrateWorkspace(join(fixtureRoot, `failed-migration-${systemCode}`))
+      ).rejects.toMatchObject({
+        code: appCode,
+        message
+      })
+      expect(workspaceManager.getCurrentPath()).toBe(source)
+      expect(
+        workspaceManager
+          .getDatabase()
+          .prepare('SELECT title FROM tasks WHERE title = ?')
+          .get(`迁移失败保护-${systemCode}`)
+      ).toEqual({ title: `迁移失败保护-${systemCode}` })
+    }
+  )
 })

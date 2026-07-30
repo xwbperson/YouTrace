@@ -145,8 +145,8 @@ describe('execution and evidence application service', () => {
       execution.createManualEffort({
         entityType: 'task',
         entityId: task.id,
-        startedAt: new Date(Date.UTC(2026, 6, 30, 0, index)).toISOString(),
-        endedAt: new Date(Date.UTC(2026, 6, 30, 0, index + 1)).toISOString(),
+        startedAt: new Date(Date.UTC(2099, 6, 30, 0, index)).toISOString(),
+        endedAt: new Date(Date.UTC(2099, 6, 30, 0, index + 1)).toISOString(),
         effectiveMinutes: 1,
         result: `投入 ${index + 1}`,
         interruptions: '',

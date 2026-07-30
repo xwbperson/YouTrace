@@ -141,6 +141,10 @@ export const appBootstrapStateSchema = z.discriminatedUnion('status', [
 ])
 
 export type AppBootstrapState = z.infer<typeof appBootstrapStateSchema>
+export type WorkspaceUnavailableState = Extract<
+  AppBootstrapState,
+  { status: 'workspace-unavailable' }
+>
 
 export const createWorkspaceInputSchema = z.object({
   rootPath: z.string().min(1),
@@ -154,6 +158,7 @@ export const openWorkspaceInputSchema = z.object({
 
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
 export type OpenWorkspaceInput = z.infer<typeof openWorkspaceInputSchema>
+export type ReconnectWorkspaceInput = Pick<OpenWorkspaceInput, 'rootPath'>
 
 export interface AppError {
   code: string
@@ -182,6 +187,7 @@ export type WindowResizeEdge =
 export interface YouTraceApi {
   app: {
     getBootstrapState(): Promise<IpcResult<AppBootstrapState>>
+    onWorkspaceUnavailable(callback: (state: WorkspaceUnavailableState) => void): () => void
   }
   dialog: {
     selectDirectory(): Promise<IpcResult<string | null>>
@@ -189,6 +195,7 @@ export interface YouTraceApi {
   workspace: {
     create(input: CreateWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     open(input: OpenWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
+    reconnect(input: ReconnectWorkspaceInput): Promise<IpcResult<WorkspaceSummary>>
     reveal(): Promise<IpcResult<void>>
   }
   planning: {

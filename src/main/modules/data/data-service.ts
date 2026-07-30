@@ -12,6 +12,7 @@ import {
 } from 'node:fs/promises'
 import { basename, dirname, extname, join, parse, relative, resolve, sep } from 'node:path'
 import Database from 'better-sqlite3'
+import packageMetadata from '../../../../package.json'
 import type {
   BackupInfo,
   BackupVerification,
@@ -28,7 +29,7 @@ import type { WorkspaceManager } from '../../workspace/workspace-manager'
 import { DataRepository } from './data-repository'
 import { PackageService, type PackageManifest } from './package-service'
 
-const APPLICATION_VERSION = '1.0.0'
+const APPLICATION_VERSION = packageMetadata.version
 const REQUIRED_DIRECTORIES = [
   'database',
   'attachments',
@@ -429,6 +430,7 @@ export class DataService {
       )
       return { workspace, sourcePreservedAt: sourceRoot, reportPath }
     } catch (error) {
+      const recoverableError = toRecoverableStorageError(error)
       const sourceReport = join(sourceRoot, 'migration-reports', reportName)
       await writeFile(
         sourceReport,
@@ -440,14 +442,17 @@ export class DataService {
             sourcePath: sourceRoot,
             incompleteTargetPath: targetRoot,
             sourcePreserved: true,
-            reason: error instanceof Error ? error.message : String(error)
+            reason:
+              recoverableError instanceof Error
+                ? recoverableError.message
+                : String(recoverableError)
           },
           null,
           2
         ),
         'utf8'
       ).catch(() => undefined)
-      throw error
+      throw recoverableError
     }
   }
 
@@ -500,6 +505,26 @@ function validateDestination(input: string, sourceRoot: string): string {
     })
   }
   return target
+}
+
+function toRecoverableStorageError(error: unknown): unknown {
+  if (error instanceof YouTraceError) return error
+  const code = (error as NodeJS.ErrnoException | null)?.code
+  if (code === 'ENOSPC') {
+    return new YouTraceError({
+      code: 'TARGET_SPACE_INSUFFICIENT',
+      message: '目标磁盘空间不足，工作区未切换。',
+      recovery: '请释放目标磁盘空间或改选目录后重试；当前工作区仍可继续使用。'
+    })
+  }
+  if (code === 'EACCES' || code === 'EPERM' || code === 'EROFS') {
+    return new YouTraceError({
+      code: 'TARGET_NOT_WRITABLE',
+      message: '目标目录不可写，工作区未切换。',
+      recovery: '请检查目录权限或改选可写目录；当前工作区仍可继续使用。'
+    })
+  }
+  return error
 }
 
 async function assertEmptyOrMissing(path: string): Promise<void> {

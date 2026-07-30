@@ -1,6 +1,6 @@
 {
   "name": "youtrace",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "有迹（YouTrace）— 本地优先的个人执行与努力记录桌面应用",
   "main": "./out/main/index.js",
   "author": "YouTrace",
