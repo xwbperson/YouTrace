@@ -70,6 +70,12 @@ test('keeps an active effort alive through custom window controls and tray-style
       resizable: true,
       menuVisible: false
     })
+    const developmentTrayIconLoaded = await electronApp.evaluate(({ app, nativeImage }) =>
+      !nativeImage
+        .createFromPath(`${app.getAppPath()}/resources/icon.png`)
+        .isEmpty()
+    )
+    expect(developmentTrayIconLoaded).toBe(true)
 
     await page.getByRole('button', { name: '最小化窗口' }).click()
     await expect
@@ -97,6 +103,10 @@ test('keeps an active effort alive through custom window controls and tray-style
         electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.isMaximized())
       )
       .toBe(false)
+
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    await expect(page.getByRole('radio', { name: /最小化到托盘/ })).toBeChecked()
+    await expect(page.getByRole('radio', { name: /直接退出程序/ })).toBeVisible()
 
     await page.getByRole('button', { name: '今日', exact: true }).click()
     const task = page.getByRole('article').filter({ hasText: '验证后台计时' })
@@ -140,6 +150,21 @@ test('keeps an active effort alive through custom window controls and tray-style
     await page.getByLabel('实际结果').fill('窗口隐藏期间计时事实保持')
     await page.getByRole('button', { name: '保存并停止' }).click()
     await expect(page.getByText('当前没有计时')).toBeVisible()
+
+    await page.getByRole('button', { name: '设置', exact: true }).click()
+    await page.getByRole('radio', { name: /直接退出程序/ }).check()
+    await page.getByRole('button', { name: '保存全部设置' }).click()
+    await expect(page.getByRole('button', { name: '关闭窗口并退出程序' })).toBeVisible()
+    await electronApp.evaluate(({ dialog }) => {
+      ;(dialog.showMessageBox as unknown as (...args: unknown[]) => unknown) = async () => ({
+        response: 0,
+        checkboxChecked: false
+      })
+    })
+    await Promise.all([
+      electronApp.waitForEvent('close'),
+      page.getByRole('button', { name: '关闭窗口并退出程序' }).click()
+    ])
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)
   }

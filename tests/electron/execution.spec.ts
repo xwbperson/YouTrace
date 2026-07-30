@@ -1,10 +1,12 @@
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { _electron as electron, expect, test } from '@playwright/test'
 
 test('records a timed effort and converts a memo through the Electron UI', async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-execution-e2e-'))
+  const memoAttachmentPath = join(fixtureRoot, 'memo-attachment.txt')
+  await writeFile(memoAttachmentPath, 'memo attachment content', 'utf8')
   const environment = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
   )
@@ -90,11 +92,21 @@ test('records a timed effort and converts a memo through the Electron UI', async
     await page.getByRole('button', { name: /备忘/ }).click()
     await page.getByLabel('快速记录').fill('把依赖排查步骤整理成检查表')
     await page.getByLabel('备忘类型').selectOption('idea')
-    await page.getByRole('button', { name: '保存到收件箱' }).click()
+    await page.getByLabel('选择备忘附件').setInputFiles(memoAttachmentPath)
+    await page.getByRole('button', { name: '保存备忘及附件' }).click()
     await expect(page.getByText('把依赖排查步骤整理成检查表')).toBeVisible()
+    await expect(page.locator('.memo-evidence-count')).toHaveText('1')
     await page.getByRole('button', { name: '整理' }).click()
     await page.getByRole('button', { name: '创建任务并保留来源' }).click()
     await expect(page.getByText('已转为任务')).toBeVisible()
+    await page.getByRole('button', { name: '归档备忘' }).click()
+    await page.getByRole('checkbox', { name: '显示已归档' }).check()
+    const archivedMemo = page.getByRole('article').filter({ hasText: '把依赖排查步骤整理成检查表' })
+    await expect(archivedMemo.getByText('已归档')).toBeVisible()
+    await archivedMemo.getByRole('button', { name: '永久删除备忘' }).click()
+    await expect(page.getByRole('heading', { name: '永久删除这条备忘？' })).toBeVisible()
+    await page.getByRole('button', { name: '确认永久删除' }).click()
+    await expect(archivedMemo).toHaveCount(0)
     await page.screenshot({ path: 'test-results/execution-memo.png' })
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)

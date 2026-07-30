@@ -91,8 +91,6 @@ test('previews a template and keeps a review snapshot after rescheduling', async
     await page.getByLabel('重要成果').fill('模板结构已验证')
     await page.getByLabel('阻塞与延期原因').fill('本周容量不足')
     await page.getByLabel('下一周期第一步').fill('完成第一章阅读')
-    await page.getByRole('button', { name: '完成复盘' }).click()
-    await expect(page.locator('.review-status')).toHaveText('已完成')
 
     const nextWeek = new Date(end)
     nextWeek.setDate(nextWeek.getDate() + 7)
@@ -101,6 +99,8 @@ test('previews a template and keeps a review snapshot after rescheduling', async
     await page.getByRole('button', { name: '批量顺延' }).click()
     await expect(page.getByText('已执行 1 次调整')).toBeVisible()
     await expect(page.getByText(/原计划未完成 · 无截止日期/)).toBeVisible()
+    await page.getByRole('button', { name: '完成复盘' }).click()
+    await expect(page.locator('.review-status')).toHaveText('已完成')
     await page.screenshot({ path: 'test-results/review-snapshot.png' })
 
     await page.getByRole('button', { name: '设置', exact: true }).click()

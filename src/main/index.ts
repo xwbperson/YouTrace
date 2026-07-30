@@ -294,13 +294,7 @@ function registerApplicationProtocol(): void {
 }
 
 function createTray(): void {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
-      <rect width="32" height="32" rx="8" fill="#216E65"/>
-      <path d="M9 8v8.5a7 7 0 0 0 14 0V8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-      <circle cx="16" cy="23" r="2" fill="#F1A85A"/>
-    </svg>`
-  const icon = nativeImage.createFromBuffer(Buffer.from(svg)).resize({ width: 20, height: 20 })
+  const icon = loadTrayIcon()
   tray = new Tray(icon)
   tray.setToolTip('有迹 · 让每一次努力都有迹可循')
   tray.setContextMenu(
@@ -314,6 +308,27 @@ function createTray(): void {
     ])
   )
   tray.on('double-click', showMainWindow)
+}
+
+function loadTrayIcon(): Electron.NativeImage {
+  const iconPaths = app.isPackaged
+    ? [join(process.resourcesPath, 'youtrace-tray.png')]
+    : [
+        join(app.getAppPath(), 'resources', 'icon.png'),
+        join(process.cwd(), 'resources', 'icon.png')
+      ]
+  for (const iconPath of iconPaths) {
+    const fileIcon = nativeImage.createFromPath(iconPath)
+    if (!fileIcon.isEmpty()) return fileIcon.resize({ width: 20, height: 20 })
+  }
+
+  const fallbackSvg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+      <rect width="32" height="32" rx="8" fill="#216E65"/>
+      <path d="M9 8v8.5a7 7 0 0 0 14 0V8" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="16" cy="23" r="2" fill="#F1A85A"/>
+    </svg>`
+  return nativeImage.createFromBuffer(Buffer.from(fallbackSvg)).resize({ width: 20, height: 20 })
 }
 
 async function requestApplicationQuit(): Promise<void> {

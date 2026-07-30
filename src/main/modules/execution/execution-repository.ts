@@ -544,6 +544,35 @@ export class ExecutionRepository {
     return result.changes > 0
   }
 
+  deleteArchivedMemo(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const memo = database
+        .prepare('SELECT id FROM memos WHERE id = ? AND archived_at IS NOT NULL')
+        .get(id)
+      if (!memo) return false
+      database
+        .prepare("DELETE FROM tag_assignments WHERE entity_type = 'memo' AND entity_id = ?")
+        .run(id)
+      database
+        .prepare("DELETE FROM entity_evidence WHERE entity_type = 'memo' AND entity_id = ?")
+        .run(id)
+      database
+        .prepare(
+          `DELETE FROM entity_relations
+            WHERE (source_type = 'memo' AND source_id = ?)
+               OR (target_type = 'memo' AND target_id = ?)`
+        )
+        .run(id, id)
+      database
+        .prepare("DELETE FROM searchable_content WHERE entity_type = 'memo' AND entity_id = ?")
+        .run(id)
+      database.prepare('DELETE FROM memos WHERE id = ?').run(id)
+      this.insertAudit(database, 'memo', id, 'purged', null, { permanent: true }, now)
+      return true
+    })()
+  }
+
   private queryEfforts(condition: string, parameters: unknown[], suffix = ''): EffortRow[] {
     return this.database()
       .prepare(

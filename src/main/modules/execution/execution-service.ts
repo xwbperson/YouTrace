@@ -353,6 +353,19 @@ export class ExecutionService {
     return this.requireMemo(id)
   }
 
+  deleteArchivedMemo(id: string): void {
+    const memo = this.requireMemo(id)
+    if (!memo.archived) {
+      throw new YouTraceError({
+        code: 'MEMO_NOT_ARCHIVED',
+        message: '请先归档备忘，再执行永久删除。'
+      })
+    }
+    if (!this.repository.deleteArchivedMemo(id, new Date().toISOString())) {
+      throw entityNotFound('备忘')
+    }
+  }
+
   private requireEffort(id: string): EffortEntry {
     const effort = this.repository.getEffort(id)
     if (!effort) throw entityNotFound('努力记录')

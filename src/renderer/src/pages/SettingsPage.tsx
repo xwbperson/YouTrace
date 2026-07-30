@@ -113,8 +113,18 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
             <label><span>主题</span><select value={preferences.theme} onChange={(event) => { const theme = event.target.value as UserPreferences['theme']; setPreferences({ ...preferences, theme }); document.documentElement.dataset.theme = theme }}><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
             <label><span>字号比例</span><input type="number" min="0.9" max="1.25" step="0.05" value={preferences.fontScale} onChange={(event) => { const fontScale = Number(event.target.value); setPreferences({ ...preferences, fontScale }); document.documentElement.style.setProperty('--user-font-scale', fontScale.toString()) }} /></label>
             <label><span>界面密度</span><select value={preferences.density} onChange={(event) => setPreferences({ ...preferences, density: event.target.value as UserPreferences['density'] })}><option value="compact">紧凑</option><option value="comfortable">舒适</option></select></label>
-            <label><span>关闭主窗口</span><select value={preferences.closeBehavior} onChange={(event) => setPreferences({ ...preferences, closeBehavior: event.target.value as UserPreferences['closeBehavior'] })}><option value="tray">隐藏到托盘</option><option value="quit">退出程序</option></select></label>
           </div>
+          <fieldset className="close-behavior-setting">
+            <legend>点击右上角关闭按钮时</legend>
+            <label className={preferences.closeBehavior === 'tray' ? 'active' : ''}>
+              <input type="radio" name="close-behavior" value="tray" checked={preferences.closeBehavior === 'tray'} onChange={() => setPreferences({ ...preferences, closeBehavior: 'tray' })} />
+              <span><strong>最小化到托盘</strong><small>窗口隐藏，计时、备份和提醒继续运行。</small></span>
+            </label>
+            <label className={preferences.closeBehavior === 'quit' ? 'active' : ''}>
+              <input type="radio" name="close-behavior" value="quit" checked={preferences.closeBehavior === 'quit'} onChange={() => setPreferences({ ...preferences, closeBehavior: 'quit' })} />
+              <span><strong>直接退出程序</strong><small>关闭前确认，退出后后台计时和提醒停止。</small></span>
+            </label>
+          </fieldset>
           <div className="settings-grid">
             <ToggleSetting label="完成前确认" description="完成关键任务前再次确认。" checked={preferences.completionConfirmation} onChange={(completionConfirmation) => setPreferences({ ...preferences, completionConfirmation })} />
             <ToggleSetting label="自动备份" description="使用在线 SQLite 快照并在校验后登记。" checked={preferences.automaticBackupEnabled} onChange={(automaticBackupEnabled) => setPreferences({ ...preferences, automaticBackupEnabled })} />
@@ -139,7 +149,7 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
       )}
 
       <section className="settings-section panel">
-        <header><span><Bell size={17} /></span><div><h2>通知与静默时间</h2><p>主窗口隐藏到托盘后，提醒仍由本地主进程调度。</p></div></header>
+        <header><span><Bell size={17} /></span><div><h2>通知与静默时间</h2><p>选择最小化到托盘时，提醒仍由本地主进程调度。</p></div></header>
         {settings && (
           <>
             <div className="settings-grid">

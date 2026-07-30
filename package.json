@@ -1,6 +1,6 @@
 {
   "name": "youtrace",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "有迹（YouTrace）— 本地优先的个人执行与努力记录桌面应用",
   "main": "./out/main/index.js",
   "author": "YouTrace",
@@ -66,6 +66,12 @@
     "files": [
       "out/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "youtrace-tray.png"
+      }
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**/*"

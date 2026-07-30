@@ -333,6 +333,44 @@ describe('execution and evidence application service', () => {
     )
   })
 
+  it('permanently deletes only an archived memo while preserving its converted task', () => {
+    const memo = execution.createMemo({
+      kind: 'idea',
+      title: '',
+      body: '把归档内容整理成独立任务',
+      projectId: null,
+      sourceLink: null,
+      tagIds: []
+    })
+    const task = execution.convertMemoToTask({
+      memoId: memo.id,
+      projectId: null,
+      title: '独立保留的任务',
+      estimatedMinutes: 20
+    })
+
+    expect(() => execution.deleteArchivedMemo(memo.id)).toThrow(/先归档/)
+
+    execution.archiveMemo(memo.id, true)
+    execution.deleteArchivedMemo(memo.id)
+
+    expect(execution.listMemos(false, true)).not.toContainEqual(
+      expect.objectContaining({ id: memo.id })
+    )
+    expect(
+      planning
+        .listTasks({
+          projectId: null,
+          statuses: [],
+          tagIds: [],
+          includeDeleted: false,
+          limit: 100,
+          offset: 0
+        })
+        .find((candidate) => candidate.id === task.id)
+    ).toMatchObject({ title: '独立保留的任务' })
+  })
+
   it('requires an auditable reason to start through an incomplete dependency', () => {
     const project = planning.createProject({
       areaId: null,

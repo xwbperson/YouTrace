@@ -172,22 +172,14 @@ test('completes the course learning loop and preserves it across an explicit qui
     await page.getByRole('button', { name: '保存到收件箱' }).click()
     await expect(page.getByText('第一章复盘：区分协议提供的服务与协议本身。')).toBeVisible()
 
-    await electronApp.evaluate(
-      ({ dialog }, filePath) => {
-        ;(dialog.showOpenDialog as unknown as (...args: unknown[]) => unknown) = async () => ({
-          canceled: false,
-          filePaths: [filePath]
-        })
-      },
-      evidencePath
-    )
     await page.getByRole('button', { name: '记录', exact: true }).click()
     await page.getByRole('button', { name: '添加成果' }).click()
     await page.getByLabel('证据类型').selectOption('file')
     await page.getByLabel('关联任务').selectOption(setup.timerTaskId as string)
     await page.getByLabel('标题').fill('第一章复盘文件')
     await page.getByLabel('说明').fill('章节复盘笔记原文件')
-    await page.getByRole('button', { name: '选择文件并保存' }).click()
+    await page.getByLabel('选择成果附件').setInputFiles(evidencePath)
+    await page.getByRole('button', { name: '上传并保存证据' }).click()
     await page.getByRole('button', { name: '成果证据', exact: true }).click()
     await expect(page.getByText('第一章复盘文件')).toBeVisible()
 

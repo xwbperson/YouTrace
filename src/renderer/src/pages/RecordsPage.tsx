@@ -9,6 +9,7 @@ import {
   Image,
   Link2,
   History,
+  Paperclip,
   Pencil,
   Plus,
   TimerReset,
@@ -406,6 +407,8 @@ function EvidenceDialog({
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
   const [source, setSource] = useState('')
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileDragging, setFileDragging] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -414,7 +417,8 @@ function EvidenceDialog({
     setError('')
     const isLocalFile = kind === 'file' || kind === 'image'
     const response = isLocalFile
-      ? await window.youtrace.data.importEvidenceFile({
+      ? selectedFile
+        ? await window.youtrace.data.importDroppedEvidenceFile(selectedFile, {
           kind,
           title,
           note,
@@ -423,6 +427,7 @@ function EvidenceDialog({
           entityId: taskId || null,
           tagIds: []
         })
+        : null
       : await window.youtrace.execution.createEvidence({
           kind,
           title,
@@ -432,17 +437,21 @@ function EvidenceDialog({
           entityType: taskId ? 'task' : null,
           entityId: taskId || null,
           tagIds: []
-        })
+    })
     setBusy(false)
+    if (response === null) {
+      setError('请先点击选择文件，或将文件拖到上传区域。')
+      return
+    }
     if (!response.ok) {
       setError(response.error.message)
       return
     }
-    if (isLocalFile && response.data === null) return
     await onCreated()
     setTitle('')
     setNote('')
     setSource('')
+    setSelectedFile(null)
     onOpenChange(false)
   }
 
@@ -463,7 +472,10 @@ function EvidenceDialog({
             <div className="form-row">
               <label>
                 <span>证据类型</span>
-                <select value={kind} onChange={(event) => setKind(event.target.value as typeof kind)}>
+                <select value={kind} onChange={(event) => {
+                  setKind(event.target.value as typeof kind)
+                  setSelectedFile(null)
+                }}>
                   <option value="file">本地文件</option>
                   <option value="image">图片</option>
                   <option value="note">文本笔记</option>
@@ -483,8 +495,43 @@ function EvidenceDialog({
             <label><span>标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
             <label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>
             {kind === 'file' || kind === 'image' ? (
-              <div className="file-picker-note">
-                保存时选择文件；应用会校验哈希并复制到当前工作区。
+              <div
+                className={`attachment-dropzone evidence-attachment-dropzone ${fileDragging ? 'dragging' : ''} ${selectedFile ? 'has-file' : ''}`}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setFileDragging(true)
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                    setFileDragging(false)
+                  }
+                }}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  setFileDragging(false)
+                  setSelectedFile(event.dataTransfer.files[0] ?? null)
+                }}
+              >
+                <label>
+                  <input
+                    className="visually-hidden"
+                    aria-label="选择成果附件"
+                    type="file"
+                    accept={kind === 'image' ? 'image/*' : undefined}
+                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                  />
+                  <Paperclip size={17} />
+                  <span>
+                    <strong>{selectedFile ? selectedFile.name : '点击选择文件，或将文件拖到这里'}</strong>
+                    <small>应用会校验哈希，并复制一份到当前工作区。</small>
+                  </span>
+                </label>
+                {selectedFile && (
+                  <button type="button" aria-label="移除待上传成果附件" onClick={() => setSelectedFile(null)}>
+                    <X size={14} />
+                  </button>
+                )}
               </div>
             ) : (
               <label><span>来源或链接</span><input value={source} onChange={(event) => setSource(event.target.value)} /></label>
@@ -493,8 +540,8 @@ function EvidenceDialog({
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
-            <button className="button button-primary" disabled={!title.trim() || busy} onClick={() => void submit()}>
-              {busy ? '正在保存…' : kind === 'file' || kind === 'image' ? '选择文件并保存' : '保存证据'}
+            <button className="button button-primary" disabled={!title.trim() || busy || ((kind === 'file' || kind === 'image') && !selectedFile)} onClick={() => void submit()}>
+              {busy ? '正在保存…' : kind === 'file' || kind === 'image' ? '上传并保存证据' : '保存证据'}
             </button>
           </div>
         </Dialog.Content>

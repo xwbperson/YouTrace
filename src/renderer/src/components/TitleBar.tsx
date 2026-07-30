@@ -1,4 +1,5 @@
 import { Copy, Maximize2, Minus, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import type { WindowResizeEdge, WindowState } from '../../../shared/contracts'
 
@@ -11,6 +12,16 @@ export function TitleBar({ workspaceName }: TitleBarProps): React.JSX.Element {
     maximized: false,
     focused: true
   })
+  const preferencesQuery = useQuery({
+    queryKey: ['user-preferences'],
+    enabled: Boolean(workspaceName),
+    queryFn: async () => {
+      const result = await window.youtrace.settings.getPreferences()
+      if (!result.ok) throw new Error(result.error.message)
+      return result.data
+    }
+  })
+  const closesToTray = preferencesQuery.data?.closeBehavior !== 'quit'
 
   useEffect(() => {
     void window.youtrace.window.getState().then((result) => {
@@ -61,8 +72,8 @@ export function TitleBar({ workspaceName }: TitleBarProps): React.JSX.Element {
         <button
           type="button"
           className="window-close"
-          aria-label="关闭窗口并保留后台运行"
-          title="关闭到托盘"
+          aria-label={closesToTray ? '关闭窗口并保留后台运行' : '关闭窗口并退出程序'}
+          title={closesToTray ? '最小化到托盘' : '直接退出程序'}
           onClick={() => void window.youtrace.window.close()}
         >
           <X size={17} strokeWidth={1.7} />

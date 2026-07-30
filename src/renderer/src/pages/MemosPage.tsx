@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Tag,
+  Trash2,
   X
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -40,8 +41,12 @@ export function MemosPage(): React.JSX.Element {
   const [projectId, setProjectId] = useState('')
   const [sourceLink, setSourceLink] = useState('')
   const [tagIds, setTagIds] = useState<string[]>([])
+  const [attachment, setAttachment] = useState<File | null>(null)
+  const [attachmentDragging, setAttachmentDragging] = useState(false)
+  const [captureNotice, setCaptureNotice] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [convertMemo, setConvertMemo] = useState<Memo | null>(null)
+  const [deleteMemo, setDeleteMemo] = useState<Memo | null>(null)
   const [draftHandled, setDraftHandled] = useState(false)
 
   const memosQuery = useQuery({
@@ -96,7 +101,7 @@ export function MemosPage(): React.JSX.Element {
   ])
 
   const createMutation = useMutation({
-    mutationFn: async (attachFile: boolean) => {
+    mutationFn: async () => {
       const memo = unwrap(
         await window.youtrace.execution.createMemo({
           kind,
@@ -107,25 +112,28 @@ export function MemosPage(): React.JSX.Element {
           tagIds
         })
       )
-      if (attachFile) {
-        unwrap(
-          await window.youtrace.data.importEvidenceFile({
-            kind: 'file',
-            title: body.slice(0, 80),
-            note: '备忘附件',
-            verificationStatus: 'prepared',
-            entityType: 'memo',
-            entityId: memo.id,
-            tagIds
-          })
-        )
-      }
-      return memo
+      if (!attachment) return null
+      const attachmentResult = await window.youtrace.data.importDroppedEvidenceFile(attachment, {
+        kind: 'file',
+        title: attachment.name,
+        note: '备忘附件',
+        verificationStatus: 'prepared',
+        entityType: 'memo',
+        entityId: memo.id,
+        tagIds
+      })
+      return attachmentResult.ok ? null : attachmentResult.error.message
     },
-    onSuccess: async () => {
+    onSuccess: async (attachmentError) => {
       setBody('')
       setSourceLink('')
       setTagIds([])
+      setAttachment(null)
+      setCaptureNotice(
+        attachmentError
+          ? `备忘已保存，但附件导入失败：${attachmentError}`
+          : ''
+      )
       setDraftHandled(true)
       await window.youtrace.data.discardRecoveryDraft(QUICK_MEMO_DRAFT_KEY)
       await queryClient.invalidateQueries({ queryKey: ['memos'] })
@@ -215,6 +223,43 @@ export function MemosPage(): React.JSX.Element {
           </select>
           <label className="memo-source-link"><Link2 size={14} /><input aria-label="来源链接" type="url" value={sourceLink} onChange={(event) => setSourceLink(event.target.value)} placeholder="可选来源链接" /></label>
         </div>
+        <div
+          className={`attachment-dropzone memo-attachment-dropzone ${attachmentDragging ? 'dragging' : ''} ${attachment ? 'has-file' : ''}`}
+          onDragEnter={(event) => {
+            event.preventDefault()
+            setAttachmentDragging(true)
+          }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setAttachmentDragging(false)
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            setAttachmentDragging(false)
+            setAttachment(event.dataTransfer.files[0] ?? null)
+          }}
+        >
+          <label>
+            <input
+              className="visually-hidden"
+              aria-label="选择备忘附件"
+              type="file"
+              onChange={(event) => setAttachment(event.target.files?.[0] ?? null)}
+            />
+            <Paperclip size={16} />
+            <span>
+              <strong>{attachment ? attachment.name : '点击选择附件，或将文件拖到这里'}</strong>
+              <small>保存后会复制到当前工作区，原文件不会被移动。</small>
+            </span>
+          </label>
+          {attachment && (
+            <button type="button" aria-label="移除待上传附件" onClick={() => setAttachment(null)}>
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <div className="memo-capture-tags" aria-label="备忘标签">
           <Tag size={14} />
           {(tagsQuery.data ?? []).map((tag) => (
@@ -224,21 +269,19 @@ export function MemosPage(): React.JSX.Element {
           ))}
           <span className="memo-capture-spacer" />
           <button
-            className="button button-secondary"
-            disabled={!body.trim() || createMutation.isPending}
-            onClick={() => createMutation.mutate(true)}
-          >
-            <Paperclip size={15} />保存并添加附件
-          </button>
-          <button
             className="button button-primary"
             disabled={!body.trim() || createMutation.isPending}
-            onClick={() => createMutation.mutate(false)}
+            onClick={() => {
+              setCaptureNotice('')
+              createMutation.mutate()
+            }}
           >
             <Plus size={16} />
-            保存到收件箱
+            {attachment ? '保存备忘及附件' : '保存到收件箱'}
           </button>
         </div>
+        {captureNotice && <div className="inline-error memo-capture-error" role="status">{captureNotice}</div>}
+        {createMutation.error && <div className="inline-error memo-capture-error">{createMutation.error.message}</div>}
       </section>
 
       <section className="memo-list-section">
@@ -267,18 +310,27 @@ export function MemosPage(): React.JSX.Element {
                 {memo.title && <strong>{memo.title}</strong>}
                 <p>{memo.body}</p>
                 <footer>
-                  <span className={memo.archived ? 'processed' : memo.inbox ? 'inbox' : 'processed'}>{memo.archived ? '已归档' : memo.inbox ? '待处理' : `已转为${convertedLabel(memo)}`}</span>
-                  {memo.evidenceCount > 0 && <span className="memo-evidence-count"><Paperclip size={11} />{memo.evidenceCount}</span>}
-                  {memo.projectId && <span>{(projectsQuery.data ?? []).find((project) => project.id === memo.projectId)?.name ?? '关联项目'}</span>}
-                  {memo.inbox && (
-                    <button onClick={() => setConvertMemo(memo)}>
-                      整理
-                      <ArrowRight size={13} />
+                  <div className="memo-card-meta">
+                    <span className={memo.archived ? 'processed' : memo.inbox ? 'inbox' : 'processed'}>{memo.archived ? '已归档' : memo.inbox ? '待处理' : `已转为${convertedLabel(memo)}`}</span>
+                    {memo.evidenceCount > 0 && <span className="memo-evidence-count"><Paperclip size={11} />{memo.evidenceCount}</span>}
+                    {memo.projectId && <span>{(projectsQuery.data ?? []).find((project) => project.id === memo.projectId)?.name ?? '关联项目'}</span>}
+                  </div>
+                  <div className="memo-card-actions">
+                    {memo.inbox && !memo.archived && (
+                      <button onClick={() => setConvertMemo(memo)}>
+                        整理
+                        <ArrowRight size={13} />
+                      </button>
+                    )}
+                    {memo.archived && (
+                      <button className="memo-delete-action" aria-label="永久删除备忘" onClick={() => setDeleteMemo(memo)}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                    <button aria-label={memo.archived ? '恢复备忘' : '归档备忘'} onClick={async () => { await window.youtrace.execution.archiveMemo(memo.id, !memo.archived); await queryClient.invalidateQueries({ queryKey: ['memos'] }) }}>
+                      {memo.archived ? <RotateCcw size={13} /> : <Archive size={13} />}
                     </button>
-                  )}
-                  <button aria-label={memo.archived ? '恢复备忘' : '归档备忘'} onClick={async () => { await window.youtrace.execution.archiveMemo(memo.id, !memo.archived); await queryClient.invalidateQueries({ queryKey: ['memos'] }) }}>
-                    {memo.archived ? <RotateCcw size={13} /> : <Archive size={13} />}
-                  </button>
+                  </div>
                 </footer>
               </article>
             ))}
@@ -302,7 +354,71 @@ export function MemosPage(): React.JSX.Element {
           }}
         />
       )}
+      <DeleteArchivedMemoDialog
+        memo={deleteMemo}
+        onOpenChange={(open) => {
+          if (!open) setDeleteMemo(null)
+        }}
+        onDeleted={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['memos'] })
+        }}
+      />
     </main>
+  )
+}
+
+function DeleteArchivedMemoDialog({
+  memo,
+  onOpenChange,
+  onDeleted
+}: {
+  memo: Memo | null
+  onOpenChange: (open: boolean) => void
+  onDeleted: () => Promise<void>
+}): React.JSX.Element {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const remove = async (): Promise<void> => {
+    if (!memo) return
+    setBusy(true)
+    setError('')
+    const result = await window.youtrace.execution.deleteArchivedMemo(memo.id)
+    setBusy(false)
+    if (!result.ok) {
+      setError(result.error.message)
+      return
+    }
+    onOpenChange(false)
+    await onDeleted()
+  }
+
+  return (
+    <Dialog.Root open={memo !== null} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content destructive-dialog">
+          <div className="dialog-heading">
+            <div>
+              <span className="section-label">不可恢复操作</span>
+              <Dialog.Title>永久删除这条备忘？</Dialog.Title>
+              <Dialog.Description>
+                备忘原文、标签和来源关系会被永久删除；已经转换出的任务、知识内容及已保存附件仍会保留。
+              </Dialog.Description>
+            </div>
+            <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+          <div className="dialog-actions">
+            <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+            <button className="button button-danger" disabled={busy} onClick={() => void remove()}>
+              <Trash2 size={14} />
+              {busy ? '正在删除…' : '确认永久删除'}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 

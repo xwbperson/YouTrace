@@ -672,6 +672,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('execution:delete-archived-memo', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      executionService.deleteArchivedMemo(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('practice:list-habits', (event, rawProjectId, rawDate) =>
     wrap(() => {
       trusted(event)
@@ -1140,6 +1147,15 @@ export function registerIpc(options: RegisterIpcOptions): void {
       })
       if (selection.canceled || !selection.filePaths[0]) return null
       return dataService.importEvidenceFile(selection.filePaths[0], input)
+    })
+  )
+
+  ipcMain.handle('data:import-dropped-evidence-file', (event, rawSourcePath, rawInput) =>
+    wrap(async () => {
+      trusted(event)
+      const sourcePath = z.string().trim().min(1).max(32_767).parse(rawSourcePath)
+      const input = importEvidenceFileInputSchema.parse(rawInput)
+      return dataService.importEvidenceFile(sourcePath, input)
     })
   )
 

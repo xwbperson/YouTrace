@@ -279,6 +279,7 @@ export interface YouTraceApi {
     convertMemoToTask(input: ConvertMemoToTaskInput): Promise<IpcResult<Task>>
     convertMemoToLearning(input: ConvertMemoToLearningInput): Promise<IpcResult<KnowledgeItem | Mistake>>
     archiveMemo(id: string, archived: boolean): Promise<IpcResult<Memo>>
+    deleteArchivedMemo(id: string): Promise<IpcResult<void>>
   }
   practice: {
     listHabits(projectId: string | null, date: string): Promise<IpcResult<Habit[]>>
@@ -351,6 +352,10 @@ export interface YouTraceApi {
     exportPortable(): Promise<IpcResult<BackupInfo>>
     importPortable(targetRoot: string): Promise<IpcResult<RestoreResult | null>>
     importEvidenceFile(input: ImportEvidenceFileInput): Promise<IpcResult<ImportedEvidence | null>>
+    importDroppedEvidenceFile(
+      file: File,
+      input: ImportEvidenceFileInput
+    ): Promise<IpcResult<ImportedEvidence>>
     listTrash(): Promise<IpcResult<TrashItem[]>>
     restoreTrash(input: TrashActionInput): Promise<IpcResult<TrashItem>>
     purgeTrash(input: TrashActionInput): Promise<IpcResult<void>>

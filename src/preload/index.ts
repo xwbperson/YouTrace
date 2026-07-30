@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AppBootstrapState,
   CreateWorkspaceInput,
@@ -107,7 +107,8 @@ const api: YouTraceApi = {
     convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input),
     convertMemoToLearning: (input) =>
       ipcRenderer.invoke('execution:convert-memo-to-learning', input),
-    archiveMemo: (id, archived) => ipcRenderer.invoke('execution:archive-memo', id, archived)
+    archiveMemo: (id, archived) => ipcRenderer.invoke('execution:archive-memo', id, archived),
+    deleteArchivedMemo: (id) => ipcRenderer.invoke('execution:delete-archived-memo', id)
   },
   practice: {
     listHabits: (projectId, date) =>
@@ -192,6 +193,8 @@ const api: YouTraceApi = {
     exportPortable: () => ipcRenderer.invoke('data:export-portable'),
     importPortable: (targetRoot) => ipcRenderer.invoke('data:import-portable', targetRoot),
     importEvidenceFile: (input) => ipcRenderer.invoke('data:import-evidence-file', input),
+    importDroppedEvidenceFile: (file, input) =>
+      ipcRenderer.invoke('data:import-dropped-evidence-file', webUtils.getPathForFile(file), input),
     listTrash: () => ipcRenderer.invoke('data:list-trash'),
     restoreTrash: (input) => ipcRenderer.invoke('data:restore-trash', input),
     purgeTrash: (input) => ipcRenderer.invoke('data:purge-trash', input)
