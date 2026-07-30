@@ -129,6 +129,13 @@ export class WorkflowService {
     return this.requireReview(input.id)
   }
 
+  trashReview(id: string): void {
+    this.requireReview(id)
+    if (!this.repository.trashReview(id, new Date().toISOString())) {
+      throw notFound('复盘')
+    }
+  }
+
   applyReviewAdjustments(input: ApplyReviewAdjustmentsInput): Review {
     this.requireReview(input.reviewId)
     const now = new Date().toISOString()

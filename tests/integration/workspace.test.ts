@@ -5,6 +5,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
+import { DatabaseManager } from '../../src/main/database/database-manager'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 
 const managers: WorkspaceManager[] = []
@@ -55,7 +56,7 @@ describe('workspace lifecycle', () => {
       .get() as { name: string } | undefined
     database.close()
 
-    expect(migration.version).toBe(9)
+    expect(migration.version).toBe(10)
     expect(searchTable?.name).toBe('searchable_content')
 
     const bootstrapContents = await readFile(join(userDataRoot, 'bootstrap.json'), 'utf8')
@@ -76,6 +77,50 @@ describe('workspace lifecycle', () => {
       status: 'ready',
       workspace: created
     })
+  })
+
+  it('upgrades a schema v9 review table for recoverable deletion', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v10-test-'))
+    const databasePath = join(fixtureRoot, 'youtrace.sqlite3')
+    const legacy = new Database(databasePath)
+    legacy.exec(`
+      CREATE TABLE schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+      INSERT INTO schema_migrations(version, applied_at)
+      VALUES (9, '2026-07-30T00:00:00.000Z');
+      CREATE TABLE reviews (
+        id TEXT PRIMARY KEY,
+        review_type TEXT NOT NULL,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        title TEXT NOT NULL,
+        important_outcomes TEXT NOT NULL DEFAULT '',
+        incomplete_items TEXT NOT NULL DEFAULT '',
+        blockers TEXT NOT NULL DEFAULT '',
+        next_first_step TEXT NOT NULL DEFAULT '',
+        next_commitments TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+    `)
+    legacy.close()
+
+    const manager = new DatabaseManager()
+    const migrated = manager.open(databasePath)
+    try {
+      const columns = migrated.pragma('table_info(reviews)') as Array<{ name: string }>
+      const version = migrated
+        .prepare('SELECT MAX(version) AS version FROM schema_migrations')
+        .get() as { version: number }
+      expect(columns.map((column) => column.name)).toContain('deleted_at')
+      expect(version.version).toBe(10)
+    } finally {
+      manager.close()
+    }
   })
 
   it('rejects a second writer while allowing an explicit read-only connection', async () => {

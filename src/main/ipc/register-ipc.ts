@@ -864,6 +864,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('workflow:trash-review', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      workflowService.trashReview(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('workflow:apply-review-adjustments', (event, rawInput) =>
     wrap(() => {
       trusted(event)

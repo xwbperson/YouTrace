@@ -69,6 +69,7 @@ export class DatabaseManager {
   private migrate(database: Database.Database): void {
     const transaction = database.transaction(() => {
       database.exec(INITIAL_SCHEMA_SQL)
+      ensureColumn(database, 'reviews', 'deleted_at', 'TEXT')
       const row = database
         .prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number | null }
@@ -90,4 +91,16 @@ function databaseIntegrityError(): YouTraceError {
     message: '工作区数据库未通过完整性检查，已停止写入。',
     recovery: '有迹会保留损坏副本，并尝试从最近的已验证备份创建独立恢复副本。'
   })
+}
+
+function ensureColumn(
+  database: Database.Database,
+  table: string,
+  column: string,
+  definition: string
+): void {
+  const columns = database.pragma(`table_info(${table})`) as Array<{ name: string }>
+  if (!columns.some((candidate) => candidate.name === column)) {
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
 }

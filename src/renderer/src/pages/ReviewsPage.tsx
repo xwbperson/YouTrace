@@ -8,8 +8,10 @@ import {
   ClipboardList,
   Clock3,
   GitBranch,
+  Pencil,
   Plus,
   RotateCcw,
+  Trash2,
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -92,6 +94,13 @@ export function ReviewsPage(): React.JSX.Element {
               key={selected.id}
               review={selected}
               onChanged={() => queryClient.invalidateQueries({ queryKey: ['reviews'] })}
+              onDeleted={async () => {
+                setSelectedId(null)
+                await Promise.all([
+                  queryClient.invalidateQueries({ queryKey: ['reviews'] }),
+                  queryClient.invalidateQueries({ queryKey: ['trash'] })
+                ])
+              }}
             />
           )}
         </div>
@@ -109,9 +118,15 @@ export function ReviewsPage(): React.JSX.Element {
   )
 }
 
-function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unknown> }): React.JSX.Element {
+function ReviewWorkspace(props: {
+  review: Review
+  onChanged: () => Promise<unknown>
+  onDeleted: () => Promise<void>
+}): React.JSX.Element {
   const { review } = props
   const queryClient = useQueryClient()
+  const [isEditing, setIsEditing] = useState(review.status === 'draft')
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [importantOutcomes, setImportantOutcomes] = useState(review.importantOutcomes)
   const [blockers, setBlockers] = useState(review.blockers)
   const [nextFirstStep, setNextFirstStep] = useState(review.nextFirstStep)
@@ -178,7 +193,20 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
       await window.youtrace.data.discardRecoveryDraft(draftKey)
       await queryClient.invalidateQueries({ queryKey: ['recovery-drafts'] })
       await props.onChanged()
+      setIsEditing(status === 'draft')
     }
+  }
+
+  const cancelEditing = async (): Promise<void> => {
+    setImportantOutcomes(review.importantOutcomes)
+    setBlockers(review.blockers)
+    setNextFirstStep(review.nextFirstStep)
+    setNextCommitments(review.nextCommitments)
+    setDraftDirty(false)
+    setDraftHandled(true)
+    await window.youtrace.data.discardRecoveryDraft(draftKey)
+    await queryClient.invalidateQueries({ queryKey: ['recovery-drafts'] })
+    setIsEditing(false)
   }
 
   const adjust = async (action: 'reschedule' | 'cancel' | 'split'): Promise<void> => {
@@ -220,7 +248,27 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
           <span className="section-label">快照生成于 {new Date(review.snapshot.generatedAt).toLocaleString('zh-CN')}</span>
           <h2>{review.title}</h2>
         </div>
-        <span className={`review-status ${review.status}`}>{review.status === 'completed' ? '已完成' : '草稿'}</span>
+        <div className="review-header-actions">
+          <span className={`review-status ${review.status}`}>{review.status === 'completed' ? '已完成' : '草稿'}</span>
+          {review.status === 'completed' && !isEditing && (
+            <button className="button button-secondary" type="button" onClick={() => setIsEditing(true)}>
+              <Pencil size={13} />
+              编辑复盘
+            </button>
+          )}
+          {!isEditing && (
+            <button className="review-delete-action" type="button" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={13} />
+              删除复盘
+            </button>
+          )}
+          {review.status === 'draft' && (
+            <button className="review-delete-action" type="button" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={13} />
+              删除复盘
+            </button>
+          )}
+        </div>
       </header>
 
       <div className="snapshot-metrics">
@@ -244,7 +292,7 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
         </div>
       </section>
 
-      <section className="review-editor">
+      {isEditing ? <section className="review-editor">
         {recoveryDraft && !draftHandled ? (
           <div className="memo-recovery-banner review-recovery-banner" role="status">
             <div>
@@ -291,9 +339,14 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
         <label><span>阻塞与延期原因</span><textarea value={blockers} onChange={(event) => { setBlockers(event.target.value); setDraftDirty(true); setDraftHandled(true) }} placeholder="记录事实，不把原因改写成结果。" /></label>
         <label><span>下一周期第一步</span><textarea value={nextFirstStep} onChange={(event) => { setNextFirstStep(event.target.value); setDraftDirty(true); setDraftHandled(true) }} /></label>
         <label><span>下一周期承诺</span><textarea value={nextCommitments} onChange={(event) => { setNextCommitments(event.target.value); setDraftDirty(true); setDraftHandled(true) }} /></label>
-      </section>
+      </section> : <section className="review-readonly-grid" aria-label="复盘正文">
+        <ReviewTextBlock label="重要成果" value={importantOutcomes} />
+        <ReviewTextBlock label="阻塞与延期原因" value={blockers} />
+        <ReviewTextBlock label="下一周期第一步" value={nextFirstStep} />
+        <ReviewTextBlock label="下一周期承诺" value={nextCommitments} />
+      </section>}
 
-      {incomplete.length > 0 && (
+      {isEditing && review.status === 'draft' && incomplete.length > 0 && (
         <section className="adjustment-panel">
           <div className="review-section-heading"><span>调整未来计划</span><small>已执行 {review.adjustmentCount} 次调整</small></div>
           <div className="adjustment-form">
@@ -310,11 +363,81 @@ function ReviewWorkspace(props: { review: Review; onChanged: () => Promise<unkno
         </section>
       )}
 
-      <footer className="review-actions">
-        <button className="button button-secondary" type="button" onClick={() => void save('draft')}><RotateCcw size={14} />保存草稿</button>
-        <button className="button button-primary" type="button" onClick={() => void save('completed')}><Check size={14} />完成复盘</button>
-      </footer>
+      {isEditing && (
+        <footer className="review-actions">
+          {review.status === 'draft' ? (
+            <>
+              <button className="button button-secondary" type="button" onClick={() => void save('draft')}><RotateCcw size={14} />保存草稿</button>
+              <button className="button button-primary" type="button" onClick={() => void save('completed')}><Check size={14} />完成复盘</button>
+            </>
+          ) : (
+            <>
+              <button className="button button-secondary" type="button" onClick={() => void cancelEditing()}><X size={14} />取消编辑</button>
+              <button className="button button-primary" type="button" onClick={() => void save('completed')}><Check size={14} />保存修改</button>
+            </>
+          )}
+        </footer>
+      )}
+      <DeleteReviewDialog
+        review={deleteOpen ? review : null}
+        onOpenChange={setDeleteOpen}
+        onDeleted={props.onDeleted}
+      />
     </main>
+  )
+}
+
+function ReviewTextBlock({ label, value }: { label: string; value: string }): React.JSX.Element {
+  return (
+    <article>
+      <span>{label}</span>
+      <p>{value || '未填写'}</p>
+    </article>
+  )
+}
+
+function DeleteReviewDialog(props: {
+  review: Review | null
+  onOpenChange: (open: boolean) => void
+  onDeleted: () => Promise<void>
+}): React.JSX.Element {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (): Promise<void> => {
+    if (!props.review) return
+    setBusy(true)
+    setError('')
+    const result = await window.youtrace.workflow.trashReview(props.review.id)
+    setBusy(false)
+    if (!result.ok) return setError(result.error.message)
+    await window.youtrace.data.discardRecoveryDraft(`review:${props.review.id}`)
+    props.onOpenChange(false)
+    await props.onDeleted()
+  }
+  return (
+    <Dialog.Root open={props.review !== null} onOpenChange={props.onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content destructive-dialog">
+          <div className="dialog-heading">
+            <div>
+              <span className="section-label">可从回收站恢复</span>
+              <Dialog.Title>删除“{props.review?.title}”</Dialog.Title>
+              <Dialog.Description>复盘正文和原快照会一起进入回收站；已经执行的任务调整不会撤销。</Dialog.Description>
+            </div>
+            <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
+          </div>
+          {error && <div className="inline-error">{error}</div>}
+          <div className="dialog-actions">
+            <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+            <button className="button button-danger" disabled={busy} onClick={() => void submit()}>
+              <Trash2 size={14} />
+              {busy ? '正在删除…' : '移入回收站'}
+            </button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 

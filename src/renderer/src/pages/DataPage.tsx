@@ -107,6 +107,7 @@ export function DataPage(): React.JSX.Element {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['projects'] }),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['reviews'] }),
         queryClient.invalidateQueries({ queryKey: ['project-history'] }),
         queryClient.invalidateQueries({ queryKey: ['all-tasks-for-records'] })
       ])
@@ -154,8 +155,8 @@ export function DataPage(): React.JSX.Element {
         </div>
       ) : (
         <section className="trash-panel panel">
-          <header><div><span className="section-label">软删除与可恢复关系</span><h2>回收站</h2><p>努力记录不会随任务或项目删除。</p></div></header>
-          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的项目和任务会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{item.entityType === 'project' ? '项目' : '任务'} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，恢复后进入未归属内容</em>}</div><div className="trash-relations"><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</div><button className="button button-secondary" type="button" onClick={() => void restoreTrashItem(item)}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
+          <header><div><span className="section-label">软删除与可恢复关系</span><h2>回收站</h2><p>努力记录不会随任务或项目删除，复盘调整也不会因删除复盘而撤销。</p></div></header>
+          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的项目、任务和复盘会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{trashEntityLabel(item.entityType)} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，恢复后进入未归属内容</em>}</div><div className="trash-relations">{item.entityType === 'review' ? <span>正文与原快照保留</span> : <><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</>}</div><button className="button button-secondary" type="button" onClick={() => void restoreTrashItem(item)}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
         </section>
       )}
       {(message || error) && <div className={`data-feedback ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'}>{error || message}<button aria-label="关闭提示" onClick={() => { setError(''); setMessage('') }}><X size={13} /></button></div>}
@@ -174,5 +175,9 @@ function PurgeDialog(props: { item: TrashItem | null; onOpenChange: (open: boole
     setConfirmation('')
     await props.onPurged()
   }
-  return <Dialog.Root open={props.item !== null} onOpenChange={props.onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content destructive-dialog"><div className="dialog-heading"><div><span className="section-label">不可恢复操作</span><Dialog.Title>永久删除“{props.item?.title}”</Dialog.Title><Dialog.Description>共享附件仍会保留；独占文件只有在存在已验证备份时才允许清理。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><label><span>输入“永久删除”确认</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-danger" disabled={confirmation !== '永久删除'} onClick={() => void submit()}>永久删除</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root open={props.item !== null} onOpenChange={props.onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content destructive-dialog"><div className="dialog-heading"><div><span className="section-label">不可恢复操作</span><Dialog.Title>永久删除“{props.item?.title}”</Dialog.Title><Dialog.Description>{props.item?.entityType === 'review' ? '复盘正文、快照和调整记录会被清除；已经作用到任务上的调整不会撤销。' : '共享附件仍会保留；独占文件只有在存在已验证备份时才允许清理。'}</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><label><span>输入“永久删除”确认</span><input autoFocus value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-danger" disabled={confirmation !== '永久删除'} onClick={() => void submit()}>永久删除</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+}
+
+function trashEntityLabel(entityType: TrashItem['entityType']): string {
+  return { project: '项目', task: '任务', review: '复盘' }[entityType]
 }

@@ -223,6 +223,20 @@ test('keeps a weekly snapshot immutable while rescheduling, splitting and cancel
 
     await page.getByRole('button', { name: '完成复盘' }).click()
     await expect(page.locator('.review-status')).toHaveText('已完成')
+    await expect(page.getByLabel('重要成果')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '保存草稿' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '完成复盘' })).toHaveCount(0)
+    await expect(page.getByText('已完成协议分析成果', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '编辑复盘' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '删除复盘' })).toBeVisible()
+
+    await page.getByRole('button', { name: '编辑复盘' }).click()
+    await page.getByLabel('重要成果').fill('完成后补充的协议分析成果')
+    await expect(page.getByRole('button', { name: '保存草稿' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: '完成复盘' })).toHaveCount(0)
+    await page.getByRole('button', { name: '保存修改' }).click()
+    await expect(page.getByLabel('重要成果')).toHaveCount(0)
+    await expect(page.getByText('完成后补充的协议分析成果', { exact: true })).toBeVisible()
 
     const snapshotList = page.locator('.snapshot-list')
     await expect(
@@ -334,7 +348,7 @@ test('keeps a weekly snapshot immutable while rescheduling, splitting and cancel
     expect(verified.review).toMatchObject({
       status: 'completed',
       adjustmentCount: 3,
-      importantOutcomes: '已完成协议分析成果',
+      importantOutcomes: '完成后补充的协议分析成果',
       blockers: '实验环境占用导致延期',
       snapshotPlanCount: 1,
       snapshotTasks: {
@@ -344,6 +358,49 @@ test('keeps a weekly snapshot immutable while rescheduling, splitting and cancel
         '取消低价值整理': { status: 'ready', dueAt: originalDueAt }
       }
     })
+
+    await page.getByRole('button', { name: '删除复盘' }).click()
+    await expect(page.getByRole('heading', { name: '删除“本周课程复盘”' })).toBeVisible()
+    await page.getByRole('button', { name: '移入回收站' }).click()
+    await expect(page.getByText('还没有复盘', { exact: true })).toBeVisible()
+
+    const deletion = await page.evaluate(async () => {
+      type Result<T> = { ok: boolean; data?: T }
+      const api = (
+        globalThis as unknown as {
+          youtrace: {
+            workflow: { listReviews(): Promise<Result<unknown[]>> }
+            data: {
+              listTrash(): Promise<
+                Result<Array<{ id: string; entityType: string; title: string }>>
+              >
+              restoreTrash(input: { id: string; confirmation: string }): Promise<Result<void>>
+            }
+          }
+        }
+      ).youtrace
+      const reviews = await api.workflow.listReviews()
+      const trash = await api.data.listTrash()
+      const reviewTrash = trash.data?.find((item) => item.entityType === 'review')
+      const restored = reviewTrash
+        ? await api.data.restoreTrash({ id: reviewTrash.id, confirmation: '' })
+        : { ok: false }
+      return {
+        visibleReviews: reviews.data?.length,
+        trashTitle: reviewTrash?.title,
+        restored: restored.ok
+      }
+    })
+    expect(deletion).toEqual({
+      visibleReviews: 0,
+      trashTitle: '本周课程复盘',
+      restored: true
+    })
+
+    await page.reload()
+    await page.getByRole('button', { name: '复盘', exact: true }).click()
+    await expect(page.locator('.review-status')).toHaveText('已完成')
+    await expect(page.getByText('完成后补充的协议分析成果', { exact: true })).toBeVisible()
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)
   }

@@ -312,6 +312,7 @@ export interface YouTraceApi {
     listReviews(): Promise<IpcResult<Review[]>>
     createReview(input: CreateReviewInput): Promise<IpcResult<Review>>
     updateReview(input: UpdateReviewInput): Promise<IpcResult<Review>>
+    trashReview(id: string): Promise<IpcResult<void>>
     applyReviewAdjustments(input: ApplyReviewAdjustmentsInput): Promise<IpcResult<Review>>
     listTemplates(): Promise<IpcResult<ProjectTemplate[]>>
     previewTemplate(input: PreviewTemplateInput): Promise<IpcResult<TemplatePreview>>

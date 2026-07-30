@@ -59,6 +59,7 @@ export class WorkflowRepository {
                 r.created_at, r.updated_at, r.completed_at
            FROM reviews r
            JOIN review_snapshots rs ON rs.review_id = r.id
+          WHERE r.deleted_at IS NULL
           ORDER BY r.start_date DESC, r.created_at DESC`
       )
       .all() as ReviewRow[]
@@ -129,6 +130,24 @@ export class WorkflowRepository {
         id
       )
     this.insertAudit(this.database(), 'review', id, 'updated', { before, value }, now)
+  }
+
+  trashReview(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database
+        .prepare('UPDATE reviews SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare(
+          `INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at)
+           VALUES (?, 'review', ?, ?)`
+        )
+        .run(crypto.randomUUID(), id, now)
+      this.insertAudit(database, 'review', id, 'trashed', { deletedAt: now }, now)
+      return true
+    })()
   }
 
   captureSnapshot(startDate: string, endDate: string, generatedAt: string): ReviewSnapshot {

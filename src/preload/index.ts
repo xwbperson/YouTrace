@@ -143,6 +143,7 @@ const api: YouTraceApi = {
     listReviews: () => ipcRenderer.invoke('workflow:list-reviews'),
     createReview: (input) => ipcRenderer.invoke('workflow:create-review', input),
     updateReview: (input) => ipcRenderer.invoke('workflow:update-review', input),
+    trashReview: (id) => ipcRenderer.invoke('workflow:trash-review', id),
     applyReviewAdjustments: (input) =>
       ipcRenderer.invoke('workflow:apply-review-adjustments', input),
     listTemplates: () => ipcRenderer.invoke('workflow:list-templates'),

@@ -126,7 +126,7 @@ export interface ReadableExport {
 
 export interface TrashItem {
   id: string
-  entityType: 'project' | 'task'
+  entityType: 'project' | 'task' | 'review'
   entityId: string
   title: string
   deletedAt: string

@@ -508,7 +508,7 @@ export class DataService {
 
   restoreTrash(id: string): TrashItem {
     const item = this.repository.restoreTrash(id, new Date().toISOString())
-    if (!item) throw notFound('回收站项目')
+    if (!item) throw notFound('回收站内容')
     return item
   }
 
@@ -526,7 +526,7 @@ export class DataService {
       })
     }
     const result = this.repository.purgeTrash(id, new Date().toISOString())
-    if (!result) throw notFound('回收站项目')
+    if (!result) throw notFound('回收站内容')
     const root = this.workspaceManager.getCurrentPath()
     for (const relativePath of result.orphanPaths) {
       const path = resolveWithin(root, relativePath)

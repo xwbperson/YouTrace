@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 9
+export const CURRENT_SCHEMA_VERSION = 10
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -465,7 +465,8 @@ export const INITIAL_SCHEMA_SQL = `
     status TEXT NOT NULL DEFAULT 'draft',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    completed_at TEXT
+    completed_at TEXT,
+    deleted_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS review_snapshots (

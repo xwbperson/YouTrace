@@ -180,9 +180,11 @@ export class DataRepository {
                 CASE tr.entity_type
                   WHEN 'project' THEN COALESCE(p.name, '已删除项目')
                   WHEN 'task' THEN COALESCE(t.title, '已删除任务')
+                  WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
                 END AS title,
                 CASE
                   WHEN tr.entity_type = 'project' THEN 1
+                  WHEN tr.entity_type = 'review' THEN 1
                   WHEN t.id IS NULL THEN 0
                   WHEN EXISTS(
                     SELECT 1 FROM audit_events ae
@@ -213,6 +215,7 @@ export class DataRepository {
            FROM trash_entries tr
            LEFT JOIN projects p ON tr.entity_type = 'project' AND p.id = tr.entity_id
            LEFT JOIN tasks t ON tr.entity_type = 'task' AND t.id = tr.entity_id
+           LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
           WHERE tr.purged_at IS NULL
           ORDER BY tr.deleted_at DESC`
       )
@@ -233,7 +236,7 @@ export class DataRepository {
           .prepare('SELECT name, description FROM projects WHERE id = ?')
           .get(item.entityId) as { name: string; description: string }
         this.upsertSearch(database, 'project', item.entityId, project.name, project.description)
-      } else {
+      } else if (item.entityType === 'task') {
         if (!item.parentAvailable) {
           database
             .prepare(
@@ -250,6 +253,10 @@ export class DataRepository {
           .prepare('SELECT title, description FROM tasks WHERE id = ?')
           .get(item.entityId) as { title: string; description: string }
         this.upsertSearch(database, 'task', item.entityId, task.title, task.description)
+      } else {
+        database
+          .prepare('UPDATE reviews SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+          .run(now, item.entityId)
       }
       database.prepare('DELETE FROM trash_entries WHERE id = ?').run(id)
       this.insertAudit(database, item.entityType, item.entityId, 'restored', { trashId: id }, now)
@@ -293,8 +300,12 @@ export class DataRepository {
         database.prepare('DELETE FROM task_dependencies WHERE task_id = ? OR prerequisite_task_id = ?').run(item.entityId, item.entityId)
         this.deleteRelations(database, 'task', [item.entityId])
         database.prepare('DELETE FROM tasks WHERE id = ?').run(item.entityId)
-      } else {
+      } else if (item.entityType === 'project') {
         orphanPaths.push(...this.purgeProject(database, item.entityId, now))
+      } else {
+        database.prepare('DELETE FROM plan_adjustments WHERE review_id = ?').run(item.entityId)
+        database.prepare('DELETE FROM review_snapshots WHERE review_id = ?').run(item.entityId)
+        database.prepare('DELETE FROM reviews WHERE id = ?').run(item.entityId)
       }
       database.prepare('UPDATE trash_entries SET purged_at = ? WHERE id = ?').run(now, id)
       this.insertAudit(database, item.entityType, item.entityId, 'purged', { trashId: id }, now)

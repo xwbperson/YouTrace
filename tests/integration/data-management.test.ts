@@ -13,6 +13,8 @@ import {
 import { PackageService } from '../../src/main/modules/data/package-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
+import { WorkflowRepository } from '../../src/main/modules/workflow/workflow-repository'
+import { WorkflowService } from '../../src/main/modules/workflow/workflow-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 
 let fixtureRoot: string
@@ -121,7 +123,7 @@ describe('workspace backup, restore and portable files', () => {
     expect(verification).toMatchObject({
       valid: true,
       workspaceId: workspaceManager.getCurrent()!.id,
-      schemaVersion: 9
+      schemaVersion: 10
     })
     planning.createTask({
       parentTaskId: null,
@@ -576,6 +578,44 @@ describe('database corruption recovery', () => {
 })
 
 describe('trash relationship and file safety', () => {
+  it('permanently removes only a trashed review after a verified backup exists', async () => {
+    const workflow = new WorkflowService(
+      new WorkflowRepository(() => workspaceManager.getDatabase()),
+      planning
+    )
+    const review = workflow.createReview({
+      reviewType: 'weekly',
+      startDate: '2026-07-27',
+      endDate: '2026-08-02',
+      title: '待清理复盘'
+    })
+    workflow.updateReview({
+      id: review.id,
+      importantOutcomes: '准备永久删除',
+      status: 'completed'
+    })
+    workflow.trashReview(review.id)
+    const trash = data.listTrash().find((item) => item.entityId === review.id)!
+
+    await data.createBackup('复盘永久删除保护点')
+    await data.purgeTrash(trash.id, '永久删除')
+
+    expect(workflow.listReviews()).toHaveLength(0)
+    expect(data.listTrash()).toHaveLength(0)
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare('SELECT COUNT(*) AS count FROM reviews WHERE id = ?')
+        .get(review.id)
+    ).toEqual({ count: 0 })
+    expect(
+      workspaceManager
+        .getDatabase()
+        .prepare('SELECT COUNT(*) AS count FROM review_snapshots WHERE review_id = ?')
+        .get(review.id)
+    ).toEqual({ count: 0 })
+  })
+
   it('keeps a shared attachment file when permanently deleting only one task reference', async () => {
     const first = createProjectAndTask('共享附件任务一')
     const second = planning.createTask({

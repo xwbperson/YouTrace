@@ -8,6 +8,7 @@ import { PlanningRepository } from '../../src/main/modules/planning/planning-rep
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
 import { TemporalRepository } from '../../src/main/modules/temporal/temporal-repository'
 import { TemporalService } from '../../src/main/modules/temporal/temporal-service'
+import { DataRepository } from '../../src/main/modules/data/data-repository'
 import { WorkflowRepository } from '../../src/main/modules/workflow/workflow-repository'
 import { WorkflowService } from '../../src/main/modules/workflow/workflow-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
@@ -142,6 +143,42 @@ describe('review snapshots and project templates', () => {
     })[0]).toMatchObject({
       status: 'scheduled',
       dueAt: '2026-08-09T12:00:00.000Z'
+    })
+  })
+
+  it('moves a completed review to recoverable trash without changing its snapshot', () => {
+    const review = workflow.createReview({
+      reviewType: 'weekly',
+      startDate: '2026-07-27',
+      endDate: '2026-08-02',
+      title: '可删除复盘'
+    })
+    workflow.updateReview({
+      id: review.id,
+      importantOutcomes: '保留这段复盘正文',
+      status: 'completed'
+    })
+
+    workflow.trashReview(review.id)
+
+    expect(workflow.listReviews()).toHaveLength(0)
+    const dataRepository = new DataRepository(() => workspaceManager.getDatabase())
+    const trash = dataRepository.listTrash()
+    expect(trash).toEqual([
+      expect.objectContaining({
+        entityType: 'review',
+        entityId: review.id,
+        title: '可删除复盘'
+      })
+    ])
+
+    dataRepository.restoreTrash(trash[0]!.id, new Date().toISOString())
+
+    expect(workflow.listReviews()[0]).toMatchObject({
+      id: review.id,
+      status: 'completed',
+      importantOutcomes: '保留这段复盘正文',
+      snapshot: review.snapshot
     })
   })
 
