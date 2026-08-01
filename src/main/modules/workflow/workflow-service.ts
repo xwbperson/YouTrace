@@ -243,6 +243,7 @@ export class WorkflowService {
         plannedDate: null,
         estimatedMinutes: milestoneDefinition.estimatedMinutes ?? null,
         manualWeight: null,
+        importanceRating: null,
         mastery: null,
         verificationCriteria: '',
         status: 'not_started',

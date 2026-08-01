@@ -52,6 +52,7 @@ test('connects advanced planning, saved search, learning and preferences in Elec
         plannedDate: '2026-08-05',
         estimatedMinutes: 180,
         manualWeight: 2,
+        importanceRating: 4.5,
         mastery: 75,
         verificationCriteria: '完成章节测试',
         status: 'in_progress',

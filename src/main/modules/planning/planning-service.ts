@@ -174,6 +174,8 @@ export class PlanningService {
       estimatedMinutes:
         input.estimatedMinutes === undefined ? current.estimated_minutes : input.estimatedMinutes,
       manualWeight: input.manualWeight === undefined ? current.manual_weight : input.manualWeight,
+      importanceRating:
+        input.importanceRating === undefined ? current.importance_rating : input.importanceRating,
       mastery: input.mastery === undefined ? current.mastery : input.mastery,
       verificationCriteria:
         input.verificationCriteria ?? current.verification_criteria,
@@ -550,6 +552,7 @@ export class PlanningService {
       completedDate: row.completed_date,
       estimatedMinutes: row.estimated_minutes,
       manualWeight: row.manual_weight,
+      importanceRating: row.importance_rating,
       mastery: row.mastery,
       verificationCriteria: row.verification_criteria,
       status: row.status,

@@ -138,11 +138,14 @@ describe('planning application service', () => {
       plannedDate: null,
       estimatedMinutes: null,
       manualWeight: 1,
+      importanceRating: 4.5,
       mastery: 90,
       verificationCriteria: '',
       status: 'completed',
       includeInProgress: true
     })
+    expect(first.importanceRating).toBe(4.5)
+    expect(planning.updateMilestone({ id: first.id, importanceRating: 3.5 }).importanceRating).toBe(3.5)
     const second = planning.createMilestone({
       projectId: project.id,
       goalId: null,
@@ -151,6 +154,7 @@ describe('planning application service', () => {
       plannedDate: null,
       estimatedMinutes: null,
       manualWeight: 2,
+      importanceRating: null,
       mastery: null,
       verificationCriteria: '',
       status: 'in_progress',
@@ -164,6 +168,7 @@ describe('planning application service', () => {
       plannedDate: null,
       estimatedMinutes: null,
       manualWeight: 7,
+      importanceRating: null,
       mastery: 60,
       verificationCriteria: '',
       status: 'not_started',

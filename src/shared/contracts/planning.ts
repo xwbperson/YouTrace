@@ -119,6 +119,7 @@ export const createMilestoneInputSchema = z.object({
   plannedDate: nullableDateSchema.default(null),
   estimatedMinutes: z.number().int().positive().max(525_600).nullable().default(null),
   manualWeight: z.number().positive().max(1_000_000).nullable().default(null),
+  importanceRating: z.number().min(0.5).max(5).multipleOf(0.5).nullable().default(null),
   mastery: z.number().int().min(0).max(100).nullable().default(null),
   verificationCriteria: z.string().max(5_000).default(''),
   status: milestoneStatusSchema.default('not_started'),
@@ -134,6 +135,7 @@ export const updateMilestoneInputSchema = z.object({
   plannedDate: nullableDateSchema.optional(),
   estimatedMinutes: z.number().int().positive().max(525_600).nullable().optional(),
   manualWeight: z.number().positive().max(1_000_000).nullable().optional(),
+  importanceRating: z.number().min(0.5).max(5).multipleOf(0.5).nullable().optional(),
   mastery: z.number().int().min(0).max(100).nullable().optional(),
   verificationCriteria: z.string().max(5_000).optional(),
   status: milestoneStatusSchema.optional(),
@@ -357,6 +359,7 @@ export interface Milestone {
   completedDate: string | null
   estimatedMinutes: number | null
   manualWeight: number | null
+  importanceRating: number | null
   mastery: number | null
   verificationCriteria: string
   status: z.infer<typeof milestoneStatusSchema>

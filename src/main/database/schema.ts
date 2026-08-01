@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 11
+export const CURRENT_SCHEMA_VERSION = 12
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -78,6 +78,7 @@ export const INITIAL_SCHEMA_SQL = `
     completed_date TEXT,
     estimated_minutes INTEGER,
     manual_weight REAL,
+    importance_rating REAL CHECK (importance_rating IS NULL OR (importance_rating >= 0.5 AND importance_rating <= 5 AND importance_rating * 2 = CAST(importance_rating * 2 AS INTEGER))),
     mastery INTEGER CHECK (mastery IS NULL OR (mastery >= 0 AND mastery <= 100)),
     verification_criteria TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,

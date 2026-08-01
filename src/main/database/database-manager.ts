@@ -72,6 +72,12 @@ export class DatabaseManager {
       ensureColumn(database, 'reviews', 'deleted_at', 'TEXT')
       ensureColumn(database, 'course_profiles', 'archived_at', 'TEXT')
       ensureColumn(database, 'course_profiles', 'deleted_at', 'TEXT')
+      ensureColumn(
+        database,
+        'milestones',
+        'importance_rating',
+        'REAL CHECK (importance_rating IS NULL OR (importance_rating >= 0.5 AND importance_rating <= 5 AND importance_rating * 2 = CAST(importance_rating * 2 AS INTEGER)))'
+      )
       const row = database
         .prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number | null }

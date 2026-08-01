@@ -4,6 +4,7 @@ import {
   BookOpen,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronRight,
   Circle,
   Archive,
@@ -18,6 +19,7 @@ import {
   Pencil,
   Plus,
   Repeat2,
+  Star,
   Tag,
   Target,
   Trash2,
@@ -68,6 +70,8 @@ const priorityLabels: Record<Task['priority'], string> = {
   critical: '关键'
 }
 
+const PROJECT_HISTORY_COLLAPSED_COUNT = 5
+
 export function PlanningPage(): React.JSX.Element {
   const queryClient = useQueryClient()
   const [section, setSection] = useState<'projects' | 'practice'>('projects')
@@ -83,6 +87,7 @@ export function PlanningPage(): React.JSX.Element {
   const [areaDialogOpen, setAreaDialogOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [historyExpanded, setHistoryExpanded] = useState(false)
   const [projectActionError, setProjectActionError] = useState('')
 
   const projectsQuery = useQuery({
@@ -137,6 +142,8 @@ export function PlanningPage(): React.JSX.Element {
       setSelectedProjectId(projects[0]?.id ?? null)
     }
   }, [projects, selectedProjectId])
+
+  useEffect(() => setHistoryExpanded(false), [selectedProjectId])
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null
   const tasks = tasksQuery.data ?? []
@@ -483,7 +490,10 @@ export function PlanningPage(): React.JSX.Element {
                           {milestone.progress >= 1 ? <Check size={12} /> : null}
                         </span>
                         <div>
-                          <strong>{milestone.title}</strong>
+                          <div className="milestone-title-row">
+                            <strong>{milestone.title}</strong>
+                            {milestone.importanceRating !== null ? <ImportanceStars value={milestone.importanceRating} compact /> : null}
+                          </div>
                           <span>
                             进度 {Math.round(milestone.progress * 100)}%
                             {milestone.manualWeight ? ` · 权重 ${milestone.manualWeight}` : ''}
@@ -584,9 +594,9 @@ export function PlanningPage(): React.JSX.Element {
                     <div className="project-history-summary" aria-label="项目投入汇总">
                       <span>{historyQuery.data.effortCount} 次投入</span>
                       <span>累计 {historyQuery.data.totalMinutes} 分钟</span>
-                      {historyQuery.data.hasMore ? (
+                      {historyQuery.data.entries.length > PROJECT_HISTORY_COLLAPSED_COUNT ? (
                         <span>
-                          最近 {historyQuery.data.entries.length} / 共{' '}
+                          显示 {historyExpanded ? historyQuery.data.entries.length : PROJECT_HISTORY_COLLAPSED_COUNT} / 共{' '}
                           {historyQuery.data.effortCount + historyQuery.data.changeCount} 条
                         </span>
                       ) : null}
@@ -607,11 +617,31 @@ export function PlanningPage(): React.JSX.Element {
                     </span>
                   </div>
                 ) : (
-                  <ol className="project-history-list">
-                    {historyQuery.data.entries.map((entry) => (
-                      <ProjectHistoryItem key={`${entry.kind}-${entry.id}`} entry={entry} />
-                    ))}
-                  </ol>
+                  <>
+                    <ol className="project-history-list">
+                      {(historyExpanded
+                        ? historyQuery.data.entries
+                        : historyQuery.data.entries.slice(0, PROJECT_HISTORY_COLLAPSED_COUNT)
+                      ).map((entry) => (
+                        <ProjectHistoryItem key={`${entry.kind}-${entry.id}`} entry={entry} />
+                      ))}
+                    </ol>
+                    {historyQuery.data.entries.length > PROJECT_HISTORY_COLLAPSED_COUNT ? (
+                      <button
+                        className="project-history-toggle"
+                        type="button"
+                        aria-expanded={historyExpanded}
+                        onClick={() => setHistoryExpanded((expanded) => !expanded)}
+                      >
+                        <ChevronDown className={historyExpanded ? 'expanded' : ''} size={15} />
+                        {historyExpanded
+                          ? `收起，仅显示最近 ${PROJECT_HISTORY_COLLAPSED_COUNT} 条`
+                          : historyQuery.data.hasMore
+                            ? `展开最近 ${historyQuery.data.entries.length} 条`
+                            : `展开全部 ${historyQuery.data.entries.length} 条`}
+                      </button>
+                    ) : null}
+                  </>
                 )}
               </section>
             </>
@@ -1119,6 +1149,92 @@ function TaskDialog({ open, onOpenChange, project, task, tags, milestones, goals
   )
 }
 
+function ImportanceStars({
+  value,
+  compact = false,
+  decorative = false
+}: {
+  value: number
+  compact?: boolean
+  decorative?: boolean
+}): React.JSX.Element {
+  return (
+    <span
+      className={`importance-stars ${compact ? 'compact' : ''}`}
+      aria-hidden={decorative || undefined}
+      role={decorative ? undefined : 'img'}
+      aria-label={decorative ? undefined : `重要性 ${value} 星`}
+    >
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fill = Math.max(0, Math.min(1, value - star + 1)) * 100
+        return (
+          <span className="importance-star-shell" key={star}>
+            <Star />
+            <span className="importance-star-fill" style={{ width: `${fill}%` }}><Star /></span>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+function ImportanceRatingField({
+  value,
+  onChange
+}: {
+  value: number | null
+  onChange: (value: number | null) => void
+}): React.JSX.Element {
+  const [preview, setPreview] = useState<number | null>(null)
+  const shownValue = preview ?? value ?? 0
+  const ratingFromPointer = (event: React.PointerEvent<HTMLDivElement>): number => {
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const relative = Math.max(0, Math.min(bounds.width, event.clientX - bounds.left))
+    return Math.max(0.5, Math.min(5, Math.ceil((relative / bounds.width) * 10) / 2))
+  }
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const current = value ?? 0
+    let next = current
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') next = Math.min(5, current + 0.5)
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') next = Math.max(0, current - 0.5)
+    else if (event.key === 'Home') next = 0
+    else if (event.key === 'End') next = 5
+    else return
+    event.preventDefault()
+    onChange(next === 0 ? null : next)
+  }
+  return (
+    <div className="importance-rating-field">
+      <span>重要性</span>
+      <div className="importance-rating-row">
+        <div
+          className="importance-rating-control"
+          role="slider"
+          tabIndex={0}
+          aria-label="里程碑重要性"
+          aria-valuemin={0}
+          aria-valuemax={5}
+          aria-valuenow={value ?? 0}
+          aria-valuetext={value === null ? '未设置' : `${value} 星`}
+          title="移动鼠标预览，点击设置；方向键每次调整半星"
+          onPointerMove={(event) => setPreview(ratingFromPointer(event))}
+          onPointerLeave={() => setPreview(null)}
+          onPointerDown={(event) => {
+            event.currentTarget.focus()
+            onChange(ratingFromPointer(event))
+          }}
+          onKeyDown={handleKeyDown}
+        >
+          <ImportanceStars value={shownValue} decorative />
+        </div>
+        <output>{shownValue === 0 ? '未设置' : `${shownValue} 星`}</output>
+        {value !== null ? <button type="button" onClick={() => onChange(null)}>清除</button> : null}
+      </div>
+      <small>支持半星；星级只表达重要性，不自动改变进度权重。</small>
+    </div>
+  )
+}
+
 interface MilestoneDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1141,6 +1257,7 @@ function MilestoneDialog({
   const [plannedDate, setPlannedDate] = useState('')
   const [estimatedMinutes, setEstimatedMinutes] = useState('')
   const [manualWeight, setManualWeight] = useState('')
+  const [importanceRating, setImportanceRating] = useState<number | null>(null)
   const [mastery, setMastery] = useState('')
   const [verificationCriteria, setVerificationCriteria] = useState('')
   const [goalId, setGoalId] = useState('')
@@ -1156,6 +1273,7 @@ function MilestoneDialog({
     setPlannedDate(milestone?.plannedDate ?? '')
     setEstimatedMinutes(milestone?.estimatedMinutes?.toString() ?? '')
     setManualWeight(milestone?.manualWeight?.toString() ?? '')
+    setImportanceRating(milestone?.importanceRating ?? null)
     setMastery(milestone?.mastery?.toString() ?? '')
     setVerificationCriteria(milestone?.verificationCriteria ?? '')
     setGoalId(milestone?.goalId ?? '')
@@ -1177,6 +1295,7 @@ function MilestoneDialog({
       plannedDate: plannedDate || null,
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       manualWeight: manualWeight ? Number(manualWeight) : null,
+      importanceRating,
       mastery: mastery ? Number(mastery) : null,
       verificationCriteria,
       status,
@@ -1222,6 +1341,7 @@ function MilestoneDialog({
                 {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
               </select>
             </label>
+            <ImportanceRatingField value={importanceRating} onChange={setImportanceRating} />
             <div className="form-row form-row-three">
               <label>
                 <span>计划日期</span>

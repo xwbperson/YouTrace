@@ -211,7 +211,7 @@ describe('workspace backup, restore and portable files', () => {
     expect(verification).toMatchObject({
       valid: true,
       workspaceId: workspaceManager.getCurrent()!.id,
-      schemaVersion: 11
+      schemaVersion: 12
     })
     planning.createTask({
       parentTaskId: null,
@@ -332,6 +332,7 @@ describe('workspace backup, restore and portable files', () => {
       plannedDate: null,
       estimatedMinutes: null,
       manualWeight: null,
+      importanceRating: null,
       mastery: null,
       verificationCriteria: '',
       status: 'not_started',

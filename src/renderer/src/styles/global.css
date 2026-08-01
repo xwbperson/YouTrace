@@ -4494,6 +4494,124 @@ kbd {
   font-size: var(--text-md);
 }
 
+.milestone-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.milestone-track article .milestone-title-row strong {
+  margin-bottom: 0;
+}
+
+.importance-stars,
+.milestone-track article .importance-stars {
+  --star-size: 21px;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  color: color-mix(in srgb, var(--muted) 42%, transparent);
+}
+
+.importance-stars.compact,
+.milestone-track article .importance-stars.compact {
+  --star-size: 13px;
+  gap: 1px;
+}
+
+.importance-stars .importance-star-shell {
+  position: relative;
+  display: inline-flex;
+  width: var(--star-size);
+  height: var(--star-size);
+}
+
+.importance-star-shell > svg,
+.importance-star-fill > svg {
+  width: var(--star-size);
+  max-width: none;
+  height: var(--star-size);
+  stroke-width: 1.7;
+}
+
+.importance-stars .importance-star-fill {
+  position: absolute;
+  display: inline-flex;
+  overflow: hidden;
+  inset: 0 auto 0 0;
+  color: var(--trace);
+}
+
+.importance-star-fill > svg {
+  fill: currentcolor;
+}
+
+.importance-rating-field {
+  display: grid;
+  gap: 6px;
+}
+
+.importance-rating-field > span {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.importance-rating-row {
+  display: flex;
+  min-height: 43px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+}
+
+.importance-rating-control {
+  display: inline-flex;
+  padding: 2px;
+  cursor: pointer;
+  border-radius: 5px;
+  outline: 0;
+  touch-action: none;
+}
+
+.importance-rating-control:hover,
+.importance-rating-control:focus-visible {
+  background: var(--trace-soft);
+  box-shadow: 0 0 0 3px var(--trace-soft);
+}
+
+.importance-rating-row output {
+  min-width: 46px;
+  color: var(--trace-strong);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.importance-rating-row button {
+  margin-left: auto;
+  padding: 4px 6px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.importance-rating-row button:hover {
+  color: var(--trace);
+  background: var(--trace-soft);
+}
+
+.importance-rating-field > small {
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
 .milestone-track article span,
 .milestone-track article > small {
   color: var(--muted);
@@ -4730,6 +4848,38 @@ kbd {
 
 .project-history-list li:last-child {
   border-bottom: 0;
+}
+
+.project-history-toggle {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  color: var(--trace-strong);
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.project-history-toggle:hover,
+.project-history-toggle:focus-visible {
+  background: var(--trace-soft);
+  border-color: color-mix(in srgb, var(--trace) 38%, var(--border));
+  outline: 0;
+}
+
+.project-history-toggle svg {
+  transition: transform 140ms ease-out;
+}
+
+.project-history-toggle svg.expanded {
+  transform: rotate(180deg);
 }
 
 .project-history-marker {

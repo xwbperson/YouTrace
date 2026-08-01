@@ -112,6 +112,7 @@ interface MilestoneRow {
   completed_date: string | null
   estimated_minutes: number | null
   manual_weight: number | null
+  importance_rating: number | null
   mastery: number | null
   verification_criteria: string
   status: Milestone['status']
@@ -546,7 +547,7 @@ export class PlanningRepository {
     return this.database()
       .prepare(
         `SELECT id, project_id, goal_id, title, description, planned_date,
-                completed_date, estimated_minutes, manual_weight, mastery,
+                completed_date, estimated_minutes, manual_weight, importance_rating, mastery,
                 verification_criteria, status, include_in_progress, created_at, updated_at
            FROM milestones
           WHERE project_id = ? AND deleted_at IS NULL AND archived_at IS NULL
@@ -560,7 +561,7 @@ export class PlanningRepository {
       (this.database()
         .prepare(
           `SELECT id, project_id, goal_id, title, description, planned_date,
-                  completed_date, estimated_minutes, manual_weight, mastery,
+                   completed_date, estimated_minutes, manual_weight, importance_rating, mastery,
                   verification_criteria, status, include_in_progress, created_at, updated_at
              FROM milestones WHERE id = ? AND deleted_at IS NULL`
         )
@@ -574,9 +575,9 @@ export class PlanningRepository {
       .prepare(
         `INSERT INTO milestones(
            id, project_id, goal_id, title, description, planned_date, completed_date,
-           estimated_minutes, manual_weight, mastery, verification_criteria, status,
-           include_in_progress, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+           estimated_minutes, manual_weight, importance_rating, mastery, verification_criteria,
+           status, include_in_progress, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -588,6 +589,7 @@ export class PlanningRepository {
         ['completed', 'verified', 'accepted'].includes(input.status) ? now.slice(0, 10) : null,
         input.estimatedMinutes,
         input.manualWeight,
+        input.importanceRating,
         input.mastery,
         input.verificationCriteria,
         input.status,
@@ -613,8 +615,8 @@ export class PlanningRepository {
       .prepare(
         `UPDATE milestones
             SET project_id = ?, goal_id = ?, title = ?, description = ?, planned_date = ?,
-                completed_date = ?, estimated_minutes = ?, manual_weight = ?, mastery = ?,
-                verification_criteria = ?, status = ?, include_in_progress = ?, updated_at = ?
+                completed_date = ?, estimated_minutes = ?, manual_weight = ?, importance_rating = ?,
+                mastery = ?, verification_criteria = ?, status = ?, include_in_progress = ?, updated_at = ?
           WHERE id = ? AND deleted_at IS NULL`
       )
       .run(
@@ -626,6 +628,7 @@ export class PlanningRepository {
         completedDate,
         input.estimatedMinutes,
         input.manualWeight,
+        input.importanceRating,
         input.mastery,
         input.verificationCriteria,
         input.status,
