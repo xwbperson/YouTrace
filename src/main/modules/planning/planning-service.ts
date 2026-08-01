@@ -33,6 +33,7 @@ import type {
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
+  UpdateTagInput,
   UpdateTaskInput
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
@@ -330,8 +331,8 @@ export class PlanningService {
     )
   }
 
-  listTags(): Tag[] {
-    return this.repository.listTags()
+  listTags(includeArchived = false): Tag[] {
+    return this.repository.listTags(includeArchived)
   }
 
   createTag(input: CreateTagInput): Tag {
@@ -351,6 +352,51 @@ export class PlanningService {
     const tag = this.repository.getTag(id)
     if (!tag) throw notFound('标签')
     return tag
+  }
+
+  updateTag(input: UpdateTagInput): Tag {
+    const current = this.repository.getTag(input.id, true)
+    if (!current) throw notFound('标签')
+    try {
+      this.repository.updateTag(
+        input.id,
+        {
+          name: input.name ?? current.name,
+          color: input.color === undefined ? current.color : input.color,
+          icon: input.icon === undefined ? current.icon : input.icon,
+          description: input.description ?? current.description
+        },
+        new Date().toISOString()
+      )
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+        throw new YouTraceError({ code: 'TAG_NAME_EXISTS', message: '已有同名标签。' })
+      }
+      throw error
+    }
+    return this.repository.getTag(input.id, true)!
+  }
+
+  archiveTag(id: string, archived: boolean): Tag {
+    if (!this.repository.getTag(id, true)) throw notFound('标签')
+    try {
+      if (!this.repository.archiveTag(id, archived, new Date().toISOString())) throw notFound('标签')
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed')) {
+        throw new YouTraceError({ code: 'TAG_NAME_EXISTS', message: '已有同名活动标签，请先改名或合并。' })
+      }
+      throw error
+    }
+    return this.repository.getTag(id, true)!
+  }
+
+  trashTag(id: string): void {
+    const tag = this.repository.getTag(id, true)
+    if (!tag) throw notFound('标签')
+    if (!tag.archived) {
+      throw new YouTraceError({ code: 'TAG_NOT_ARCHIVED', message: '请先归档标签，再将它移入回收站。' })
+    }
+    if (!this.repository.trashTag(id, new Date().toISOString())) throw notFound('标签')
   }
 
   assignTag(input: AssignTagInput): void {

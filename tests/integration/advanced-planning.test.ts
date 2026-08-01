@@ -2,18 +2,21 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DataRepository } from '../../src/main/modules/data/data-repository'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
 import { PlanningService } from '../../src/main/modules/planning/planning-service'
 import { WorkspaceManager } from '../../src/main/workspace/workspace-manager'
 
 let workspaceManager: WorkspaceManager
 let planning: PlanningService
+let dataRepository: DataRepository
 
 beforeEach(async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-advanced-planning-'))
   workspaceManager = new WorkspaceManager(join(fixtureRoot, 'app-data'))
   await workspaceManager.create(join(fixtureRoot, 'workspace'), '高级规划测试')
   planning = new PlanningService(new PlanningRepository(() => workspaceManager.getDatabase()))
+  dataRepository = new DataRepository(() => workspaceManager.getDatabase())
 })
 
 afterEach(async () => {
@@ -279,5 +282,32 @@ describe('advanced planning lifecycle', () => {
         offset: 0
       })
     ).toMatchObject([{ id: task.id }])
+  })
+
+  it('edits tags and moves archived tags through the trash lifecycle', () => {
+    const tag = planning.createTag({
+      name: '原标签',
+      color: '#216E65',
+      icon: null,
+      description: ''
+    })
+    expect(planning.updateTag({ id: tag.id, name: '修改后的标签', color: '#334455' })).toMatchObject({
+      name: '修改后的标签',
+      color: '#334455'
+    })
+    expect(planning.archiveTag(tag.id, true).archived).toBe(true)
+    expect(planning.listTags()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: tag.id })]))
+    expect(planning.listTags(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: tag.id, archived: true })]))
+
+    planning.trashTag(tag.id)
+    const trash = dataRepository.listTrash().find((item) => item.entityType === 'tag')!
+    expect(trash.title).toBe('修改后的标签')
+    expect(dataRepository.restoreTrash(trash.id, new Date().toISOString())).not.toBeNull()
+    expect(planning.listTags(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: tag.id })]))
+
+    planning.trashTag(tag.id)
+    const restoredTrash = dataRepository.listTrash().find((item) => item.entityType === 'tag')!
+    expect(dataRepository.purgeTrash(restoredTrash.id, new Date().toISOString())).not.toBeNull()
+    expect(planning.listTags(true)).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: tag.id })]))
   })
 })

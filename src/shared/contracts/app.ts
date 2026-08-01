@@ -33,6 +33,7 @@ import type {
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
+  UpdateTagInput,
   UpdateTaskInput
 } from './planning'
 import type {
@@ -261,8 +262,11 @@ export interface YouTraceApi {
     setChecklistProgress(input: SetChecklistProgressInput): Promise<IpcResult<Task>>
     getTaskRecurrence(taskId: string): Promise<IpcResult<TaskRecurrence | null>>
     setTaskRecurrence(input: SetTaskRecurrenceInput): Promise<IpcResult<TaskRecurrence | null>>
-    listTags(): Promise<IpcResult<Tag[]>>
+    listTags(includeArchived?: boolean): Promise<IpcResult<Tag[]>>
     createTag(input: CreateTagInput): Promise<IpcResult<Tag>>
+    updateTag(input: UpdateTagInput): Promise<IpcResult<Tag>>
+    archiveTag(id: string, archived: boolean): Promise<IpcResult<Tag>>
+    trashTag(id: string): Promise<IpcResult<void>>
     assignTag(input: AssignTagInput): Promise<IpcResult<void>>
     getTagStats(id: string): Promise<IpcResult<TagStats>>
     mergeTags(input: MergeTagsInput): Promise<IpcResult<Tag>>

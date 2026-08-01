@@ -208,6 +208,8 @@ export const createTagInputSchema = z.object({
   description: z.string().max(2_000).default('')
 })
 
+export const updateTagInputSchema = createTagInputSchema.partial().extend({ id: z.string().uuid() })
+
 export const assignTagInputSchema = z.object({
   tagId: z.string().uuid(),
   entityType: z.enum([
@@ -403,6 +405,7 @@ export interface Tag {
   icon: string | null
   description: string
   favorite: boolean
+  archived: boolean
   createdAt: string
   updatedAt: string
 }
@@ -449,6 +452,7 @@ export type UpdateMilestoneInput = z.infer<typeof updateMilestoneInputSchema>
 export type AddTaskDependencyInput = z.infer<typeof addTaskDependencyInputSchema>
 export type TaskListInput = z.infer<typeof taskListInputSchema>
 export type CreateTagInput = z.infer<typeof createTagInputSchema>
+export type UpdateTagInput = z.infer<typeof updateTagInputSchema>
 export type AssignTagInput = z.infer<typeof assignTagInputSchema>
 export type SearchInput = z.input<typeof searchInputSchema>
 export type ParsedSearchInput = z.output<typeof searchInputSchema>

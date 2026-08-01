@@ -212,6 +212,7 @@ export class DataRepository {
                   WHEN 'plan' THEN COALESCE(pp.title, '已删除周期计划')
                   WHEN 'time_block' THEN COALESCE(tb.title, '已删除时间块')
                   WHEN 'countdown' THEN COALESCE(cd.title, '已删除倒计时')
+                  WHEN 'tag' THEN COALESCE(tg.name, '已删除标签')
                   WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
                   WHEN 'evidence' THEN COALESCE(e.title, '已删除成果')
                 END AS title,
@@ -220,7 +221,7 @@ export class DataRepository {
                   WHEN tr.entity_type = 'project' THEN 1
                   WHEN tr.entity_type = 'review' THEN 1
                   WHEN tr.entity_type = 'evidence' THEN 1
-                  WHEN tr.entity_type IN ('plan', 'time_block', 'countdown') THEN 1
+                  WHEN tr.entity_type IN ('plan', 'time_block', 'countdown', 'tag') THEN 1
                   WHEN tr.entity_type = 'goal' AND g.id IS NULL THEN 0
                   WHEN tr.entity_type = 'goal' AND g.project_id IS NULL THEN 1
                   WHEN tr.entity_type = 'goal' AND EXISTS(
@@ -284,6 +285,7 @@ export class DataRepository {
            LEFT JOIN plan_periods pp ON tr.entity_type = 'plan' AND pp.id = tr.entity_id
            LEFT JOIN time_blocks tb ON tr.entity_type = 'time_block' AND tb.id = tr.entity_id
            LEFT JOIN countdowns cd ON tr.entity_type = 'countdown' AND cd.id = tr.entity_id
+           LEFT JOIN tags tg ON tr.entity_type = 'tag' AND tg.id = tr.entity_id
            LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
            LEFT JOIN evidence e ON tr.entity_type = 'evidence' AND e.id = tr.entity_id
           WHERE tr.purged_at IS NULL
@@ -365,6 +367,8 @@ export class DataRepository {
         database.prepare('UPDATE time_blocks SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
       } else if (item.entityType === 'countdown') {
         database.prepare('UPDATE countdowns SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'tag') {
+        database.prepare('UPDATE tags SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
       } else if (item.entityType === 'evidence') {
         database
           .prepare('UPDATE evidence SET deleted_at = NULL, updated_at = ? WHERE id = ?')
@@ -488,6 +492,11 @@ export class DataRepository {
         database.prepare("DELETE FROM tag_assignments WHERE entity_type = 'countdown' AND entity_id = ?").run(item.entityId)
         database.prepare('DELETE FROM countdown_workload WHERE countdown_id = ?').run(item.entityId)
         database.prepare('DELETE FROM countdowns WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'tag') {
+        database.prepare('DELETE FROM tag_assignments WHERE tag_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'tag', [item.entityId]))
+        this.deleteRelations(database, 'tag', [item.entityId])
+        database.prepare('DELETE FROM tags WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'evidence') {
         const attachments = database
           .prepare(

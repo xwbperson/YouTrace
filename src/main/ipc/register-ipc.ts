@@ -70,6 +70,7 @@ import {
   updateMistakeInputSchema,
   updateProjectInputSchema,
   updateTaskInputSchema,
+  updateTagInputSchema,
   updateReviewInputSchema,
   updatePlanInputSchema,
   updateTimeBlockInputSchema,
@@ -481,10 +482,10 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
-  ipcMain.handle('planning:list-tags', (event) =>
+  ipcMain.handle('planning:list-tags', (event, rawIncludeArchived) =>
     wrap(() => {
       trusted(event)
-      return planningService.listTags()
+      return planningService.listTags(z.boolean().optional().parse(rawIncludeArchived) ?? false)
     })
   )
 
@@ -492,6 +493,30 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return planningService.createTag(createTagInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-tag', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateTag(updateTagInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:archive-tag', (event, rawId, rawArchived) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.archiveTag(
+        z.string().uuid().parse(rawId),
+        z.boolean().parse(rawArchived)
+      )
+    })
+  )
+
+  ipcMain.handle('planning:trash-tag', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashTag(z.string().uuid().parse(rawId))
     })
   )
 

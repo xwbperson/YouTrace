@@ -119,6 +119,7 @@ export function DataPage(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ['plans'] }),
         queryClient.invalidateQueries({ queryKey: ['time-blocks'] }),
         queryClient.invalidateQueries({ queryKey: ['countdowns'] }),
+        queryClient.invalidateQueries({ queryKey: ['tags'] }),
         queryClient.invalidateQueries({ queryKey: ['reviews'] }),
         queryClient.invalidateQueries({ queryKey: ['evidence'] }),
         queryClient.invalidateQueries({ queryKey: ['project-history'] }),
@@ -192,5 +193,5 @@ function PurgeDialog(props: { item: TrashItem | null; onOpenChange: (open: boole
 }
 
 function trashEntityLabel(entityType: TrashItem['entityType']): string {
-  return { area: '领域', project: '项目', goal: '目标', milestone: '里程碑', task: '任务', habit: '习惯', metric: '指标', course: '课程', knowledge: '知识点', mistake: '错题', learning_test: '学习测试', plan: '周期计划', time_block: '时间块', countdown: '倒计时', review: '复盘', evidence: '成果' }[entityType]
+  return { area: '领域', project: '项目', goal: '目标', milestone: '里程碑', task: '任务', habit: '习惯', metric: '指标', course: '课程', knowledge: '知识点', mistake: '错题', learning_test: '学习测试', plan: '周期计划', time_block: '时间块', countdown: '倒计时', tag: '标签', review: '复盘', evidence: '成果' }[entityType]
 }

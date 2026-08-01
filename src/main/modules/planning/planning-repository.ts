@@ -87,6 +87,7 @@ interface TagRow {
   favorite: number
   created_at: string
   updated_at: string
+  archived_at: string | null
 }
 
 interface GoalRow {
@@ -1151,23 +1152,23 @@ export class PlanningRepository {
     this.database().prepare('DELETE FROM task_recurrence_rules WHERE task_id = ?').run(taskId)
   }
 
-  listTags(): Tag[] {
+  listTags(includeArchived = false): Tag[] {
     const rows = this.database()
       .prepare(
-        `SELECT id, name, color, icon, description, favorite, created_at, updated_at
+        `SELECT id, name, color, icon, description, favorite, created_at, updated_at, archived_at
            FROM tags
-          WHERE archived_at IS NULL AND deleted_at IS NULL
+          WHERE deleted_at IS NULL ${includeArchived ? '' : 'AND archived_at IS NULL'}
           ORDER BY favorite DESC, sort_order ASC, name COLLATE NOCASE`
       )
       .all() as TagRow[]
     return rows.map(mapTag)
   }
 
-  getTag(id: string): Tag | null {
+  getTag(id: string, includeArchived = false): Tag | null {
     const row = this.database()
       .prepare(
-        `SELECT id, name, color, icon, description, favorite, created_at, updated_at
-           FROM tags WHERE id = ? AND archived_at IS NULL AND deleted_at IS NULL`
+        `SELECT id, name, color, icon, description, favorite, created_at, updated_at, archived_at
+           FROM tags WHERE id = ? AND deleted_at IS NULL ${includeArchived ? '' : 'AND archived_at IS NULL'}`
       )
       .get(id) as TagRow | undefined
     return row ? mapTag(row) : null
@@ -1182,6 +1183,44 @@ export class PlanningRepository {
       )
       .run(id, input.name, input.color, input.icon, input.description, now, now)
     this.insertAudit(database, 'tag', id, 'created', null, input, now)
+  }
+
+  updateTag(id: string, input: CreateTagInput, now: string): boolean {
+    const database = this.database()
+    const before = this.getTag(id, true)
+    const result = database
+      .prepare(
+        `UPDATE tags SET name = ?, color = ?, icon = ?, description = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .run(input.name, input.color, input.icon, input.description, now, id)
+    if (result.changes > 0) this.insertAudit(database, 'tag', id, 'updated', before, input, now)
+    return result.changes > 0
+  }
+
+  archiveTag(id: string, archived: boolean, now: string): boolean {
+    const database = this.database()
+    const before = this.getTag(id, true)
+    const result = database
+      .prepare('UPDATE tags SET archived_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
+      .run(archived ? now : null, now, id)
+    if (result.changes > 0) this.insertAudit(database, 'tag', id, archived ? 'archived' : 'restored_from_archive', before, null, now)
+    return result.changes > 0
+  }
+
+  trashTag(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database
+        .prepare('UPDATE tags SET deleted_at = ?, updated_at = ? WHERE id = ? AND archived_at IS NOT NULL AND deleted_at IS NULL')
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare("INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at) VALUES (?, 'tag', ?, ?)")
+        .run(crypto.randomUUID(), id, now)
+      this.insertAudit(database, 'tag', id, 'trashed', null, null, now)
+      return true
+    })()
   }
 
   assignTag(tagId: string, entityType: string, entityId: string, now: string): void {
@@ -1686,6 +1725,7 @@ function mapTag(row: TagRow): Tag {
     icon: row.icon,
     description: row.description,
     favorite: row.favorite === 1,
+    archived: row.archived_at !== null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

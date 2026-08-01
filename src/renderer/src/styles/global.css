@@ -6789,6 +6789,15 @@ kbd {
   box-shadow: 0 0 0 2px var(--trace-soft);
 }
 
+.tag-card.archived {
+  background: color-mix(in srgb, var(--surface) 82%, var(--canvas));
+}
+
+.tag-card.archived > header,
+.tag-card.archived > p {
+  opacity: 0.72;
+}
+
 .tag-card header {
   display: flex;
   align-items: center;
@@ -6816,6 +6825,7 @@ kbd {
 
 .tag-card footer {
   display: flex;
+  flex-wrap: wrap;
   gap: 13px;
   padding-top: 10px;
   color: var(--faint);
@@ -6836,6 +6846,10 @@ kbd {
 
 .tag-card footer button:hover {
   color: var(--trace);
+}
+
+.tag-card footer button.danger {
+  color: var(--danger);
 }
 
 .tag-stats-panel {

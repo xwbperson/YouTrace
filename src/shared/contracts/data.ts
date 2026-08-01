@@ -142,6 +142,7 @@ export interface TrashItem {
     | 'plan'
     | 'time_block'
     | 'countdown'
+    | 'tag'
     | 'review'
     | 'evidence'
   entityId: string
