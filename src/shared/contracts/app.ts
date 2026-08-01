@@ -378,10 +378,12 @@ export interface YouTraceApi {
     minimize(): Promise<IpcResult<void>>
     toggleMaximize(): Promise<IpcResult<WindowState>>
     close(): Promise<IpcResult<void>>
+    quit(): Promise<IpcResult<void>>
     getState(): Promise<IpcResult<WindowState>>
     startResize(edge: WindowResizeEdge, screenX: number, screenY: number): void
     moveResize(screenX: number, screenY: number): void
     endResize(): void
+    onQuitRequested(callback: () => void): () => void
     onStateChanged(callback: (state: WindowState) => void): () => void
   }
 }

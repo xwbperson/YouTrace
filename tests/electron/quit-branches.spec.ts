@@ -67,11 +67,7 @@ test('cancels an active-effort quit or suspends it without counting offline time
     )
     expect(setup.workspace).toBe(true)
 
-    await electronApp.evaluate(async ({ dialog }) => {
-      ;(dialog.showMessageBox as unknown as (...args: unknown[]) => unknown) = async () => ({
-        response: 2,
-        checkboxChecked: false
-      })
+    await electronApp.evaluate(async () => {
       const hook = (
         globalThis as unknown as {
           __youtraceE2E?: { requestApplicationQuit(): Promise<void> }
@@ -80,6 +76,9 @@ test('cancels an active-effort quit or suspends it without counting offline time
       if (!hook) throw new Error('E2E quit hook is unavailable')
       await hook.requestApplicationQuit()
     })
+    const firstQuitDialog = page.getByRole('dialog', { name: /退出前活动计时.*仍在计时/ })
+    await expect(firstQuitDialog).toBeVisible()
+    await firstQuitDialog.getByRole('button', { name: '取消' }).click()
     expect(
       await page.evaluate(async () =>
         (globalThis as unknown as { youtrace: any }).youtrace.execution.getActiveEffort()
@@ -90,21 +89,18 @@ test('cancels an active-effort quit or suspends it without counting offline time
     })
 
     const closePromise = electronApp.waitForEvent('close')
-    await electronApp
-      .evaluate(async ({ dialog }) => {
-        ;(dialog.showMessageBox as unknown as (...args: unknown[]) => unknown) = async () => ({
-          response: 1,
-          checkboxChecked: false
-        })
-        const hook = (
-          globalThis as unknown as {
-            __youtraceE2E?: { requestApplicationQuit(): Promise<void> }
-          }
-        ).__youtraceE2E
-        if (!hook) throw new Error('E2E quit hook is unavailable')
-        await hook.requestApplicationQuit()
-      })
-      .catch(() => undefined)
+    await electronApp.evaluate(async () => {
+      const hook = (
+        globalThis as unknown as {
+          __youtraceE2E?: { requestApplicationQuit(): Promise<void> }
+        }
+      ).__youtraceE2E
+      if (!hook) throw new Error('E2E quit hook is unavailable')
+      await hook.requestApplicationQuit()
+    })
+    const secondQuitDialog = page.getByRole('dialog', { name: /退出前活动计时.*仍在计时/ })
+    await expect(secondQuitDialog).toBeVisible()
+    await secondQuitDialog.getByRole('button', { name: '暂停计时并退出' }).click()
     await closePromise
 
     electronApp = await electron.launch({ args: launchArgs, env: launchEnvironment })

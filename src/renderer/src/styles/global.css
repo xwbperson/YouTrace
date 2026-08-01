@@ -4694,6 +4694,31 @@ kbd {
   width: min(620px, calc(100vw - 48px));
 }
 
+.dialog-content.quit-dialog {
+  width: min(540px, calc(100vw - 40px));
+}
+
+.quit-dialog-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 12px 14px;
+  color: var(--muted);
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--text-sm);
+}
+
+.quit-dialog-loading svg {
+  color: var(--trace);
+}
+
+.quit-dialog-actions {
+  flex-wrap: wrap;
+}
+
 .dialog-heading {
   display: flex;
   align-items: flex-start;

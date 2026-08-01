@@ -3,7 +3,6 @@ import { pathToFileURL } from 'node:url'
 import {
   app,
   BrowserWindow,
-  dialog,
   Menu,
   nativeImage,
   net,
@@ -13,7 +12,6 @@ import {
   Tray
 } from 'electron'
 import type { AppBootstrapState } from '../shared/contracts'
-import type { MessageBoxOptions } from 'electron'
 import { registerIpc, windowState } from './ipc/register-ipc'
 import { WorkspaceManager } from './workspace/workspace-manager'
 import { PlanningRepository } from './modules/planning/planning-repository'
@@ -333,55 +331,11 @@ function loadTrayIcon(): Electron.NativeImage {
 
 async function requestApplicationQuit(): Promise<void> {
   if (isQuitting) return
-  const active = executionService?.getActiveEffort() ?? null
-  if (active) {
-    const options: MessageBoxOptions = {
-      type: 'question',
-      title: '退出有迹',
-      message: `“${active.entityTitle ?? '当前事项'}”仍有一段未结束计时`,
-      detail:
-        '保存并停止会记录到当前时刻；保留未结束会暂停计时，重新打开后由你继续。退出后的离线时间不会计入努力。',
-      buttons: ['保存到当前时刻并停止', '保留未结束会话', '取消退出'],
-      defaultId: 0,
-      cancelId: 2,
-      noLink: true
-    }
-    const choice = mainWindow
-      ? await dialog.showMessageBox(mainWindow, options)
-      : await dialog.showMessageBox(options)
-    if (choice.response === 2) return
-    if (choice.response === 0) {
-      executionService?.stopEffort({
-        id: active.id,
-        result: '退出程序时保存',
-        interruptions: '',
-        obstacles: '',
-        nextStep: '',
-        energy: null,
-        perceivedDifficulty: null
-      })
-    } else {
-      executionService?.suspendEffort(active.id)
-    }
-    await effortRecoveryService?.recordHeartbeat()
-  } else {
-    const options: MessageBoxOptions = {
-      type: 'question',
-      title: '退出有迹',
-      message: '确定退出有迹吗？',
-      detail: '退出后后台提醒会停止；下次启动时会重新计算并汇总错过的提醒。',
-      buttons: ['退出', '取消'],
-      defaultId: 0,
-      cancelId: 1,
-      noLink: true
-    }
-    const choice = mainWindow
-      ? await dialog.showMessageBox(mainWindow, options)
-      : await dialog.showMessageBox(options)
-    if (choice.response !== 0) return
-  }
-  isQuitting = true
-  app.quit()
+  showMainWindow()
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const sendRequest = (): void => mainWindow?.webContents.send('window:quit-requested')
+  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', sendRequest)
+  else sendRequest()
 }
 
 async function recordEffortHeartbeat(): Promise<void> {

@@ -1,5 +1,5 @@
 import type { BrowserWindow, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
-import { dialog, ipcMain, shell } from 'electron'
+import { app, dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import {
   addTaskDependencyInputSchema,
@@ -1264,6 +1264,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
   ipcMain.handle('window:close', (event) =>
     wrap(() => {
       trusted(event).close()
+    })
+  )
+
+  ipcMain.handle('window:quit', (event) =>
+    wrap(() => {
+      trusted(event)
+      app.quit()
     })
   )
 

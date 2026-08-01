@@ -302,21 +302,18 @@ test('completes the course learning loop and preserves it across an explicit qui
     await expect(countdown.getByText(/建议 \d+ 分钟\/日/)).toBeVisible()
 
     const closePromise = electronApp.waitForEvent('close')
-    await electronApp
-      .evaluate(async ({ dialog }) => {
-        ;(dialog.showMessageBox as unknown as (...args: unknown[]) => unknown) = async () => ({
-          response: 0,
-          checkboxChecked: false
-        })
-        const hooks = (
-          globalThis as unknown as {
-            __youtraceE2E?: { requestApplicationQuit(): Promise<void> }
-          }
-        ).__youtraceE2E
-        if (!hooks) throw new Error('E2E quit hook is unavailable')
-        await hooks.requestApplicationQuit()
-      })
-      .catch(() => undefined)
+    await electronApp.evaluate(async () => {
+      const hooks = (
+        globalThis as unknown as {
+          __youtraceE2E?: { requestApplicationQuit(): Promise<void> }
+        }
+      ).__youtraceE2E
+      if (!hooks) throw new Error('E2E quit hook is unavailable')
+      await hooks.requestApplicationQuit()
+    })
+    const quitDialog = page.getByRole('dialog', { name: '退出有迹？' })
+    await expect(quitDialog).toBeVisible()
+    await quitDialog.getByRole('button', { name: '退出程序' }).click()
     await closePromise
 
     electronApp = await electron.launch({ args: launchArgs, env: environment })

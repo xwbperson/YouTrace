@@ -155,15 +155,12 @@ test('keeps an active effort alive through custom window controls and tray-style
     await page.getByRole('radio', { name: /直接退出程序/ }).check()
     await page.getByRole('button', { name: '保存全部设置' }).click()
     await expect(page.getByRole('button', { name: '关闭窗口并退出程序' })).toBeVisible()
-    await electronApp.evaluate(({ dialog }) => {
-      ;(dialog.showMessageBox as unknown as (...args: unknown[]) => unknown) = async () => ({
-        response: 0,
-        checkboxChecked: false
-      })
-    })
+    await page.getByRole('button', { name: '关闭窗口并退出程序' }).click()
+    const quitDialog = page.getByRole('dialog', { name: '退出有迹？' })
+    await expect(quitDialog).toBeVisible()
     await Promise.all([
       electronApp.waitForEvent('close'),
-      page.getByRole('button', { name: '关闭窗口并退出程序' }).click()
+      quitDialog.getByRole('button', { name: '退出程序' }).click()
     ])
   } finally {
     await electronApp.evaluate(({ app }) => app.exit(0)).catch(() => undefined)

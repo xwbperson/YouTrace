@@ -220,12 +220,18 @@ const api: YouTraceApi = {
     toggleMaximize: () =>
       ipcRenderer.invoke('window:toggle-maximize') as Promise<IpcResult<WindowState>>,
     close: () => ipcRenderer.invoke('window:close') as Promise<IpcResult<void>>,
+    quit: () => ipcRenderer.invoke('window:quit') as Promise<IpcResult<void>>,
     getState: () => ipcRenderer.invoke('window:get-state') as Promise<IpcResult<WindowState>>,
     startResize: (edge, screenX, screenY) =>
       ipcRenderer.send('window:resize-start', edge, screenX, screenY),
     moveResize: (screenX, screenY) =>
       ipcRenderer.send('window:resize-move', screenX, screenY),
     endResize: () => ipcRenderer.send('window:resize-end'),
+    onQuitRequested: (callback) => {
+      const listener = (): void => callback()
+      ipcRenderer.on('window:quit-requested', listener)
+      return () => ipcRenderer.removeListener('window:quit-requested', listener)
+    },
     onStateChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, state: WindowState): void => {
         callback(state)
