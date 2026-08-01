@@ -117,6 +117,11 @@ export const createMemoInputSchema = z.object({
   tagIds: z.array(z.string().uuid()).max(50).default([])
 })
 
+export const updateMemoInputSchema = createMemoInputSchema
+  .omit({ sourceLink: true })
+  .partial()
+  .extend({ id: z.string().uuid() })
+
 export const convertMemoToTaskInputSchema = z.object({
   memoId: z.string().uuid(),
   projectId: z.string().uuid().nullable().default(null),
@@ -221,5 +226,6 @@ export type CreateEvidenceInput = z.infer<typeof createEvidenceInputSchema>
 export type UpdateEvidenceInput = z.infer<typeof updateEvidenceInputSchema>
 export type UpdateEvidenceStatusInput = z.infer<typeof updateEvidenceStatusInputSchema>
 export type CreateMemoInput = z.infer<typeof createMemoInputSchema>
+export type UpdateMemoInput = z.infer<typeof updateMemoInputSchema>
 export type ConvertMemoToTaskInput = z.infer<typeof convertMemoToTaskInputSchema>
 export type ConvertMemoToLearningInput = z.infer<typeof convertMemoToLearningInputSchema>

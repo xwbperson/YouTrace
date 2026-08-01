@@ -16,6 +16,7 @@ import type {
   Mistake,
   StartEffortInput,
   StopEffortInput,
+  UpdateMemoInput,
   Task,
   UpdateEvidenceInput,
   UpdateEvidenceStatusInput
@@ -300,6 +301,26 @@ export class ExecutionService {
       })
     }
     return this.requireMemo(id)
+  }
+
+  updateMemo(input: UpdateMemoInput): Memo {
+    const current = this.requireMemo(input.id)
+    const projectId = input.projectId === undefined ? current.projectId : input.projectId
+    if (projectId && !this.planningRepository.getProject(projectId)) {
+      throw entityNotFound('关联项目')
+    }
+    this.repository.updateMemo(
+      input.id,
+      {
+        kind: input.kind ?? current.kind,
+        title: input.title ?? current.title,
+        body: input.body ?? current.body,
+        projectId,
+        tagIds: input.tagIds ?? current.tagIds
+      },
+      new Date().toISOString()
+    )
+    return this.requireMemo(input.id)
   }
 
   listMemos(inboxOnly: boolean, includeArchived = false): Memo[] {

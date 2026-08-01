@@ -52,6 +52,7 @@ import type {
   Memo,
   StartEffortInput,
   StopEffortInput,
+  UpdateMemoInput,
   UpdateEvidenceInput,
   UpdateEvidenceStatusInput
 } from './execution'
@@ -291,6 +292,7 @@ export interface YouTraceApi {
     trashEvidence(id: string): Promise<IpcResult<void>>
     updateEvidenceStatus(input: UpdateEvidenceStatusInput): Promise<IpcResult<Evidence>>
     createMemo(input: CreateMemoInput): Promise<IpcResult<Memo>>
+    updateMemo(input: UpdateMemoInput): Promise<IpcResult<Memo>>
     listMemos(inboxOnly: boolean, includeArchived?: boolean): Promise<IpcResult<Memo[]>>
     convertMemoToTask(input: ConvertMemoToTaskInput): Promise<IpcResult<Task>>
     convertMemoToLearning(input: ConvertMemoToLearningInput): Promise<IpcResult<KnowledgeItem | Mistake>>

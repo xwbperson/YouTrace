@@ -554,6 +554,49 @@ export class ExecutionRepository {
     transaction()
   }
 
+  updateMemo(
+    id: string,
+    input: {
+      kind: Memo['kind']
+      title: string
+      body: string
+      projectId: string | null
+      tagIds: string[]
+    },
+    now: string
+  ): void {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      const before = this.getMemo(id)
+      database
+        .prepare(
+          `UPDATE memos SET kind = ?, title = ?, body = ?, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`
+        )
+        .run(input.kind, input.title, input.body, now, id)
+      database
+        .prepare(
+          `DELETE FROM entity_relations
+            WHERE source_type = 'memo' AND source_id = ?
+              AND target_type = 'project' AND relation_type = 'RELATED_TO'`
+        )
+        .run(id)
+      if (input.projectId) {
+        database
+          .prepare(
+            `INSERT INTO entity_relations(
+               source_type, source_id, target_type, target_id, relation_type, created_at
+             ) VALUES ('memo', ?, 'project', ?, 'RELATED_TO', ?)`
+          )
+          .run(id, input.projectId, now)
+      }
+      this.replaceTags(database, 'memo', id, input.tagIds, now)
+      this.upsertSearch(database, 'memo', id, input.title || input.body.slice(0, 80), input.body)
+      this.insertAudit(database, 'memo', id, 'updated', before, input, now)
+    })
+    transaction()
+  }
+
   getMemo(id: string): Memo | null {
     const rows = this.queryMemos('m.id = ? AND m.deleted_at IS NULL', [id])
     return rows[0] ? mapMemo(rows[0]) : null

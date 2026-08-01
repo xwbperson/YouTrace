@@ -9,6 +9,7 @@ import {
   Lightbulb,
   Link2,
   Paperclip,
+  Pencil,
   Plus,
   RotateCcw,
   Tag,
@@ -16,7 +17,7 @@ import {
   X
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { IpcResult, Memo, Project } from '../../../shared/contracts'
+import type { IpcResult, Memo, Project, Tag as TraceTag } from '../../../shared/contracts'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -46,6 +47,7 @@ export function MemosPage(): React.JSX.Element {
   const [captureNotice, setCaptureNotice] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [convertMemo, setConvertMemo] = useState<Memo | null>(null)
+  const [editMemo, setEditMemo] = useState<Memo | null>(null)
   const [deleteMemo, setDeleteMemo] = useState<Memo | null>(null)
   const [draftHandled, setDraftHandled] = useState(false)
 
@@ -316,6 +318,9 @@ export function MemosPage(): React.JSX.Element {
                     {memo.projectId && <span>{(projectsQuery.data ?? []).find((project) => project.id === memo.projectId)?.name ?? '关联项目'}</span>}
                   </div>
                   <div className="memo-card-actions">
+                    <button aria-label="编辑备忘" onClick={() => setEditMemo(memo)}>
+                      <Pencil size={13} />
+                    </button>
                     {memo.inbox && !memo.archived && (
                       <button onClick={() => setConvertMemo(memo)}>
                         整理
@@ -354,6 +359,20 @@ export function MemosPage(): React.JSX.Element {
           }}
         />
       )}
+      {editMemo && (
+        <EditMemoDialog
+          key={editMemo.id}
+          memo={editMemo}
+          projects={projectsQuery.data ?? []}
+          tags={tagsQuery.data ?? []}
+          open
+          onOpenChange={(open) => { if (!open) setEditMemo(null) }}
+          onSaved={async () => {
+            setEditMemo(null)
+            await queryClient.invalidateQueries({ queryKey: ['memos'] })
+          }}
+        />
+      )}
       <DeleteArchivedMemoDialog
         memo={deleteMemo}
         onOpenChange={(open) => {
@@ -365,6 +384,46 @@ export function MemosPage(): React.JSX.Element {
       />
     </main>
   )
+}
+
+function EditMemoDialog({
+  memo,
+  projects,
+  tags,
+  open,
+  onOpenChange,
+  onSaved
+}: {
+  memo: Memo
+  projects: Project[]
+  tags: TraceTag[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void>
+}): React.JSX.Element {
+  const [kind, setKind] = useState<Memo['kind']>(memo.kind)
+  const [title, setTitle] = useState(memo.title)
+  const [body, setBody] = useState(memo.body)
+  const [projectId, setProjectId] = useState(memo.projectId ?? '')
+  const [tagIds, setTagIds] = useState(memo.tagIds)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async (): Promise<void> => {
+    setBusy(true)
+    setError('')
+    const result = await window.youtrace.execution.updateMemo({
+      id: memo.id,
+      kind,
+      title,
+      body,
+      projectId: projectId || null,
+      tagIds
+    })
+    setBusy(false)
+    if (!result.ok) return setError(result.error.message)
+    await onSaved()
+  }
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">保留原始记录关系</span><Dialog.Title>编辑备忘</Dialog.Title><Dialog.Description>修改内容不会改变已有附件、来源成果或转换关系。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><div className="form-row"><label><span>备忘类型</span><select value={kind} onChange={(event) => setKind(event.target.value as Memo['kind'])}>{Object.entries(kindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>关联项目</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">不关联项目</option>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label></div><label><span>标题（可选）</span><input value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>内容</span><textarea autoFocus value={body} onChange={(event) => setBody(event.target.value)} /></label>{tags.length > 0 && <fieldset className="tag-picker"><legend>标签</legend><div>{tags.map((tag) => <button type="button" key={tag.id} className={tagIds.includes(tag.id) ? 'active' : ''} onClick={() => setTagIds((current) => current.includes(tag.id) ? current.filter((id) => id !== tag.id) : [...current, tag.id])}>{tag.name}</button>)}</div></fieldset>}{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!body.trim() || busy} onClick={() => void submit()}><Pencil size={14} />{busy ? '保存中…' : '保存修改'}</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function DeleteArchivedMemoDialog({

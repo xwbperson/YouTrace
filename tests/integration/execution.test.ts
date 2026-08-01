@@ -283,13 +283,26 @@ describe('execution and evidence application service', () => {
       sourceLink: null,
       tagIds: []
     })
+    const updatedMemo = execution.updateMemo({
+      id: memo.id,
+      kind: 'knowledge',
+      title: '环境检查表思路',
+      body: '把失败环境整理成可复用检查表，并补充依赖版本。',
+      projectId: project.id,
+      tagIds: []
+    })
+    expect(updatedMemo).toMatchObject({
+      kind: 'knowledge',
+      title: '环境检查表思路',
+      body: '把失败环境整理成可复用检查表，并补充依赖版本。'
+    })
     const converted = execution.convertMemoToTask({
-      memoId: memo.id,
+      memoId: updatedMemo.id,
       projectId: project.id,
       title: '整理环境检查表',
       estimatedMinutes: 30
     })
-    expect(converted.description).toBe(memo.body)
+    expect(converted.description).toBe(updatedMemo.body)
     expect(execution.listMemos(false).find((item) => item.id === memo.id)?.processedAt).not.toBeNull()
 
     const relation = workspaceManager

@@ -107,6 +107,7 @@ const api: YouTraceApi = {
     updateEvidenceStatus: (input) =>
       ipcRenderer.invoke('execution:update-evidence-status', input),
     createMemo: (input) => ipcRenderer.invoke('execution:create-memo', input),
+    updateMemo: (input) => ipcRenderer.invoke('execution:update-memo', input),
     listMemos: (inboxOnly, includeArchived) =>
       ipcRenderer.invoke('execution:list-memos', inboxOnly, includeArchived),
     convertMemoToTask: (input) => ipcRenderer.invoke('execution:convert-memo-to-task', input),

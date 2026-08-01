@@ -65,6 +65,7 @@ import {
   updateKnowledgeInputSchema,
   updateLearningTestInputSchema,
   updateMetricInputSchema,
+  updateMemoInputSchema,
   updateMilestoneInputSchema,
   updateMistakeInputSchema,
   updateProjectInputSchema,
@@ -678,6 +679,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return executionService.createMemo(createMemoInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('execution:update-memo', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return executionService.updateMemo(updateMemoInputSchema.parse(rawInput))
     })
   )
 
