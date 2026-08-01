@@ -70,6 +70,8 @@ export class DatabaseManager {
     const transaction = database.transaction(() => {
       database.exec(INITIAL_SCHEMA_SQL)
       ensureColumn(database, 'reviews', 'deleted_at', 'TEXT')
+      ensureColumn(database, 'course_profiles', 'archived_at', 'TEXT')
+      ensureColumn(database, 'course_profiles', 'deleted_at', 'TEXT')
       const row = database
         .prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number | null }

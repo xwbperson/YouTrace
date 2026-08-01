@@ -58,8 +58,14 @@ import {
   updateEvidenceInputSchema,
   updateAreaInputSchema,
   updateChecklistItemInputSchema,
+  updateCourseInputSchema,
   updateGoalInputSchema,
+  updateHabitInputSchema,
+  updateKnowledgeInputSchema,
+  updateLearningTestInputSchema,
+  updateMetricInputSchema,
   updateMilestoneInputSchema,
+  updateMistakeInputSchema,
   updateProjectInputSchema,
   updateTaskInputSchema,
   updateReviewInputSchema,
@@ -731,6 +737,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('practice:update-habit', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateHabit(updateHabitInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-habit', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashHabit(z.string().uuid().parse(rawId)) })
+  )
+
   ipcMain.handle('practice:record-habit', (event, rawInput) =>
     wrap(() => {
       trusted(event)
@@ -750,6 +764,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
       trusted(event)
       return practiceService.createMetric(createMetricInputSchema.parse(rawInput))
     })
+  )
+
+  ipcMain.handle('practice:update-metric', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateMetric(updateMetricInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-metric', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashMetric(z.string().uuid().parse(rawId)) })
   )
 
   ipcMain.handle('practice:record-metric', (event, rawInput) =>
@@ -773,6 +795,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('practice:update-course', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateCourse(updateCourseInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-course', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashCourse(z.string().uuid().parse(rawId)) })
+  )
+
   ipcMain.handle('practice:list-knowledge', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)
@@ -785,6 +815,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
       trusted(event)
       return practiceService.createKnowledge(createKnowledgeInputSchema.parse(rawInput))
     })
+  )
+
+  ipcMain.handle('practice:update-knowledge', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateKnowledge(updateKnowledgeInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-knowledge', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashKnowledge(z.string().uuid().parse(rawId)) })
   )
 
   ipcMain.handle('practice:list-mistakes', (event, rawProjectId) =>
@@ -801,6 +839,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('practice:update-mistake', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateMistake(updateMistakeInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-mistake', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashMistake(z.string().uuid().parse(rawId)) })
+  )
+
   ipcMain.handle('practice:list-learning-tests', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)
@@ -813,6 +859,14 @@ export function registerIpc(options: RegisterIpcOptions): void {
       trusted(event)
       return practiceService.createLearningTest(createLearningTestInputSchema.parse(rawInput))
     })
+  )
+
+  ipcMain.handle('practice:update-learning-test', (event, rawInput) =>
+    wrap(() => { trusted(event); return practiceService.updateLearningTest(updateLearningTestInputSchema.parse(rawInput)) })
+  )
+
+  ipcMain.handle('practice:trash-learning-test', (event, rawId) =>
+    wrap(() => { trusted(event); practiceService.trashLearningTest(z.string().uuid().parse(rawId)) })
   )
 
   ipcMain.handle('practice:list-review-queue', (event, rawProjectId) =>

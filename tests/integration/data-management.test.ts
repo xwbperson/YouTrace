@@ -27,6 +27,7 @@ let workspaceManager: WorkspaceManager
 let planning: PlanningService
 let data: DataService
 let execution: ExecutionService
+let practice: PracticeService
 
 beforeEach(async () => {
   fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-data-test-'))
@@ -35,7 +36,7 @@ beforeEach(async () => {
   await workspaceManager.create(sourceRoot, '数据安全测试')
   const planningRepository = new PlanningRepository(() => workspaceManager.getDatabase())
   planning = new PlanningService(planningRepository)
-  const practice = new PracticeService(
+  practice = new PracticeService(
     new PracticeRepository(() => workspaceManager.getDatabase()),
     planningRepository
   )
@@ -210,7 +211,7 @@ describe('workspace backup, restore and portable files', () => {
     expect(verification).toMatchObject({
       valid: true,
       workspaceId: workspaceManager.getCurrent()!.id,
-      schemaVersion: 10
+      schemaVersion: 11
     })
     planning.createTask({
       parentTaskId: null,
@@ -381,6 +382,46 @@ describe('workspace backup, restore and portable files', () => {
       .toEqual({ count: 0 })
     expect(database.prepare('SELECT COUNT(*) AS count FROM areas WHERE id = ?').get(area.id))
       .toEqual({ count: 0 })
+  })
+
+  it('updates, restores and permanently deletes practice and learning items', async () => {
+    const project = planning.createProject({ areaId: null, name: '学习生命周期', description: '', status: 'active', startDate: null, targetDate: null, successCriteria: '', progressMode: 'equal' })
+    const habit = practice.createHabit({ projectId: project.id, name: '旧习惯', description: '', frequency: 'daily', targetCount: 1, weekdays: [], reminderTime: null, startDate: '2026-08-01', endDate: null })
+    const metric = practice.createMetric({ projectId: project.id, name: '旧指标', targetValue: 10, unit: '页', direction: 'increase', period: 'total' })
+    const course = practice.createCourse({ projectId: project.id, courseName: '旧课程', examDate: null, textbook: { title: '旧教材', author: '', edition: '', isbn: '', publisher: '' } })
+    const knowledge = practice.createKnowledge({ projectId: project.id, milestoneId: null, title: '旧知识点', content: '', mastery: null, nextReviewDate: null })
+    const mistake = practice.createMistake({ projectId: project.id, knowledgeItemId: knowledge.id, question: '旧错题', wrongAnswer: '', correctAnswer: '', analysis: '', mastery: null, nextReviewDate: null })
+    const learningTest = practice.createLearningTest({ projectId: project.id, milestoneId: null, title: '旧测试', score: 60, maxScore: 100, testedAt: '2026-08-01T08:00:00.000Z', note: '' })
+
+    expect(practice.updateHabit({ id: habit.id, name: '新习惯' }).name).toBe('新习惯')
+    expect(practice.updateMetric({ id: metric.id, name: '新指标' }).name).toBe('新指标')
+    expect(practice.updateCourse({ id: course.id, courseName: '新课程' }).courseName).toBe('新课程')
+    expect(practice.updateKnowledge({ id: knowledge.id, title: '新知识点' }).title).toBe('新知识点')
+    expect(practice.updateMistake({ id: mistake.id, question: '新错题' }).question).toBe('新错题')
+    expect(practice.updateLearningTest({ id: learningTest.id, title: '新测试' }).title).toBe('新测试')
+
+    practice.trashKnowledge(knowledge.id)
+    const knowledgeTrash = data.listTrash().find((item) => item.entityId === knowledge.id)!
+    expect(knowledgeTrash).toMatchObject({ entityType: 'knowledge', title: '新知识点' })
+    data.restoreTrash(knowledgeTrash.id)
+    expect(practice.listKnowledge(project.id)).toHaveLength(1)
+
+    practice.trashHabit(habit.id)
+    practice.trashMetric(metric.id)
+    practice.trashCourse(course.id)
+    practice.trashKnowledge(knowledge.id)
+    practice.trashMistake(mistake.id)
+    practice.trashLearningTest(learningTest.id)
+    await data.createBackup('实践对象永久删除保护点')
+    for (const item of data.listTrash()) await data.purgeTrash(item.id, '永久删除')
+
+    const database = workspaceManager.getDatabase()
+    for (const [table, id] of [
+      ['habit_rules', habit.id], ['metrics', metric.id], ['course_profiles', course.id],
+      ['knowledge_items', knowledge.id], ['mistakes', mistake.id], ['learning_tests', learningTest.id]
+    ]) {
+      expect(database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE id = ?`).get(id)).toEqual({ count: 0 })
+    }
   })
 
   it('migrates by verified copy and preserves the active source when a later target is invalid', async () => {

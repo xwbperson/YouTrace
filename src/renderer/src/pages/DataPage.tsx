@@ -110,6 +110,12 @@ export function DataPage(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ['goals'] }),
         queryClient.invalidateQueries({ queryKey: ['milestones'] }),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['habits'] }),
+        queryClient.invalidateQueries({ queryKey: ['metrics'] }),
+        queryClient.invalidateQueries({ queryKey: ['courses'] }),
+        queryClient.invalidateQueries({ queryKey: ['knowledge'] }),
+        queryClient.invalidateQueries({ queryKey: ['mistakes'] }),
+        queryClient.invalidateQueries({ queryKey: ['learning-tests'] }),
         queryClient.invalidateQueries({ queryKey: ['reviews'] }),
         queryClient.invalidateQueries({ queryKey: ['evidence'] }),
         queryClient.invalidateQueries({ queryKey: ['project-history'] }),
@@ -160,7 +166,7 @@ export function DataPage(): React.JSX.Element {
       ) : (
         <section className="trash-panel panel">
           <header><div><span className="section-label">软删除与可恢复关系</span><h2>回收站</h2><p>努力记录不会随任务或项目删除，复盘调整也不会因删除复盘而撤销。</p></div></header>
-          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的领域、项目、目标、里程碑、任务、成果和复盘会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{trashEntityLabel(item.entityType)} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，请先恢复父对象</em>}</div><div className="trash-relations">{item.entityType === 'review' ? <span>正文与原快照保留</span> : <><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</>}</div><button className="button button-secondary" type="button" disabled={!item.parentAvailable && (item.entityType === 'goal' || item.entityType === 'milestone')} onClick={() => void restoreTrashItem(item)}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
+          {trash.length === 0 ? <div className="trash-empty"><Trash2 size={27} /><strong>回收站为空</strong><p>删除的计划、实践、学习、成果和复盘内容会先来到这里。</p></div> : <div className="trash-list">{trash.map((item) => <article key={item.id}><span><Trash2 size={16} /></span><div><strong>{item.title}</strong><small>{trashEntityLabel(item.entityType)} · {new Date(item.deletedAt).toLocaleString('zh-CN')}</small>{!item.parentAvailable && <em>原父对象不可用，请先恢复父对象</em>}</div><div className="trash-relations">{item.entityType === 'review' ? <span>正文与原快照保留</span> : <><span>{item.attachmentCount} 个附件</span>{item.sharedAttachmentCount > 0 && <span>{item.sharedAttachmentCount} 个共享附件受保护</span>}</>}</div><button className="button button-secondary" type="button" disabled={!item.parentAvailable && item.entityType !== 'task'} onClick={() => void restoreTrashItem(item)}><ArchiveRestore size={13} />恢复</button><button className="trash-purge" type="button" onClick={() => setPurgeItem(item)}>永久删除</button></article>)}</div>}
         </section>
       )}
       {(message || error) && <div className={`data-feedback ${error ? 'error' : ''}`} role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'}>{error || message}<button aria-label="关闭提示" onClick={() => { setError(''); setMessage('') }}><X size={13} /></button></div>}
@@ -183,5 +189,5 @@ function PurgeDialog(props: { item: TrashItem | null; onOpenChange: (open: boole
 }
 
 function trashEntityLabel(entityType: TrashItem['entityType']): string {
-  return { area: '领域', project: '项目', goal: '目标', milestone: '里程碑', task: '任务', review: '复盘', evidence: '成果' }[entityType]
+  return { area: '领域', project: '项目', goal: '目标', milestone: '里程碑', task: '任务', habit: '习惯', metric: '指标', course: '课程', knowledge: '知识点', mistake: '错题', learning_test: '学习测试', review: '复盘', evidence: '成果' }[entityType]
 }

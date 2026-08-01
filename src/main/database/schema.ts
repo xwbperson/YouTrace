@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 10
+export const CURRENT_SCHEMA_VERSION = 11
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -527,7 +527,9 @@ export const INITIAL_SCHEMA_SQL = `
     course_name TEXT NOT NULL,
     exam_date TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    archived_at TEXT,
+    deleted_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS textbooks (

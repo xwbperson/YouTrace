@@ -14,6 +14,8 @@ export const createHabitInputSchema = z.object({
   endDate: localDateSchema.nullable().default(null)
 })
 
+export const updateHabitInputSchema = createHabitInputSchema.partial().extend({ id: z.string().uuid() })
+
 export const recordHabitInputSchema = z.object({
   habitId: z.string().uuid(),
   date: localDateSchema,
@@ -29,6 +31,8 @@ export const createMetricInputSchema = z.object({
   direction: z.enum(['increase', 'decrease', 'maintain']),
   period: z.enum(['daily', 'weekly', 'monthly', 'quarterly', 'total'])
 })
+
+export const updateMetricInputSchema = createMetricInputSchema.partial().extend({ id: z.string().uuid() })
 
 export const recordMetricInputSchema = z.object({
   metricId: z.string().uuid(),
@@ -50,6 +54,8 @@ export const createCourseInputSchema = z.object({
   })
 })
 
+export const updateCourseInputSchema = createCourseInputSchema.partial().extend({ id: z.string().uuid() })
+
 export const createKnowledgeInputSchema = z.object({
   projectId: z.string().uuid(),
   milestoneId: z.string().uuid().nullable().default(null),
@@ -58,6 +64,8 @@ export const createKnowledgeInputSchema = z.object({
   mastery: z.number().int().min(0).max(100).nullable().default(null),
   nextReviewDate: localDateSchema.nullable().default(null)
 })
+
+export const updateKnowledgeInputSchema = createKnowledgeInputSchema.partial().extend({ id: z.string().uuid() })
 
 export const createMistakeInputSchema = z.object({
   projectId: z.string().uuid(),
@@ -70,7 +78,9 @@ export const createMistakeInputSchema = z.object({
   nextReviewDate: localDateSchema.nullable().default(null)
 })
 
-export const createLearningTestInputSchema = z.object({
+export const updateMistakeInputSchema = createMistakeInputSchema.partial().extend({ id: z.string().uuid() })
+
+const learningTestInputSchema = z.object({
   projectId: z.string().uuid(),
   milestoneId: z.string().uuid().nullable().default(null),
   title: z.string().trim().min(1).max(240),
@@ -78,8 +88,17 @@ export const createLearningTestInputSchema = z.object({
   maxScore: z.number().finite().positive().nullable().default(null),
   testedAt: z.string().datetime(),
   note: z.string().max(10_000).default('')
-}).refine(
+})
+
+export const createLearningTestInputSchema = learningTestInputSchema.refine(
   (value) => value.score === null || value.maxScore === null || value.score <= value.maxScore,
+  { message: '成绩不能超过满分。', path: ['score'] }
+)
+
+export const updateLearningTestInputSchema = learningTestInputSchema.partial().extend({
+  id: z.string().uuid()
+}).refine(
+  (value) => value.score === undefined || value.maxScore === undefined || value.score === null || value.maxScore === null || value.score <= value.maxScore,
   { message: '成绩不能超过满分。', path: ['score'] }
 )
 
@@ -196,11 +215,17 @@ export interface ReviewQueueItem {
 }
 
 export type CreateHabitInput = z.infer<typeof createHabitInputSchema>
+export type UpdateHabitInput = z.infer<typeof updateHabitInputSchema>
 export type RecordHabitInput = z.infer<typeof recordHabitInputSchema>
 export type CreateMetricInput = z.infer<typeof createMetricInputSchema>
+export type UpdateMetricInput = z.infer<typeof updateMetricInputSchema>
 export type RecordMetricInput = z.infer<typeof recordMetricInputSchema>
 export type CreateCourseInput = z.infer<typeof createCourseInputSchema>
+export type UpdateCourseInput = z.infer<typeof updateCourseInputSchema>
 export type CreateKnowledgeInput = z.infer<typeof createKnowledgeInputSchema>
+export type UpdateKnowledgeInput = z.infer<typeof updateKnowledgeInputSchema>
 export type CreateMistakeInput = z.infer<typeof createMistakeInputSchema>
+export type UpdateMistakeInput = z.infer<typeof updateMistakeInputSchema>
 export type CreateLearningTestInput = z.infer<typeof createLearningTestInputSchema>
+export type UpdateLearningTestInput = z.infer<typeof updateLearningTestInputSchema>
 export type RecordReviewResultInput = z.infer<typeof recordReviewResultInputSchema>

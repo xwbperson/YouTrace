@@ -189,6 +189,20 @@ export class PracticeRepository {
     this.insertAudit(database, 'habit', id, 'created', null, input, now)
   }
 
+  updateHabit(id: string, input: CreateHabitInput, now: string): void {
+    this.database().prepare(
+      `UPDATE habit_rules SET project_id = ?, name = ?, description = ?, frequency = ?,
+         target_count = ?, weekdays_json = ?, reminder_time = ?, start_date = ?, end_date = ?,
+         updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(input.projectId, input.name, input.description, input.frequency, input.targetCount,
+      JSON.stringify(input.weekdays), input.reminderTime, input.startDate, input.endDate, now, id)
+    this.insertAudit(this.database(), 'habit', id, 'updated', null, input, now)
+  }
+
+  trashHabit(id: string, now: string): boolean {
+    return this.trashEntity('habit_rules', 'habit', id, now, false)
+  }
+
   recordHabit(id: string, input: RecordHabitInput, now: string): void {
     const database = this.database()
     database
@@ -300,6 +314,18 @@ export class PracticeRepository {
     this.insertAudit(database, 'metric', id, 'created', null, input, now)
   }
 
+  updateMetric(id: string, input: CreateMetricInput, now: string): void {
+    this.database().prepare(
+      `UPDATE metrics SET project_id = ?, name = ?, target_value = ?, unit = ?, direction = ?,
+         period = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(input.projectId, input.name, input.targetValue, input.unit, input.direction, input.period, now, id)
+    this.insertAudit(this.database(), 'metric', id, 'updated', null, input, now)
+  }
+
+  trashMetric(id: string, now: string): boolean {
+    return this.trashEntity('metrics', 'metric', id, now, false)
+  }
+
   recordMetric(id: string, input: RecordMetricInput, now: string): void {
     const database = this.database()
     database
@@ -331,6 +357,7 @@ export class PracticeRepository {
                 c.created_at, c.updated_at
            FROM course_profiles c
            LEFT JOIN textbooks t ON t.course_profile_id = c.id
+          WHERE c.deleted_at IS NULL AND c.archived_at IS NULL
           ORDER BY c.created_at`
       )
       .all() as CourseRow[]
@@ -375,6 +402,33 @@ export class PracticeRepository {
       this.insertAudit(database, 'course', id, 'created', null, input, now)
     })
     transaction()
+  }
+
+  updateCourse(id: string, input: CreateCourseInput, now: string): void {
+    const database = this.database()
+    database.transaction(() => {
+      database.prepare(
+        `UPDATE course_profiles SET project_id = ?, course_name = ?, exam_date = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      ).run(input.projectId, input.courseName, input.examDate, now, id)
+      const textbook = database.prepare('SELECT id FROM textbooks WHERE course_profile_id = ?').get(id) as { id: string } | undefined
+      if (textbook) {
+        database.prepare(
+          `UPDATE textbooks SET title = ?, author = ?, edition = ?, isbn = ?, publisher = ?, updated_at = ?
+            WHERE id = ?`
+        ).run(input.textbook.title, input.textbook.author, input.textbook.edition, input.textbook.isbn, input.textbook.publisher, now, textbook.id)
+      } else {
+        database.prepare(
+          `INSERT INTO textbooks(id, course_profile_id, title, author, edition, isbn, publisher, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).run(crypto.randomUUID(), id, input.textbook.title, input.textbook.author, input.textbook.edition, input.textbook.isbn, input.textbook.publisher, now, now)
+      }
+      this.insertAudit(database, 'course', id, 'updated', null, input, now)
+    })()
+  }
+
+  trashCourse(id: string, now: string): boolean {
+    return this.trashEntity('course_profiles', 'course', id, now, false)
   }
 
   listKnowledge(projectId: string): KnowledgeItem[] {
@@ -435,6 +489,29 @@ export class PracticeRepository {
       this.insertAudit(database, 'knowledge', id, 'created', null, input, now)
     })
     transaction()
+  }
+
+  updateKnowledge(id: string, input: CreateKnowledgeInput, now: string): void {
+    const database = this.database()
+    database.transaction(() => {
+      database.prepare(
+        `UPDATE knowledge_items SET project_id = ?, milestone_id = ?, title = ?, content = ?,
+           mastery = ?, next_review_date = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+      ).run(input.projectId, input.milestoneId, input.title, input.content, input.mastery, input.nextReviewDate, now, id)
+      database.prepare("DELETE FROM review_queue WHERE entity_type = 'knowledge' AND entity_id = ? AND status = 'pending'").run(id)
+      if (input.nextReviewDate) {
+        database.prepare(
+          `INSERT OR IGNORE INTO review_queue(id, entity_type, entity_id, scheduled_date, created_at, updated_at)
+           VALUES (?, 'knowledge', ?, ?, ?, ?)`
+        ).run(crypto.randomUUID(), id, input.nextReviewDate, now, now)
+      }
+      this.upsertSearch(database, 'knowledge', id, input.title, input.content)
+      this.insertAudit(database, 'knowledge', id, 'updated', null, input, now)
+    })()
+  }
+
+  trashKnowledge(id: string, now: string): boolean {
+    return this.trashEntity('knowledge_items', 'knowledge', id, now)
   }
 
   listMistakes(projectId: string): Mistake[] {
@@ -499,6 +576,31 @@ export class PracticeRepository {
     transaction()
   }
 
+  updateMistake(id: string, input: CreateMistakeInput, now: string): void {
+    const database = this.database()
+    database.transaction(() => {
+      database.prepare(
+        `UPDATE mistakes SET project_id = ?, knowledge_item_id = ?, question = ?, wrong_answer = ?,
+           correct_answer = ?, analysis = ?, mastery = ?, next_review_date = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      ).run(input.projectId, input.knowledgeItemId, input.question, input.wrongAnswer, input.correctAnswer,
+        input.analysis, input.mastery, input.nextReviewDate, now, id)
+      database.prepare("DELETE FROM review_queue WHERE entity_type = 'mistake' AND entity_id = ? AND status = 'pending'").run(id)
+      if (input.nextReviewDate) {
+        database.prepare(
+          `INSERT OR IGNORE INTO review_queue(id, entity_type, entity_id, scheduled_date, created_at, updated_at)
+           VALUES (?, 'mistake', ?, ?, ?, ?)`
+        ).run(crypto.randomUUID(), id, input.nextReviewDate, now, now)
+      }
+      this.upsertSearch(database, 'mistake', id, input.question.slice(0, 160), input.analysis)
+      this.insertAudit(database, 'mistake', id, 'updated', null, input, now)
+    })()
+  }
+
+  trashMistake(id: string, now: string): boolean {
+    return this.trashEntity('mistakes', 'mistake', id, now)
+  }
+
   listLearningTests(projectId: string): LearningTest[] {
     return (
       this.database()
@@ -549,6 +651,18 @@ export class PracticeRepository {
         now
       )
     this.insertAudit(this.database(), 'learning_test', id, 'created', null, input, now)
+  }
+
+  updateLearningTest(id: string, input: CreateLearningTestInput, now: string): void {
+    this.database().prepare(
+      `UPDATE learning_tests SET project_id = ?, milestone_id = ?, title = ?, score = ?,
+         max_score = ?, tested_at = ?, note = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+    ).run(input.projectId, input.milestoneId, input.title, input.score, input.maxScore, input.testedAt, input.note, now, id)
+    this.insertAudit(this.database(), 'learning_test', id, 'updated', null, input, now)
+  }
+
+  trashLearningTest(id: string, now: string): boolean {
+    return this.trashEntity('learning_tests', 'learning_test', id, now, false)
   }
 
   listReviewQueue(projectId: string): ReviewQueueItem[] {
@@ -643,6 +757,30 @@ export class PracticeRepository {
       }, now)
     })
     transaction()
+  }
+
+  private trashEntity(
+    table: 'habit_rules' | 'metrics' | 'course_profiles' | 'knowledge_items' | 'mistakes' | 'learning_tests',
+    entityType: 'habit' | 'metric' | 'course' | 'knowledge' | 'mistake' | 'learning_test',
+    id: string,
+    now: string,
+    searchable = true
+  ): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database.prepare(
+        `UPDATE ${table} SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`
+      ).run(now, now, id)
+      if (result.changes === 0) return false
+      database.prepare(
+        `INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at) VALUES (?, ?, ?, ?)`
+      ).run(crypto.randomUUID(), entityType, id, now)
+      if (searchable) {
+        database.prepare('DELETE FROM searchable_content WHERE entity_type = ? AND entity_id = ?').run(entityType, id)
+      }
+      this.insertAudit(database, entityType, id, 'trashed', null, null, now)
+      return true
+    })()
   }
 
   private upsertSearch(

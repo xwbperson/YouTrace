@@ -71,7 +71,13 @@ import type {
   RecordHabitInput,
   RecordMetricInput,
   RecordReviewResultInput,
-  ReviewQueueItem
+  ReviewQueueItem,
+  UpdateCourseInput,
+  UpdateHabitInput,
+  UpdateKnowledgeInput,
+  UpdateLearningTestInput,
+  UpdateMetricInput,
+  UpdateMistakeInput
 } from './practice'
 import type {
   Countdown,
@@ -291,18 +297,30 @@ export interface YouTraceApi {
   practice: {
     listHabits(projectId: string | null, date: string): Promise<IpcResult<Habit[]>>
     createHabit(input: CreateHabitInput): Promise<IpcResult<Habit>>
+    updateHabit(input: UpdateHabitInput): Promise<IpcResult<Habit>>
+    trashHabit(id: string): Promise<IpcResult<void>>
     recordHabit(input: RecordHabitInput): Promise<IpcResult<Habit>>
     listMetrics(projectId: string | null): Promise<IpcResult<Metric[]>>
     createMetric(input: CreateMetricInput): Promise<IpcResult<Metric>>
+    updateMetric(input: UpdateMetricInput): Promise<IpcResult<Metric>>
+    trashMetric(id: string): Promise<IpcResult<void>>
     recordMetric(input: RecordMetricInput): Promise<IpcResult<Metric>>
     listCourses(): Promise<IpcResult<Course[]>>
     createCourse(input: CreateCourseInput): Promise<IpcResult<Course>>
+    updateCourse(input: UpdateCourseInput): Promise<IpcResult<Course>>
+    trashCourse(id: string): Promise<IpcResult<void>>
     listKnowledge(projectId: string): Promise<IpcResult<KnowledgeItem[]>>
     createKnowledge(input: CreateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
+    updateKnowledge(input: UpdateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
+    trashKnowledge(id: string): Promise<IpcResult<void>>
     listMistakes(projectId: string): Promise<IpcResult<Mistake[]>>
     createMistake(input: CreateMistakeInput): Promise<IpcResult<Mistake>>
+    updateMistake(input: UpdateMistakeInput): Promise<IpcResult<Mistake>>
+    trashMistake(id: string): Promise<IpcResult<void>>
     listLearningTests(projectId: string): Promise<IpcResult<LearningTest[]>>
     createLearningTest(input: CreateLearningTestInput): Promise<IpcResult<LearningTest>>
+    updateLearningTest(input: UpdateLearningTestInput): Promise<IpcResult<LearningTest>>
+    trashLearningTest(id: string): Promise<IpcResult<void>>
     listReviewQueue(projectId: string): Promise<IpcResult<ReviewQueueItem[]>>
     recordReviewResult(input: RecordReviewResultInput): Promise<IpcResult<ReviewQueueItem>>
   }

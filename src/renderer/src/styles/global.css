@@ -7034,7 +7034,7 @@ kbd {
 .habit-card {
   display: grid;
   min-height: 78px;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 12px;
   padding: 13px;
@@ -7125,6 +7125,67 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.practice-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.practice-card-actions button,
+.metric-card > footer .practice-card-actions button {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.practice-card-actions button:hover {
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+}
+
+.practice-card-actions button:last-child:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.weekday-picker {
+  padding: 0;
+  border: 0;
+}
+
+.weekday-picker legend {
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.weekday-picker > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.weekday-picker button {
+  padding: 6px 9px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.weekday-picker button.active {
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+  border-color: var(--trace);
 }
 
 .metric-card > header {
@@ -7252,6 +7313,8 @@ kbd {
 
 .course-workspace > header > div:last-child {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 7px;
 }
 
@@ -7280,7 +7343,7 @@ kbd {
 
 .learning-columns article {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   padding: 10px 2px;
   color: var(--trace);
@@ -7323,7 +7386,7 @@ kbd {
 
 .learning-followup article {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 9px 2px;

@@ -203,6 +203,12 @@ export class DataRepository {
                   WHEN 'goal' THEN COALESCE(g.title, '已删除目标')
                   WHEN 'milestone' THEN COALESCE(m.title, '已删除里程碑')
                   WHEN 'task' THEN COALESCE(t.title, '已删除任务')
+                  WHEN 'habit' THEN COALESCE(h.name, '已删除习惯')
+                  WHEN 'metric' THEN COALESCE(mt.name, '已删除指标')
+                  WHEN 'course' THEN COALESCE(c.course_name, '已删除课程')
+                  WHEN 'knowledge' THEN COALESCE(k.title, '已删除知识点')
+                  WHEN 'mistake' THEN COALESCE(SUBSTR(mk.question, 1, 160), '已删除错题')
+                  WHEN 'learning_test' THEN COALESCE(lt.title, '已删除测试')
                   WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
                   WHEN 'evidence' THEN COALESCE(e.title, '已删除成果')
                 END AS title,
@@ -224,6 +230,22 @@ export class DataRepository {
                      WHERE parent.id = m.project_id AND parent.deleted_at IS NULL
                   ) THEN 1
                   WHEN tr.entity_type = 'milestone' THEN 0
+                  WHEN tr.entity_type = 'habit' AND h.id IS NULL THEN 0
+                  WHEN tr.entity_type = 'habit' AND h.project_id IS NULL THEN 1
+                  WHEN tr.entity_type = 'habit' AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = h.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'habit' THEN 0
+                  WHEN tr.entity_type = 'metric' AND mt.id IS NULL THEN 0
+                  WHEN tr.entity_type = 'metric' AND mt.project_id IS NULL THEN 1
+                  WHEN tr.entity_type = 'metric' AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = mt.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'metric' THEN 0
+                  WHEN tr.entity_type = 'course' AND c.id IS NOT NULL AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = c.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'course' THEN 0
+                  WHEN tr.entity_type = 'knowledge' AND k.id IS NOT NULL AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = k.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'knowledge' THEN 0
+                  WHEN tr.entity_type = 'mistake' AND mk.id IS NOT NULL AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = mk.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'mistake' THEN 0
+                  WHEN tr.entity_type = 'learning_test' AND lt.id IS NOT NULL AND EXISTS(SELECT 1 FROM projects parent WHERE parent.id = lt.project_id AND parent.deleted_at IS NULL) THEN 1
+                  WHEN tr.entity_type = 'learning_test' THEN 0
                   WHEN t.id IS NULL THEN 0
                   WHEN EXISTS(
                     SELECT 1 FROM audit_events ae
@@ -249,6 +271,12 @@ export class DataRepository {
            LEFT JOIN goals g ON tr.entity_type = 'goal' AND g.id = tr.entity_id
            LEFT JOIN milestones m ON tr.entity_type = 'milestone' AND m.id = tr.entity_id
            LEFT JOIN tasks t ON tr.entity_type = 'task' AND t.id = tr.entity_id
+           LEFT JOIN habit_rules h ON tr.entity_type = 'habit' AND h.id = tr.entity_id
+           LEFT JOIN metrics mt ON tr.entity_type = 'metric' AND mt.id = tr.entity_id
+           LEFT JOIN course_profiles c ON tr.entity_type = 'course' AND c.id = tr.entity_id
+           LEFT JOIN knowledge_items k ON tr.entity_type = 'knowledge' AND k.id = tr.entity_id
+           LEFT JOIN mistakes mk ON tr.entity_type = 'mistake' AND mk.id = tr.entity_id
+           LEFT JOIN learning_tests lt ON tr.entity_type = 'learning_test' AND lt.id = tr.entity_id
            LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
            LEFT JOIN evidence e ON tr.entity_type = 'evidence' AND e.id = tr.entity_id
           WHERE tr.purged_at IS NULL
@@ -308,6 +336,22 @@ export class DataRepository {
           .prepare('SELECT title, description FROM tasks WHERE id = ?')
           .get(item.entityId) as { title: string; description: string }
         this.upsertSearch(database, 'task', item.entityId, task.title, task.description)
+      } else if (item.entityType === 'habit') {
+        database.prepare('UPDATE habit_rules SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'metric') {
+        database.prepare('UPDATE metrics SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'course') {
+        database.prepare('UPDATE course_profiles SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'knowledge') {
+        database.prepare('UPDATE knowledge_items SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+        const knowledge = database.prepare('SELECT title, content FROM knowledge_items WHERE id = ?').get(item.entityId) as { title: string; content: string }
+        this.upsertSearch(database, 'knowledge', item.entityId, knowledge.title, knowledge.content)
+      } else if (item.entityType === 'mistake') {
+        database.prepare('UPDATE mistakes SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+        const mistake = database.prepare('SELECT question, analysis FROM mistakes WHERE id = ?').get(item.entityId) as { question: string; analysis: string }
+        this.upsertSearch(database, 'mistake', item.entityId, mistake.question.slice(0, 160), mistake.analysis)
+      } else if (item.entityType === 'learning_test') {
+        database.prepare('UPDATE learning_tests SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
       } else if (item.entityType === 'evidence') {
         database
           .prepare('UPDATE evidence SET deleted_at = NULL, updated_at = ? WHERE id = ?')
@@ -383,6 +427,37 @@ export class DataRepository {
         orphanPaths.push(...this.detachAttachments(database, 'milestone', [item.entityId]))
         this.deleteRelations(database, 'milestone', [item.entityId])
         database.prepare('DELETE FROM milestones WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'habit') {
+        this.deleteReminders(database, 'habit', [item.entityId])
+        database.prepare('DELETE FROM habit_instances WHERE habit_rule_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'habit', [item.entityId]))
+        this.deleteRelations(database, 'habit', [item.entityId])
+        database.prepare('DELETE FROM habit_rules WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'metric') {
+        database.prepare('DELETE FROM metric_entries WHERE metric_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'metric', [item.entityId]))
+        this.deleteRelations(database, 'metric', [item.entityId])
+        database.prepare('DELETE FROM metrics WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'course') {
+        database.prepare('DELETE FROM textbooks WHERE course_profile_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'course', [item.entityId]))
+        this.deleteRelations(database, 'course', [item.entityId])
+        database.prepare('DELETE FROM course_profiles WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'knowledge') {
+        database.prepare('UPDATE mistakes SET knowledge_item_id = NULL WHERE knowledge_item_id = ?').run(item.entityId)
+        database.prepare("DELETE FROM review_queue WHERE entity_type = 'knowledge' AND entity_id = ?").run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'knowledge', [item.entityId]))
+        this.deleteRelations(database, 'knowledge', [item.entityId])
+        database.prepare('DELETE FROM knowledge_items WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'mistake') {
+        database.prepare("DELETE FROM review_queue WHERE entity_type = 'mistake' AND entity_id = ?").run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'mistake', [item.entityId]))
+        this.deleteRelations(database, 'mistake', [item.entityId])
+        database.prepare('DELETE FROM mistakes WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'learning_test') {
+        orphanPaths.push(...this.detachAttachments(database, 'learning_test', [item.entityId]))
+        this.deleteRelations(database, 'learning_test', [item.entityId])
+        database.prepare('DELETE FROM learning_tests WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'evidence') {
         const attachments = database
           .prepare(
@@ -651,6 +726,12 @@ export class DataRepository {
     const milestoneIds = (
       database.prepare('SELECT id FROM milestones WHERE project_id = ?').all(projectId) as Array<{ id: string }>
     ).map((row) => row.id)
+    const courseIds = (database.prepare('SELECT id FROM course_profiles WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const knowledgeIds = (database.prepare('SELECT id FROM knowledge_items WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const mistakeIds = (database.prepare('SELECT id FROM mistakes WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const learningTestIds = (database.prepare('SELECT id FROM learning_tests WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const habitIds = (database.prepare('SELECT id FROM habit_rules WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const metricIds = (database.prepare('SELECT id FROM metrics WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
     const taskIds = (
       database.prepare('SELECT id FROM tasks WHERE project_id = ?').all(projectId) as Array<{ id: string }>
     ).map((row) => row.id)
@@ -701,15 +782,28 @@ export class DataRepository {
       .run(now, projectId, projectId)
     database.prepare('DELETE FROM milestones WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM goals WHERE project_id = ?').run(projectId)
-    const courseIds = (
-      database.prepare('SELECT id FROM course_profiles WHERE project_id = ?').all(projectId) as Array<{ id: string }>
-    ).map((row) => row.id)
+    const practiceChildren = [
+      ['course', courseIds],
+      ['knowledge', knowledgeIds],
+      ['mistake', mistakeIds],
+      ['learning_test', learningTestIds],
+      ['habit', habitIds],
+      ['metric', metricIds]
+    ] as const
+    for (const [entityType, entityIds] of practiceChildren) {
+      orphanPaths.push(...this.detachAttachments(database, entityType, [...entityIds]))
+      this.deleteRelations(database, entityType, [...entityIds])
+      for (const entityId of entityIds) {
+        database.prepare('UPDATE trash_entries SET purged_at = ? WHERE entity_type = ? AND entity_id = ? AND purged_at IS NULL').run(now, entityType, entityId)
+      }
+    }
     for (const courseId of courseIds) database.prepare('DELETE FROM textbooks WHERE course_profile_id = ?').run(courseId)
     database.prepare('DELETE FROM review_queue WHERE entity_id IN (SELECT id FROM knowledge_items WHERE project_id = ?) OR entity_id IN (SELECT id FROM mistakes WHERE project_id = ?)').run(projectId, projectId)
     database.prepare('DELETE FROM mistakes WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM knowledge_items WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM learning_tests WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM course_profiles WHERE project_id = ?').run(projectId)
+    this.deleteReminders(database, 'habit', habitIds)
     database.prepare('DELETE FROM habit_instances WHERE habit_rule_id IN (SELECT id FROM habit_rules WHERE project_id = ?)').run(projectId)
     database.prepare('DELETE FROM habit_rules WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM metric_entries WHERE metric_id IN (SELECT id FROM metrics WHERE project_id = ?)').run(projectId)
@@ -753,6 +847,22 @@ export class DataRepository {
       }
     }
     return orphanPaths
+  }
+
+  private deleteReminders(database: Database.Database, sourceType: string, sourceIds: string[]): void {
+    for (const sourceId of sourceIds) {
+      database.prepare(
+        `DELETE FROM reminder_event_payloads WHERE event_id IN (
+           SELECT e.id FROM reminder_events e JOIN reminder_rules r ON r.id = e.rule_id
+            WHERE r.source_type = ? AND r.source_id = ?)`
+      ).run(sourceType, sourceId)
+      database.prepare(
+        `DELETE FROM reminder_events WHERE rule_id IN (
+           SELECT id FROM reminder_rules WHERE source_type = ? AND source_id = ?)`
+      ).run(sourceType, sourceId)
+      database.prepare('DELETE FROM reminder_source_preferences WHERE source_type = ? AND source_id = ?').run(sourceType, sourceId)
+      database.prepare('DELETE FROM reminder_rules WHERE source_type = ? AND source_id = ?').run(sourceType, sourceId)
+    }
   }
 
   private deleteRelations(database: Database.Database, entityType: string, entityIds: string[]): void {

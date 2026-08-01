@@ -8,9 +8,11 @@ import {
   Circle,
   Flame,
   Gauge,
+  Pencil,
   Plus,
   RotateCcw,
   Target,
+  Trash2,
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -24,7 +26,11 @@ import type {
   CreateMistakeInput,
   Habit,
   IpcResult,
+  KnowledgeItem,
+  LearningTest,
+  Milestone,
   Metric,
+  Mistake,
   Project
 } from '../../../shared/contracts'
 
@@ -45,15 +51,30 @@ export function PracticePage(): React.JSX.Element {
   const [view, setView] = useState<PracticeView>('habits')
   const [scopeId, setScopeId] = useState<string>('personal')
   const [habitDialogOpen, setHabitDialogOpen] = useState(false)
+  const [editingHabit, setEditingHabit] = useState<Habit | null>(null)
   const [metricDialogOpen, setMetricDialogOpen] = useState(false)
+  const [editingMetric, setEditingMetric] = useState<Metric | null>(null)
   const [courseDialogOpen, setCourseDialogOpen] = useState(false)
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null)
   const [metricToRecord, setMetricToRecord] = useState<Metric | null>(null)
   const [knowledgeDialogOpen, setKnowledgeDialogOpen] = useState(false)
+  const [editingKnowledge, setEditingKnowledge] = useState<KnowledgeItem | null>(null)
   const [mistakeDialogOpen, setMistakeDialogOpen] = useState(false)
+  const [editingMistake, setEditingMistake] = useState<Mistake | null>(null)
   const [testDialogOpen, setTestDialogOpen] = useState(false)
+  const [editingTest, setEditingTest] = useState<LearningTest | null>(null)
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const today = useMemo(() => localDate(), [])
   const projectId = scopeId === 'personal' ? null : scopeId
+
+  const openCreate = (kind: 'habit' | 'metric' | 'course' | 'knowledge' | 'mistake' | 'test'): void => {
+    if (kind === 'habit') { setEditingHabit(null); setHabitDialogOpen(true) }
+    else if (kind === 'metric') { setEditingMetric(null); setMetricDialogOpen(true) }
+    else if (kind === 'course') { setEditingCourse(null); setCourseDialogOpen(true) }
+    else if (kind === 'knowledge') { setEditingKnowledge(null); setKnowledgeDialogOpen(true) }
+    else if (kind === 'mistake') { setEditingMistake(null); setMistakeDialogOpen(true) }
+    else { setEditingTest(null); setTestDialogOpen(true) }
+  }
 
   const projectsQuery = useQuery({
     queryKey: ['projects'],
@@ -87,6 +108,11 @@ export function PracticePage(): React.JSX.Element {
     enabled: selectedCourse !== null,
     queryFn: async () =>
       unwrap(await window.youtrace.practice.listKnowledge(selectedCourse!.projectId))
+  })
+  const courseMilestonesQuery = useQuery({
+    queryKey: ['milestones', selectedCourse?.projectId],
+    enabled: selectedCourse !== null,
+    queryFn: async () => unwrap(await window.youtrace.planning.listMilestones(selectedCourse!.projectId))
   })
   const mistakesQuery = useQuery({
     queryKey: ['mistakes', selectedCourse?.projectId],
@@ -181,7 +207,7 @@ export function PracticePage(): React.JSX.Element {
             </div>
             <div className="practice-actions">
               {scopeSelector}
-              <button className="button button-primary" type="button" onClick={() => setHabitDialogOpen(true)}>
+              <button className="button button-primary" type="button" onClick={() => openCreate('habit')}>
                 <Plus size={15} />
                 新建习惯
               </button>
@@ -193,7 +219,7 @@ export function PracticePage(): React.JSX.Element {
               title="还没有这个范围的习惯"
               copy="从一个小而明确、可以每天留下事实的动作开始。"
               action="创建第一个习惯"
-              onAction={() => setHabitDialogOpen(true)}
+              onAction={() => openCreate('habit')}
             />
           ) : (
             <div className="habit-grid">
@@ -226,6 +252,7 @@ export function PracticePage(): React.JSX.Element {
                   >
                     跳过
                   </button>
+                  <div className="practice-card-actions"><button type="button" aria-label={`编辑习惯：${habit.name}`} onClick={() => { setEditingHabit(habit); setHabitDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除习惯：${habit.name}`} onClick={async () => { await window.youtrace.practice.trashHabit(habit.id); await queryClient.invalidateQueries({ queryKey: ['habits'] }) }}><Trash2 size={13} /></button></div>
                 </article>
               ))}
             </div>
@@ -243,7 +270,7 @@ export function PracticePage(): React.JSX.Element {
             </div>
             <div className="practice-actions">
               {scopeSelector}
-              <button className="button button-primary" type="button" onClick={() => setMetricDialogOpen(true)}>
+              <button className="button button-primary" type="button" onClick={() => openCreate('metric')}>
                 <Plus size={15} />
                 新建指标
               </button>
@@ -255,7 +282,7 @@ export function PracticePage(): React.JSX.Element {
               title="还没有这个范围的指标"
               copy="选择真正影响决策的数字，不必记录一切。"
               action="创建第一个指标"
-              onAction={() => setMetricDialogOpen(true)}
+              onAction={() => openCreate('metric')}
             />
           ) : (
             <div className="metric-grid">
@@ -284,6 +311,7 @@ export function PracticePage(): React.JSX.Element {
                         <Plus size={13} />
                         记录
                       </button>
+                      <div className="practice-card-actions"><button type="button" aria-label={`编辑指标：${metric.name}`} onClick={() => { setEditingMetric(metric); setMetricDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除指标：${metric.name}`} onClick={async () => { await window.youtrace.practice.trashMetric(metric.id); await queryClient.invalidateQueries({ queryKey: ['metrics'] }) }}><Trash2 size={13} /></button></div>
                     </footer>
                   </article>
                 )
@@ -301,7 +329,7 @@ export function PracticePage(): React.JSX.Element {
               <h2>课程学习</h2>
               <p>课程项目承载学习结果，掌握度与项目进度保持独立。</p>
             </div>
-            <button className="button button-primary" type="button" onClick={() => setCourseDialogOpen(true)}>
+            <button className="button button-primary" type="button" onClick={() => openCreate('course')}>
               <Plus size={15} />
               建立课程
             </button>
@@ -312,7 +340,7 @@ export function PracticePage(): React.JSX.Element {
               title="还没有课程档案"
               copy="先建立一个项目，再把教材、知识点和错题接到同一条学习轨迹。"
               action="建立第一门课程"
-              onAction={() => setCourseDialogOpen(true)}
+              onAction={() => openCreate('course')}
             />
           ) : (
             <div className="learning-layout">
@@ -340,18 +368,20 @@ export function PracticePage(): React.JSX.Element {
                       <h3>{selectedCourse.courseName}</h3>
                     </div>
                     <div>
-                      <button className="button button-secondary" type="button" onClick={() => setKnowledgeDialogOpen(true)}>
+                       <button className="button button-secondary" type="button" onClick={() => openCreate('knowledge')}>
                         <Plus size={14} />
                         知识点
                       </button>
-                      <button className="button button-secondary" type="button" onClick={() => setMistakeDialogOpen(true)}>
+                       <button className="button button-secondary" type="button" onClick={() => openCreate('mistake')}>
                         <Plus size={14} />
                         错题
                       </button>
-                      <button className="button button-secondary" type="button" onClick={() => setTestDialogOpen(true)}>
-                        <ClipboardCheck size={14} />
-                        测试
-                      </button>
+                       <button className="button button-secondary" type="button" onClick={() => openCreate('test')}>
+                         <ClipboardCheck size={14} />
+                         测试
+                       </button>
+                       <button className="button button-secondary" type="button" onClick={() => { setEditingCourse(selectedCourse); setCourseDialogOpen(true) }}><Pencil size={14} />编辑课程</button>
+                       <button className="button button-danger" type="button" onClick={async () => { await window.youtrace.practice.trashCourse(selectedCourse.id); await queryClient.invalidateQueries({ queryKey: ['courses'] }) }}><Trash2 size={14} />删除课程</button>
                     </div>
                   </header>
                   <div className="learning-columns">
@@ -363,14 +393,15 @@ export function PracticePage(): React.JSX.Element {
                       {(knowledgeQuery.data ?? []).map((item) => (
                         <article key={item.id}>
                           <BookOpen size={15} />
-                          <div>
-                            <strong>{item.title}</strong>
+                           <div>
+                             <strong>{item.title}</strong>
                             <span>
                               掌握度 {item.mastery ?? '未评估'}
                               {item.mastery !== null ? '%' : ''}
                               {item.nextReviewDate ? ` · ${item.nextReviewDate} 复习` : ''}
-                            </span>
-                          </div>
+                             </span>
+                           </div>
+                           <div className="practice-card-actions"><button type="button" aria-label={`编辑知识点：${item.title}`} onClick={() => { setEditingKnowledge(item); setKnowledgeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除知识点：${item.title}`} onClick={async () => { await window.youtrace.practice.trashKnowledge(item.id); await Promise.all([queryClient.invalidateQueries({ queryKey: ['knowledge'] }), queryClient.invalidateQueries({ queryKey: ['courses'] }), queryClient.invalidateQueries({ queryKey: ['review-queue'] })]) }}><Trash2 size={13} /></button></div>
                         </article>
                       ))}
                       {(knowledgeQuery.data ?? []).length === 0 && <p>还没有知识点。</p>}
@@ -383,14 +414,15 @@ export function PracticePage(): React.JSX.Element {
                       {(mistakesQuery.data ?? []).map((item) => (
                         <article key={item.id}>
                           <RotateCcw size={15} />
-                          <div>
-                            <strong>{item.question}</strong>
+                           <div>
+                             <strong>{item.question}</strong>
                             <span>
                               掌握度 {item.mastery ?? '未评估'}
                               {item.mastery !== null ? '%' : ''}
                               {item.nextReviewDate ? ` · ${item.nextReviewDate} 复习` : ''}
-                            </span>
-                          </div>
+                             </span>
+                           </div>
+                           <div className="practice-card-actions"><button type="button" aria-label={`编辑错题：${item.question}`} onClick={() => { setEditingMistake(item); setMistakeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除错题：${item.question}`} onClick={async () => { await window.youtrace.practice.trashMistake(item.id); await Promise.all([queryClient.invalidateQueries({ queryKey: ['mistakes'] }), queryClient.invalidateQueries({ queryKey: ['courses'] }), queryClient.invalidateQueries({ queryKey: ['review-queue'] })]) }}><Trash2 size={13} /></button></div>
                         </article>
                       ))}
                       {(mistakesQuery.data ?? []).length === 0 && <p>还没有错题。</p>}
@@ -399,7 +431,7 @@ export function PracticePage(): React.JSX.Element {
                   <div className="learning-followup">
                     <section>
                       <div className="learning-heading"><span>测试记录</span><strong>{testsQuery.data?.length ?? 0}</strong></div>
-                      {(testsQuery.data ?? []).slice(0, 5).map((test) => <article key={test.id}><ClipboardCheck size={14} /><div><strong>{test.title}</strong><span>{test.score === null ? '未记录成绩' : `${test.score} / ${test.maxScore ?? '—'}`} · {new Date(test.testedAt).toLocaleDateString('zh-CN')}</span></div></article>)}
+                      {(testsQuery.data ?? []).slice(0, 5).map((test) => <article key={test.id}><ClipboardCheck size={14} /><div><strong>{test.title}</strong><span>{test.score === null ? '未记录成绩' : `${test.score} / ${test.maxScore ?? '—'}`} · {new Date(test.testedAt).toLocaleDateString('zh-CN')}</span></div><div className="practice-card-actions"><button type="button" aria-label={`编辑测试：${test.title}`} onClick={() => { setEditingTest(test); setTestDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除测试：${test.title}`} onClick={async () => { await window.youtrace.practice.trashLearningTest(test.id); await queryClient.invalidateQueries({ queryKey: ['learning-tests'] }) }}><Trash2 size={13} /></button></div></article>)}
                       {(testsQuery.data ?? []).length === 0 && <p>还没有测试记录。</p>}
                     </section>
                     <section>
@@ -417,21 +449,24 @@ export function PracticePage(): React.JSX.Element {
 
       <HabitDialog
         open={habitDialogOpen}
-        onOpenChange={setHabitDialogOpen}
+        onOpenChange={(open) => { setHabitDialogOpen(open); if (!open) setEditingHabit(null) }}
         projectId={projectId}
-        onCreated={() => queryClient.invalidateQueries({ queryKey: ['habits'] })}
+        habit={editingHabit}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['habits'] })}
       />
       <MetricDialog
         open={metricDialogOpen}
-        onOpenChange={setMetricDialogOpen}
+        onOpenChange={(open) => { setMetricDialogOpen(open); if (!open) setEditingMetric(null) }}
         projectId={projectId}
-        onCreated={() => queryClient.invalidateQueries({ queryKey: ['metrics'] })}
+        metric={editingMetric}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['metrics'] })}
       />
       <CourseDialog
         open={courseDialogOpen}
-        onOpenChange={setCourseDialogOpen}
+        onOpenChange={(open) => { setCourseDialogOpen(open); if (!open) setEditingCourse(null) }}
         projects={projects}
-        onCreated={async (course) => {
+        course={editingCourse}
+        onSaved={async (course) => {
           setSelectedCourseId(course.id)
           await queryClient.invalidateQueries({ queryKey: ['courses'] })
         }}
@@ -445,9 +480,11 @@ export function PracticePage(): React.JSX.Element {
       />
       <KnowledgeDialog
         open={knowledgeDialogOpen}
-        onOpenChange={setKnowledgeDialogOpen}
+        onOpenChange={(open) => { setKnowledgeDialogOpen(open); if (!open) setEditingKnowledge(null) }}
         course={selectedCourse}
-        onCreated={async () => {
+        knowledge={editingKnowledge}
+        milestones={courseMilestonesQuery.data ?? []}
+        onSaved={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['knowledge'] }),
             queryClient.invalidateQueries({ queryKey: ['courses'] })
@@ -456,9 +493,11 @@ export function PracticePage(): React.JSX.Element {
       />
       <MistakeDialog
         open={mistakeDialogOpen}
-        onOpenChange={setMistakeDialogOpen}
+        onOpenChange={(open) => { setMistakeDialogOpen(open); if (!open) setEditingMistake(null) }}
         course={selectedCourse}
-        onCreated={async () => {
+        mistake={editingMistake}
+        knowledgeItems={knowledgeQuery.data ?? []}
+        onSaved={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['mistakes'] }),
             queryClient.invalidateQueries({ queryKey: ['courses'] })
@@ -467,9 +506,11 @@ export function PracticePage(): React.JSX.Element {
       />
       <LearningTestDialog
         open={testDialogOpen}
-        onOpenChange={setTestDialogOpen}
+        onOpenChange={(open) => { setTestDialogOpen(open); if (!open) setEditingTest(null) }}
         course={selectedCourse}
-        onCreated={async () => {
+        learningTest={editingTest}
+        milestones={courseMilestonesQuery.data ?? []}
+        onSaved={async () => {
           await queryClient.invalidateQueries({ queryKey: ['learning-tests'] })
         }}
       />
@@ -531,40 +572,64 @@ function HabitDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: string | null
-  onCreated: () => Promise<unknown>
+  habit: Habit | null
+  onSaved: () => Promise<unknown>
 }): React.JSX.Element {
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [frequency, setFrequency] = useState<CreateHabitInput['frequency']>('daily')
+  const [targetCount, setTargetCount] = useState('1')
+  const [weekdays, setWeekdays] = useState<number[]>([])
   const [reminderTime, setReminderTime] = useState('')
+  const [startDate, setStartDate] = useState(localDate())
+  const [endDate, setEndDate] = useState('')
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (!props.open) return
+    setName(props.habit?.name ?? '')
+    setDescription(props.habit?.description ?? '')
+    setFrequency(props.habit?.frequency ?? 'daily')
+    setTargetCount(props.habit?.targetCount.toString() ?? '1')
+    setWeekdays(props.habit?.weekdays ?? [])
+    setReminderTime(props.habit?.reminderTime ?? '')
+    setStartDate(props.habit?.startDate ?? localDate())
+    setEndDate(props.habit?.endDate ?? '')
+    setError('')
+  }, [props.open, props.habit])
   const submit = async (): Promise<void> => {
-    const result = await window.youtrace.practice.createHabit({
+    const input: CreateHabitInput = {
       projectId: props.projectId,
       name,
-      description: '',
+      description,
       frequency,
-      targetCount: 1,
-      weekdays: [],
+      targetCount: Number(targetCount),
+      weekdays,
       reminderTime: reminderTime || null,
-      startDate: localDate(),
-      endDate: null
-    })
+      startDate,
+      endDate: endDate || null
+    }
+    const result = props.habit
+      ? await window.youtrace.practice.updateHabit({ id: props.habit.id, ...input })
+      : await window.youtrace.practice.createHabit(input)
     if (!result.ok) return setError(result.error.message)
-    await props.onCreated()
-    setName('')
+    await props.onSaved()
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="让重复行动可见" title="新建习惯" description="习惯只记录发生与否，不自动替代任务结果。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="让重复行动可见" title={props.habit ? '编辑习惯' : '新建习惯'} description="习惯只记录发生与否，不自动替代任务结果。">
       <div className="dialog-form">
         <label><span>习惯名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：每日复盘" /></label>
-        <div className="form-row">
+        <label><span>说明</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+        <div className="form-row form-row-three">
           <label><span>频率</span><select value={frequency} onChange={(event) => setFrequency(event.target.value as CreateHabitInput['frequency'])}><option value="daily">每天</option><option value="weekdays">工作日</option><option value="weekly">每周</option><option value="custom">自定义</option></select></label>
+          <label><span>每周期目标次数</span><input type="number" min="1" max="99" value={targetCount} onChange={(event) => setTargetCount(event.target.value)} /></label>
           <label><span>提醒时间</span><input type="time" value={reminderTime} onChange={(event) => setReminderTime(event.target.value)} /></label>
         </div>
+        {(frequency === 'weekly' || frequency === 'custom') ? <fieldset className="weekday-picker"><legend>执行星期</legend><div>{['日', '一', '二', '三', '四', '五', '六'].map((label, day) => <button type="button" key={day} className={weekdays.includes(day) ? 'active' : ''} onClick={() => setWeekdays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day])}>周{label}</button>)}</div></fieldset> : null}
+        <div className="form-row"><label><span>开始日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span>结束日期</span><input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label></div>
         {error && <div className="inline-error">{error}</div>}
       </div>
-      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!name.trim()} onClick={() => void submit()}>创建习惯</button></div>
+      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!name.trim() || !startDate || !targetCount} onClick={() => void submit()}>{props.habit ? '保存修改' : '创建习惯'}</button></div>
     </DialogFrame>
   )
 }
@@ -573,41 +638,53 @@ function MetricDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: string | null
-  onCreated: () => Promise<unknown>
+  metric: Metric | null
+  onSaved: () => Promise<unknown>
 }): React.JSX.Element {
   const [name, setName] = useState('')
   const [targetValue, setTargetValue] = useState('')
   const [unit, setUnit] = useState('')
+  const [direction, setDirection] = useState<CreateMetricInput['direction']>('increase')
   const [period, setPeriod] = useState<CreateMetricInput['period']>('total')
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (!props.open) return
+    setName(props.metric?.name ?? '')
+    setTargetValue(props.metric?.targetValue.toString() ?? '')
+    setUnit(props.metric?.unit ?? '')
+    setDirection(props.metric?.direction ?? 'increase')
+    setPeriod(props.metric?.period ?? 'total')
+    setError('')
+  }, [props.open, props.metric])
   const submit = async (): Promise<void> => {
-    const result = await window.youtrace.practice.createMetric({
+    const input: CreateMetricInput = {
       projectId: props.projectId,
       name,
       targetValue: Number(targetValue),
       unit,
-      direction: 'increase',
+      direction,
       period
-    })
+    }
+    const result = props.metric
+      ? await window.youtrace.practice.updateMetric({ id: props.metric.id, ...input })
+      : await window.youtrace.practice.createMetric(input)
     if (!result.ok) return setError(result.error.message)
-    await props.onCreated()
-    setName('')
-    setTargetValue('')
-    setUnit('')
+    await props.onSaved()
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="只记录会影响决策的数" title="新建指标" description="目标用于比较，记录值永远保留为原始事实。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="只记录会影响决策的数" title={props.metric ? '编辑指标' : '新建指标'} description="目标用于比较，记录值永远保留为原始事实。">
       <div className="dialog-form">
         <label><span>指标名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：累计跑量" /></label>
         <div className="form-row form-row-three">
           <label><span>目标值</span><input type="number" value={targetValue} onChange={(event) => setTargetValue(event.target.value)} /></label>
           <label><span>单位</span><input value={unit} onChange={(event) => setUnit(event.target.value)} placeholder="公里" /></label>
-          <label><span>周期</span><select value={period} onChange={(event) => setPeriod(event.target.value as CreateMetricInput['period'])}><option value="total">累计</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="quarterly">每季度</option></select></label>
+          <label><span>方向</span><select value={direction} onChange={(event) => setDirection(event.target.value as CreateMetricInput['direction'])}><option value="increase">越高越好</option><option value="decrease">越低越好</option><option value="maintain">保持范围</option></select></label>
         </div>
+        <label><span>周期</span><select value={period} onChange={(event) => setPeriod(event.target.value as CreateMetricInput['period'])}><option value="total">累计</option><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="quarterly">每季度</option></select></label>
         {error && <div className="inline-error">{error}</div>}
       </div>
-      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!name.trim() || !targetValue || !unit.trim()} onClick={() => void submit()}>创建指标</button></div>
+      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!name.trim() || !targetValue || !unit.trim()} onClick={() => void submit()}>{props.metric ? '保存修改' : '创建指标'}</button></div>
     </DialogFrame>
   )
 }
@@ -665,41 +742,57 @@ function CourseDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   projects: Project[]
-  onCreated: (course: Course) => Promise<void>
+  course: Course | null
+  onSaved: (course: Course) => Promise<void>
 }): React.JSX.Element {
   const [projectId, setProjectId] = useState('')
   const [courseName, setCourseName] = useState('')
   const [textbookTitle, setTextbookTitle] = useState('')
+  const [author, setAuthor] = useState('')
+  const [edition, setEdition] = useState('')
+  const [isbn, setIsbn] = useState('')
+  const [publisher, setPublisher] = useState('')
   const [examDate, setExamDate] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
-    if (!projectId && props.projects[0]) setProjectId(props.projects[0].id)
-  }, [projectId, props.projects])
+    if (!props.open) return
+    setProjectId(props.course?.projectId ?? props.projects[0]?.id ?? '')
+    setCourseName(props.course?.courseName ?? '')
+    setTextbookTitle(props.course?.textbook?.title ?? '')
+    setAuthor(props.course?.textbook?.author ?? '')
+    setEdition(props.course?.textbook?.edition ?? '')
+    setIsbn(props.course?.textbook?.isbn ?? '')
+    setPublisher(props.course?.textbook?.publisher ?? '')
+    setExamDate(props.course?.examDate ?? '')
+    setError('')
+  }, [props.open, props.course, props.projects])
   const submit = async (): Promise<void> => {
     const input: CreateCourseInput = {
       projectId,
       courseName,
       examDate: examDate || null,
-      textbook: { title: textbookTitle, author: '', edition: '', isbn: '', publisher: '' }
+      textbook: { title: textbookTitle, author, edition, isbn, publisher }
     }
-    const result = await window.youtrace.practice.createCourse(input)
+    const result = props.course
+      ? await window.youtrace.practice.updateCourse({ id: props.course.id, ...input })
+      : await window.youtrace.practice.createCourse(input)
     if (!result.ok) return setError(result.error.message)
-    await props.onCreated(result.data)
-    setCourseName('')
-    setTextbookTitle('')
+    await props.onSaved(result.data)
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="把学习资料接到项目" title="建立课程" description="每门课程关联一个项目，并保留独立的教材档案。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="把学习资料接到项目" title={props.course ? '编辑课程' : '建立课程'} description="每门课程关联一个项目，并保留独立的教材档案。">
       <div className="dialog-form">
         {props.projects.length === 0 ? <div className="inline-error">请先在“项目任务”中创建一个项目。</div> : <>
           <label><span>关联项目</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
           <label><span>课程名称</span><input autoFocus value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="例如：计算机网络" /></label>
           <div className="form-row"><label><span>教材名称</span><input value={textbookTitle} onChange={(event) => setTextbookTitle(event.target.value)} placeholder="教材或主要资料" /></label><label><span>考试日期</span><input type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label></div>
+          <div className="form-row"><label><span>作者</span><input value={author} onChange={(event) => setAuthor(event.target.value)} /></label><label><span>版本</span><input value={edition} onChange={(event) => setEdition(event.target.value)} /></label></div>
+          <div className="form-row"><label><span>ISBN</span><input value={isbn} onChange={(event) => setIsbn(event.target.value)} /></label><label><span>出版社</span><input value={publisher} onChange={(event) => setPublisher(event.target.value)} /></label></div>
         </>}
         {error && <div className="inline-error">{error}</div>}
       </div>
-      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!projectId || !courseName.trim() || !textbookTitle.trim()} onClick={() => void submit()}>建立课程</button></div>
+      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!projectId || !courseName.trim() || !textbookTitle.trim()} onClick={() => void submit()}>{props.course ? '保存修改' : '建立课程'}</button></div>
     </DialogFrame>
   )
 }
@@ -708,30 +801,45 @@ function KnowledgeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   course: Course | null
-  onCreated: () => Promise<void>
+  knowledge: KnowledgeItem | null
+  milestones: Milestone[]
+  onSaved: () => Promise<void>
 }): React.JSX.Element {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
+  const [milestoneId, setMilestoneId] = useState('')
   const [mastery, setMastery] = useState('')
   const [reviewDate, setReviewDate] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!props.open) return
+    setTitle(props.knowledge?.title ?? '')
+    setContent(props.knowledge?.content ?? '')
+    setMilestoneId(props.knowledge?.milestoneId ?? '')
+    setMastery(props.knowledge?.mastery?.toString() ?? '')
+    setReviewDate(props.knowledge?.nextReviewDate ?? '')
+    setError('')
+  }, [props.open, props.knowledge])
   const submit = async (): Promise<void> => {
     if (!props.course) return
-    const input: CreateKnowledgeInput = { projectId: props.course.projectId, milestoneId: null, title, content, mastery: mastery ? Number(mastery) : null, nextReviewDate: reviewDate || null }
-    const result = await window.youtrace.practice.createKnowledge(input)
-    if (!result.ok) return
-    await props.onCreated()
-    setTitle('')
-    setContent('')
+    const input: CreateKnowledgeInput = { projectId: props.course.projectId, milestoneId: milestoneId || null, title, content, mastery: mastery ? Number(mastery) : null, nextReviewDate: reviewDate || null }
+    const result = props.knowledge
+      ? await window.youtrace.practice.updateKnowledge({ id: props.knowledge.id, ...input })
+      : await window.youtrace.practice.createKnowledge(input)
+    if (!result.ok) return setError(result.error.message)
+    await props.onSaved()
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title="添加知识点" description="内容可被全局搜索，掌握度不等同于完成进度。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title={props.knowledge ? '编辑知识点' : '添加知识点'} description="内容可被全局搜索，掌握度不等同于完成进度。">
       <div className="dialog-form">
         <label><span>知识点标题</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
         <label><span>内容</span><textarea value={content} onChange={(event) => setContent(event.target.value)} /></label>
+        <label><span>所属章节 / 里程碑</span><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">不关联章节</option>{props.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.title}</option>)}</select></label>
         <div className="form-row"><label><span>掌握度（0–100）</span><input type="number" min="0" max="100" value={mastery} onChange={(event) => setMastery(event.target.value)} /></label><label><span>下次复习</span><input type="date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} /></label></div>
+        {error && <div className="inline-error">{error}</div>}
       </div>
-      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !props.course} onClick={() => void submit()}>添加知识点</button></div>
+      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !props.course} onClick={() => void submit()}>{props.knowledge ? '保存修改' : '添加知识点'}</button></div>
     </DialogFrame>
   )
 }
@@ -740,34 +848,50 @@ function MistakeDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   course: Course | null
-  onCreated: () => Promise<void>
+  mistake: Mistake | null
+  knowledgeItems: KnowledgeItem[]
+  onSaved: () => Promise<void>
 }): React.JSX.Element {
   const [question, setQuestion] = useState('')
   const [wrongAnswer, setWrongAnswer] = useState('')
   const [correctAnswer, setCorrectAnswer] = useState('')
   const [analysis, setAnalysis] = useState('')
+  const [knowledgeItemId, setKnowledgeItemId] = useState('')
+  const [mastery, setMastery] = useState('')
   const [reviewDate, setReviewDate] = useState('')
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!props.open) return
+    setQuestion(props.mistake?.question ?? '')
+    setWrongAnswer(props.mistake?.wrongAnswer ?? '')
+    setCorrectAnswer(props.mistake?.correctAnswer ?? '')
+    setAnalysis(props.mistake?.analysis ?? '')
+    setKnowledgeItemId(props.mistake?.knowledgeItemId ?? '')
+    setMastery(props.mistake?.mastery?.toString() ?? '')
+    setReviewDate(props.mistake?.nextReviewDate ?? '')
+    setError('')
+  }, [props.open, props.mistake])
   const submit = async (): Promise<void> => {
     if (!props.course) return
-    const input: CreateMistakeInput = { projectId: props.course.projectId, knowledgeItemId: null, question, wrongAnswer, correctAnswer, analysis, mastery: null, nextReviewDate: reviewDate || null }
-    const result = await window.youtrace.practice.createMistake(input)
-    if (!result.ok) return
-    await props.onCreated()
-    setQuestion('')
-    setWrongAnswer('')
-    setCorrectAnswer('')
-    setAnalysis('')
+    const input: CreateMistakeInput = { projectId: props.course.projectId, knowledgeItemId: knowledgeItemId || null, question, wrongAnswer, correctAnswer, analysis, mastery: mastery ? Number(mastery) : null, nextReviewDate: reviewDate || null }
+    const result = props.mistake
+      ? await window.youtrace.practice.updateMistake({ id: props.mistake.id, ...input })
+      : await window.youtrace.practice.createMistake(input)
+    if (!result.ok) return setError(result.error.message)
+    await props.onSaved()
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title="记录错题" description="保留错误答案、正确答案和分析，方便之后验证修正。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title={props.mistake ? '编辑错题' : '记录错题'} description="保留错误答案、正确答案和分析，方便之后验证修正。">
       <div className="dialog-form">
         <label><span>题目</span><textarea autoFocus value={question} onChange={(event) => setQuestion(event.target.value)} /></label>
         <div className="form-row"><label><span>错误答案</span><textarea value={wrongAnswer} onChange={(event) => setWrongAnswer(event.target.value)} /></label><label><span>正确答案</span><textarea value={correctAnswer} onChange={(event) => setCorrectAnswer(event.target.value)} /></label></div>
         <label><span>错误分析</span><textarea value={analysis} onChange={(event) => setAnalysis(event.target.value)} /></label>
-        <label><span>下次复习</span><input type="date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} /></label>
+        <label><span>关联知识点</span><select value={knowledgeItemId} onChange={(event) => setKnowledgeItemId(event.target.value)}><option value="">不关联知识点</option>{props.knowledgeItems.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+        <div className="form-row"><label><span>掌握度（0–100）</span><input type="number" min="0" max="100" value={mastery} onChange={(event) => setMastery(event.target.value)} /></label><label><span>下次复习</span><input type="date" value={reviewDate} onChange={(event) => setReviewDate(event.target.value)} /></label></div>
+        {error && <div className="inline-error">{error}</div>}
       </div>
-      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!question.trim() || !props.course} onClick={() => void submit()}>记录错题</button></div>
+      <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!question.trim() || !props.course} onClick={() => void submit()}>{props.mistake ? '保存修改' : '记录错题'}</button></div>
     </DialogFrame>
   )
 }
@@ -776,33 +900,52 @@ function LearningTestDialog(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   course: Course | null
-  onCreated: () => Promise<void>
+  learningTest: LearningTest | null
+  milestones: Milestone[]
+  onSaved: () => Promise<void>
 }): React.JSX.Element {
   const [title, setTitle] = useState('')
   const [score, setScore] = useState('')
   const [maxScore, setMaxScore] = useState('100')
+  const [milestoneId, setMilestoneId] = useState('')
+  const [testedAt, setTestedAt] = useState(toDateTimeLocal(new Date().toISOString()))
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (!props.open) return
+    setTitle(props.learningTest?.title ?? '')
+    setScore(props.learningTest?.score?.toString() ?? '')
+    setMaxScore(props.learningTest?.maxScore?.toString() ?? '100')
+    setMilestoneId(props.learningTest?.milestoneId ?? '')
+    setTestedAt(toDateTimeLocal(props.learningTest?.testedAt ?? new Date().toISOString()))
+    setNote(props.learningTest?.note ?? '')
+    setError('')
+  }, [props.open, props.learningTest])
   const submit = async (): Promise<void> => {
     if (!props.course) return
     const input: CreateLearningTestInput = {
       projectId: props.course.projectId,
-      milestoneId: null,
+      milestoneId: milestoneId || null,
       title,
       score: score ? Number(score) : null,
       maxScore: maxScore ? Number(maxScore) : null,
-      testedAt: new Date().toISOString(),
+      testedAt: new Date(testedAt).toISOString(),
       note
     }
-    const result = await window.youtrace.practice.createLearningTest(input)
+    const result = props.learningTest
+      ? await window.youtrace.practice.updateLearningTest({ id: props.learningTest.id, ...input })
+      : await window.youtrace.practice.createLearningTest(input)
     if (!result.ok) return setError(result.error.message)
-    await props.onCreated()
-    setTitle('')
-    setScore('')
-    setNote('')
+    await props.onSaved()
     props.onOpenChange(false)
   }
-  return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title="记录学习测试" description="测试成绩是掌握证据，不会自动改写任务完成状态。"><div className="dialog-form"><label><span>测试名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><div className="form-row"><label><span>成绩</span><input type="number" min="0" value={score} onChange={(event) => setScore(event.target.value)} /></label><label><span>满分</span><input type="number" min="1" value={maxScore} onChange={(event) => setMaxScore(event.target.value)} /></label></div><label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !props.course} onClick={() => void submit()}>记录测试</button></div></DialogFrame>
+  return <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker={props.course?.courseName ?? '课程'} title={props.learningTest ? '编辑学习测试' : '记录学习测试'} description="测试成绩是掌握证据，不会自动改写任务完成状态。"><div className="dialog-form"><label><span>测试名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>所属章节 / 里程碑</span><select value={milestoneId} onChange={(event) => setMilestoneId(event.target.value)}><option value="">不关联章节</option>{props.milestones.map((milestone) => <option key={milestone.id} value={milestone.id}>{milestone.title}</option>)}</select></label><div className="form-row form-row-three"><label><span>成绩</span><input type="number" min="0" value={score} onChange={(event) => setScore(event.target.value)} /></label><label><span>满分</span><input type="number" min="1" value={maxScore} onChange={(event) => setMaxScore(event.target.value)} /></label><label><span>测试时间</span><input type="datetime-local" value={testedAt} onChange={(event) => setTestedAt(event.target.value)} /></label></div><label><span>说明</span><textarea value={note} onChange={(event) => setNote(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !props.course || !testedAt} onClick={() => void submit()}>{props.learningTest ? '保存修改' : '记录测试'}</button></div></DialogFrame>
+}
+
+function toDateTimeLocal(value: string): string {
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
 function reviewResultLabel(result: 'again' | 'hard' | 'good' | 'easy'): string {

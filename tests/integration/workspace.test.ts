@@ -56,7 +56,7 @@ describe('workspace lifecycle', () => {
       .get() as { name: string } | undefined
     database.close()
 
-    expect(migration.version).toBe(10)
+    expect(migration.version).toBe(11)
     expect(searchTable?.name).toBe('searchable_content')
 
     const bootstrapContents = await readFile(join(userDataRoot, 'bootstrap.json'), 'utf8')
@@ -79,8 +79,8 @@ describe('workspace lifecycle', () => {
     })
   })
 
-  it('upgrades a schema v9 review table for recoverable deletion', async () => {
-    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v10-test-'))
+  it('upgrades a schema v9 workspace for recoverable review and course deletion', async () => {
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v11-test-'))
     const databasePath = join(fixtureRoot, 'youtrace.sqlite3')
     const legacy = new Database(databasePath)
     legacy.exec(`
@@ -113,11 +113,13 @@ describe('workspace lifecycle', () => {
     const migrated = manager.open(databasePath)
     try {
       const columns = migrated.pragma('table_info(reviews)') as Array<{ name: string }>
+      const courseColumns = migrated.pragma('table_info(course_profiles)') as Array<{ name: string }>
       const version = migrated
         .prepare('SELECT MAX(version) AS version FROM schema_migrations')
         .get() as { version: number }
       expect(columns.map((column) => column.name)).toContain('deleted_at')
-      expect(version.version).toBe(10)
+      expect(courseColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['archived_at', 'deleted_at']))
+      expect(version.version).toBe(11)
     } finally {
       manager.close()
     }

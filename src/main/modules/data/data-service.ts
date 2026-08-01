@@ -518,7 +518,8 @@ export class DataService {
     if (
       candidate &&
       !candidate.parentAvailable &&
-      (candidate.entityType === 'goal' || candidate.entityType === 'milestone')
+      ['goal', 'milestone', 'habit', 'metric', 'course', 'knowledge', 'mistake', 'learning_test']
+        .includes(candidate.entityType)
     ) {
       throw new YouTraceError({
         code: 'TRASH_PARENT_RESTORE_REQUIRED',
