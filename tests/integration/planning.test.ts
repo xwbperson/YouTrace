@@ -218,6 +218,8 @@ describe('planning application service', () => {
         overrideReason: null
       })
     ).toThrow(/依赖环/)
+    planning.removeTaskDependency(taskB.id, taskC.id)
+    expect(planning.listTaskDependencies(taskB.id)).toHaveLength(0)
   })
 
   it('covers short, mixed, punctuated and rebuilt search with combined task filters', () => {

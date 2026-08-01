@@ -70,6 +70,7 @@ import type {
   KnowledgeItem,
   LearningTest,
   Metric,
+  MetricEntry,
   Mistake,
   RecordHabitInput,
   RecordMetricInput,
@@ -80,6 +81,7 @@ import type {
   UpdateKnowledgeInput,
   UpdateLearningTestInput,
   UpdateMetricInput,
+  UpdateMetricEntryInput,
   UpdateMistakeInput
 } from './practice'
 import type {
@@ -256,6 +258,7 @@ export interface YouTraceApi {
     updateTask(input: UpdateTaskInput): Promise<IpcResult<Task>>
     trashTask(id: string): Promise<IpcResult<void>>
     addTaskDependency(input: AddTaskDependencyInput): Promise<IpcResult<void>>
+    removeTaskDependency(taskId: string, prerequisiteTaskId: string): Promise<IpcResult<void>>
     listTaskDependencies(taskId: string): Promise<IpcResult<TaskDependency[]>>
     listChecklist(taskId: string): Promise<IpcResult<TaskChecklistItem[]>>
     createChecklistItem(input: CreateChecklistItemInput): Promise<IpcResult<TaskChecklistItem>>
@@ -312,11 +315,15 @@ export interface YouTraceApi {
     updateHabit(input: UpdateHabitInput): Promise<IpcResult<Habit>>
     trashHabit(id: string): Promise<IpcResult<void>>
     recordHabit(input: RecordHabitInput): Promise<IpcResult<Habit>>
+    clearHabitRecord(habitId: string, date: string): Promise<IpcResult<Habit>>
     listMetrics(projectId: string | null): Promise<IpcResult<Metric[]>>
     createMetric(input: CreateMetricInput): Promise<IpcResult<Metric>>
     updateMetric(input: UpdateMetricInput): Promise<IpcResult<Metric>>
     trashMetric(id: string): Promise<IpcResult<void>>
     recordMetric(input: RecordMetricInput): Promise<IpcResult<Metric>>
+    listMetricEntries(metricId: string): Promise<IpcResult<MetricEntry[]>>
+    updateMetricEntry(input: UpdateMetricEntryInput): Promise<IpcResult<MetricEntry>>
+    deleteMetricEntry(id: string): Promise<IpcResult<void>>
     listCourses(): Promise<IpcResult<Course[]>>
     createCourse(input: CreateCourseInput): Promise<IpcResult<Course>>
     updateCourse(input: UpdateCourseInput): Promise<IpcResult<Course>>

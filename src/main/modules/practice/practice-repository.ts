@@ -11,11 +11,13 @@ import type {
   KnowledgeItem,
   LearningTest,
   Metric,
+  MetricEntry,
   Mistake,
   RecordHabitInput,
   RecordMetricInput,
   RecordReviewResultInput,
-  ReviewQueueItem
+  ReviewQueueItem,
+  UpdateMetricEntryInput
 } from '../../../shared/contracts'
 
 interface HabitRow {
@@ -230,6 +232,16 @@ export class PracticeRepository {
     this.insertAudit(database, 'habit', input.habitId, 'instance_recorded', null, input, now)
   }
 
+  clearHabitRecord(habitId: string, date: string, now: string): boolean {
+    const result = this.database()
+      .prepare('DELETE FROM habit_instances WHERE habit_rule_id = ? AND scheduled_date = ?')
+      .run(habitId, date)
+    if (result.changes > 0) {
+      this.insertAudit(this.database(), 'habit', habitId, 'instance_cleared', null, { date }, now)
+    }
+    return result.changes > 0
+  }
+
   getCompletedHabitDates(habitId: string): string[] {
     return (
       this.database()
@@ -335,6 +347,57 @@ export class PracticeRepository {
       )
       .run(id, input.metricId, input.value, input.recordedAt, input.note, now)
     this.insertAudit(database, 'metric', input.metricId, 'value_recorded', null, input, now)
+  }
+
+  listMetricEntries(metricId: string): MetricEntry[] {
+    return (this.database()
+      .prepare(
+        `SELECT id, metric_id, value, recorded_at, note, created_at
+           FROM metric_entries WHERE metric_id = ? ORDER BY recorded_at DESC, created_at DESC`
+      )
+      .all(metricId) as Array<{
+        id: string
+        metric_id: string
+        value: number
+        recorded_at: string
+        note: string
+        created_at: string
+      }>).map((row) => ({
+        id: row.id,
+        metricId: row.metric_id,
+        value: row.value,
+        recordedAt: row.recorded_at,
+        note: row.note,
+        createdAt: row.created_at
+      }))
+  }
+
+  getMetricEntry(id: string): MetricEntry | null {
+    const row = this.database()
+      .prepare('SELECT metric_id FROM metric_entries WHERE id = ?')
+      .get(id) as { metric_id: string } | undefined
+    return row ? this.listMetricEntries(row.metric_id).find((entry) => entry.id === id) ?? null : null
+  }
+
+  updateMetricEntry(input: UpdateMetricEntryInput, now: string): boolean {
+    const before = this.getMetricEntry(input.id)
+    const result = this.database()
+      .prepare('UPDATE metric_entries SET value = ?, recorded_at = ?, note = ? WHERE id = ?')
+      .run(input.value, input.recordedAt, input.note, input.id)
+    if (result.changes > 0 && before) {
+      this.insertAudit(this.database(), 'metric', before.metricId, 'value_corrected', before, input, now)
+    }
+    return result.changes > 0
+  }
+
+  deleteMetricEntry(id: string, now: string): boolean {
+    const before = this.getMetricEntry(id)
+    if (!before) return false
+    const result = this.database().prepare('DELETE FROM metric_entries WHERE id = ?').run(id)
+    if (result.changes > 0) {
+      this.insertAudit(this.database(), 'metric', before.metricId, 'value_removed', before, null, now)
+    }
+    return result.changes > 0
   }
 
   listCourses(): CourseRow[] {

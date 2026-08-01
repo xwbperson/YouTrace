@@ -30,6 +30,7 @@ import type {
   LearningTest,
   Milestone,
   Metric,
+  MetricEntry,
   Mistake,
   Project
 } from '../../../shared/contracts'
@@ -44,6 +45,11 @@ function unwrap<T>(result: IpcResult<T>): T {
 function localDate(date = new Date()): string {
   const offset = date.getTimezoneOffset() * 60_000
   return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+}
+
+function localDateTime(date = new Date()): string {
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
 export function PracticePage(): React.JSX.Element {
@@ -228,8 +234,13 @@ export function PracticePage(): React.JSX.Element {
                   <button
                     type="button"
                     className="habit-check"
-                    aria-label={habit.todayStatus === 'completed' ? `重新记录 ${habit.name}` : `完成 ${habit.name}`}
-                    onClick={() => recordHabit.mutate({ habit, status: 'completed' })}
+                    aria-label={habit.todayStatus === 'completed' ? `清除今日记录 ${habit.name}` : `完成 ${habit.name}`}
+                    onClick={async () => {
+                      if (habit.todayStatus === 'completed') {
+                        await window.youtrace.practice.clearHabitRecord(habit.id, today)
+                        await queryClient.invalidateQueries({ queryKey: ['habits'] })
+                      } else recordHabit.mutate({ habit, status: 'completed' })
+                    }}
                   >
                     {habit.todayStatus === 'completed' ? <Check size={18} /> : <Circle size={18} />}
                   </button>
@@ -248,9 +259,14 @@ export function PracticePage(): React.JSX.Element {
                   <button
                     type="button"
                     className="quiet-action"
-                    onClick={() => recordHabit.mutate({ habit, status: 'skipped' })}
+                    onClick={async () => {
+                      if (habit.todayStatus === 'skipped') {
+                        await window.youtrace.practice.clearHabitRecord(habit.id, today)
+                        await queryClient.invalidateQueries({ queryKey: ['habits'] })
+                      } else recordHabit.mutate({ habit, status: 'skipped' })
+                    }}
                   >
-                    跳过
+                    {habit.todayStatus === 'skipped' ? '清除跳过' : '跳过'}
                   </button>
                   <div className="practice-card-actions"><button type="button" aria-label={`编辑习惯：${habit.name}`} onClick={() => { setEditingHabit(habit); setHabitDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除习惯：${habit.name}`} onClick={async () => { await window.youtrace.practice.trashHabit(habit.id); await queryClient.invalidateQueries({ queryKey: ['habits'] }) }}><Trash2 size={13} /></button></div>
                 </article>
@@ -694,47 +710,154 @@ function MetricRecordDialog(props: {
   onOpenChange: (open: boolean) => void
   onRecorded: () => Promise<unknown>
 }): React.JSX.Element {
+  const queryClient = useQueryClient()
   const [value, setValue] = useState('')
   const [note, setNote] = useState('')
+  const [recordedAt, setRecordedAt] = useState(localDateTime())
+  const [editingEntry, setEditingEntry] = useState<MetricEntry | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<MetricEntry | null>(null)
   const [error, setError] = useState('')
-  const submit = async (): Promise<void> => {
+
+  const entriesQuery = useQuery({
+    queryKey: ['metric-entries', props.metric?.id],
+    enabled: props.metric !== null,
+    queryFn: async () => unwrap(await window.youtrace.practice.listMetricEntries(props.metric!.id))
+  })
+
+  useEffect(() => {
     if (!props.metric) return
-    const result = await window.youtrace.practice.recordMetric({
-      metricId: props.metric.id,
-      value: Number(value),
-      recordedAt: new Date().toISOString(),
-      note
-    })
-    if (!result.ok) return setError(result.error.message)
-    await props.onRecorded()
     setValue('')
     setNote('')
-    props.onOpenChange(false)
+    setRecordedAt(localDateTime())
+    setEditingEntry(null)
+    setPendingDelete(null)
+    setError('')
+  }, [props.metric])
+
+  const resetForm = (): void => {
+    setValue('')
+    setNote('')
+    setRecordedAt(localDateTime())
+    setEditingEntry(null)
+    setError('')
   }
+
+  const submit = async (): Promise<void> => {
+    if (!props.metric) return
+    const result = editingEntry
+      ? await window.youtrace.practice.updateMetricEntry({
+          id: editingEntry.id,
+          value: Number(value),
+          recordedAt: new Date(recordedAt).toISOString(),
+          note
+        })
+      : await window.youtrace.practice.recordMetric({
+          metricId: props.metric.id,
+          value: Number(value),
+          recordedAt: new Date(recordedAt).toISOString(),
+          note
+        })
+    if (!result.ok) return setError(result.error.message)
+    await Promise.all([
+      props.onRecorded(),
+      queryClient.invalidateQueries({ queryKey: ['metric-entries', props.metric.id] })
+    ])
+    resetForm()
+  }
+
+  const startEditing = (entry: MetricEntry): void => {
+    setEditingEntry(entry)
+    setValue(entry.value.toString())
+    setNote(entry.note)
+    setRecordedAt(localDateTime(new Date(entry.recordedAt)))
+    setError('')
+  }
+
+  const deleteEntry = async (): Promise<void> => {
+    if (!pendingDelete || !props.metric) return
+    const result = await window.youtrace.practice.deleteMetricEntry(pendingDelete.id)
+    if (!result.ok) return setError(result.error.message)
+    if (editingEntry?.id === pendingDelete.id) resetForm()
+    setPendingDelete(null)
+    await Promise.all([
+      props.onRecorded(),
+      queryClient.invalidateQueries({ queryKey: ['metric-entries', props.metric.id] })
+    ])
+  }
+
   return (
-    <DialogFrame
-      open={props.metric !== null}
-      onOpenChange={props.onOpenChange}
-      kicker={props.metric?.name ?? '指标'}
-      title="记录指标"
-      description="这次输入会作为原始事实保留，不会自动修改项目进度。"
-    >
-      <div className="dialog-form">
-        <label>
-          <span>本次数值{props.metric ? `（${props.metric.unit}）` : ''}</span>
-          <input autoFocus type="number" value={value} onChange={(event) => setValue(event.target.value)} />
-        </label>
-        <label>
-          <span>备注</span>
-          <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="可选：记录口径或当时情况" />
-        </label>
-        {error && <div className="inline-error">{error}</div>}
-      </div>
-      <div className="dialog-actions">
-        <Dialog.Close className="button button-secondary">取消</Dialog.Close>
-        <button className="button button-primary" disabled={!value} onClick={() => void submit()}>保存记录</button>
-      </div>
-    </DialogFrame>
+    <>
+      <DialogFrame
+        open={props.metric !== null}
+        onOpenChange={props.onOpenChange}
+        kicker={props.metric?.name ?? '指标'}
+        title={editingEntry ? '编辑指标记录' : '记录指标'}
+        description="记录可以在这里更正或删除，修改会同步重算指标汇总。"
+      >
+        <div className="dialog-form">
+          <div className="form-row">
+            <label>
+              <span>本次数值{props.metric ? `（${props.metric.unit}）` : ''}</span>
+              <input autoFocus type="number" value={value} onChange={(event) => setValue(event.target.value)} />
+            </label>
+            <label>
+              <span>记录时间</span>
+              <input type="datetime-local" value={recordedAt} onChange={(event) => setRecordedAt(event.target.value)} />
+            </label>
+          </div>
+          <label>
+            <span>备注</span>
+            <textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="可选：记录口径或当时情况" />
+          </label>
+          {error && <div className="inline-error">{error}</div>}
+          <section className="metric-entry-history">
+            <header>
+              <strong>历史记录</strong>
+              <span>{entriesQuery.data?.length ?? 0} 条</span>
+            </header>
+            {entriesQuery.isLoading && <p>正在读取记录…</p>}
+            {entriesQuery.error && <p className="inline-error">{entriesQuery.error.message}</p>}
+            {(entriesQuery.data ?? []).map((entry) => (
+              <article className={editingEntry?.id === entry.id ? 'editing' : ''} key={entry.id}>
+                <div>
+                  <strong>{entry.value} {props.metric?.unit}</strong>
+                  <span>{new Date(entry.recordedAt).toLocaleString('zh-CN')}{entry.note ? ` · ${entry.note}` : ''}</span>
+                </div>
+                <div className="practice-card-actions">
+                  <button type="button" aria-label={`编辑指标记录：${entry.value}`} onClick={() => startEditing(entry)}><Pencil size={13} /></button>
+                  <button type="button" aria-label={`删除指标记录：${entry.value}`} onClick={() => setPendingDelete(entry)}><Trash2 size={13} /></button>
+                </div>
+              </article>
+            ))}
+            {!entriesQuery.isLoading && (entriesQuery.data ?? []).length === 0 && <p>还没有指标记录。</p>}
+          </section>
+        </div>
+        <div className="dialog-actions">
+          {editingEntry && <button className="button button-secondary" type="button" onClick={resetForm}>取消编辑</button>}
+          <Dialog.Close className="button button-secondary">关闭</Dialog.Close>
+          <button className="button button-primary" disabled={!value || !recordedAt} onClick={() => void submit()}>{editingEntry ? '保存修改' : '保存记录'}</button>
+        </div>
+      </DialogFrame>
+      <Dialog.Root open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content className="dialog-content destructive-dialog">
+            <div className="dialog-heading">
+              <div>
+                <span className="section-label">不可恢复操作</span>
+                <Dialog.Title>删除这条指标记录？</Dialog.Title>
+                <Dialog.Description>删除后，指标汇总会重新计算；这条记录不能恢复。</Dialog.Description>
+              </div>
+              <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
+            </div>
+            <div className="dialog-actions">
+              <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+              <button className="button button-danger" type="button" onClick={() => void deleteEntry()}><Trash2 size={14} />确认删除</button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   )
 }
 

@@ -41,6 +41,10 @@ export const recordMetricInputSchema = z.object({
   note: z.string().max(2_000).default('')
 })
 
+export const updateMetricEntryInputSchema = recordMetricInputSchema.omit({ metricId: true }).extend({
+  id: z.string().uuid()
+})
+
 export const createCourseInputSchema = z.object({
   projectId: z.string().uuid(),
   courseName: z.string().trim().min(1).max(200),
@@ -141,6 +145,15 @@ export interface Metric {
   updatedAt: string
 }
 
+export interface MetricEntry {
+  id: string
+  metricId: string
+  value: number
+  recordedAt: string
+  note: string
+  createdAt: string
+}
+
 export interface Course {
   id: string
   projectId: string
@@ -220,6 +233,7 @@ export type RecordHabitInput = z.infer<typeof recordHabitInputSchema>
 export type CreateMetricInput = z.infer<typeof createMetricInputSchema>
 export type UpdateMetricInput = z.infer<typeof updateMetricInputSchema>
 export type RecordMetricInput = z.infer<typeof recordMetricInputSchema>
+export type UpdateMetricEntryInput = z.infer<typeof updateMetricEntryInputSchema>
 export type CreateCourseInput = z.infer<typeof createCourseInputSchema>
 export type UpdateCourseInput = z.infer<typeof updateCourseInputSchema>
 export type CreateKnowledgeInput = z.infer<typeof createKnowledgeInputSchema>

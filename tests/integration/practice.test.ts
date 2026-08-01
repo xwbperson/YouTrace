@@ -65,6 +65,11 @@ describe('habit, metric and course practice service', () => {
       currentStreak: 3,
       totalCompleted: 3
     })
+    expect(practice.clearHabitRecord(habit.id, '2026-07-30')).toMatchObject({
+      todayStatus: null,
+      currentStreak: 0,
+      totalCompleted: 2
+    })
 
     const metric = practice.createMetric({
       projectId: null,
@@ -87,6 +92,18 @@ describe('habit, metric and course practice service', () => {
       note: '节奏跑'
     })
     expect(current).toMatchObject({ currentValue: 12, entryCount: 2 })
+    const entries = practice.listMetricEntries(metric.id)
+    expect(entries).toHaveLength(2)
+    const corrected = practice.updateMetricEntry({
+      id: entries[0]!.id,
+      value: 6,
+      recordedAt: entries[0]!.recordedAt,
+      note: '晨跑，修正里程'
+    })
+    expect(corrected).toMatchObject({ value: 6, note: '晨跑，修正里程' })
+    expect(practice.listMetrics(null)[0]).toMatchObject({ currentValue: 11, entryCount: 2 })
+    practice.deleteMetricEntry(entries[1]!.id)
+    expect(practice.listMetrics(null)[0]).toMatchObject({ currentValue: 6, entryCount: 1 })
   })
 
   it('connects course materials, knowledge, mistakes, review queue and search', () => {

@@ -11,6 +11,7 @@ import type {
   KnowledgeItem,
   LearningTest,
   Metric,
+  MetricEntry,
   Mistake,
   RecordHabitInput,
   RecordMetricInput,
@@ -21,6 +22,7 @@ import type {
   UpdateKnowledgeInput,
   UpdateLearningTestInput,
   UpdateMetricInput,
+  UpdateMetricEntryInput,
   UpdateMistakeInput
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
@@ -75,6 +77,14 @@ export class PracticeService {
     return this.requireHabit(input.habitId, input.date)
   }
 
+  clearHabitRecord(habitId: string, date: string): Habit {
+    if (!this.repository.getHabit(habitId, date)) throw notFound('习惯')
+    if (!this.repository.clearHabitRecord(habitId, date, new Date().toISOString())) {
+      throw notFound('习惯记录')
+    }
+    return this.requireHabit(habitId, date)
+  }
+
   listMetrics(projectId: string | null): Metric[] {
     return this.repository.listMetrics(projectId).map(mapMetric)
   }
@@ -110,6 +120,21 @@ export class PracticeService {
     if (!this.repository.getMetric(input.metricId)) throw notFound('指标')
     this.repository.recordMetric(randomUUID(), input, new Date().toISOString())
     return this.requireMetric(input.metricId)
+  }
+
+  listMetricEntries(metricId: string): MetricEntry[] {
+    if (!this.repository.getMetric(metricId)) throw notFound('指标')
+    return this.repository.listMetricEntries(metricId)
+  }
+
+  updateMetricEntry(input: UpdateMetricEntryInput): MetricEntry {
+    if (!this.repository.getMetricEntry(input.id)) throw notFound('指标记录')
+    if (!this.repository.updateMetricEntry(input, new Date().toISOString())) throw notFound('指标记录')
+    return this.repository.getMetricEntry(input.id)!
+  }
+
+  deleteMetricEntry(id: string): void {
+    if (!this.repository.deleteMetricEntry(id, new Date().toISOString())) throw notFound('指标记录')
   }
 
   listCourses(): Course[] {

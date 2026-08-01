@@ -7347,6 +7347,56 @@ kbd {
   font-weight: 650;
 }
 
+.metric-entry-history {
+  display: grid;
+  max-height: 230px;
+  gap: 7px;
+  padding-top: 3px;
+  overflow-y: auto;
+}
+
+.metric-entry-history > header,
+.metric-entry-history > article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-entry-history > header {
+  color: var(--muted);
+}
+
+.metric-entry-history > header span,
+.metric-entry-history > p,
+.metric-entry-history > article span {
+  color: var(--faint);
+  font-size: var(--text-xs);
+}
+
+.metric-entry-history > article {
+  padding: 9px 10px;
+  background: var(--canvas);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+
+.metric-entry-history > article.editing {
+  border-color: var(--trace);
+}
+
+.metric-entry-history > article > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.metric-entry-history > article span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .learning-layout {
   display: grid;
   min-height: 390px;

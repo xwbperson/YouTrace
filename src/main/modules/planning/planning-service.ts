@@ -270,6 +270,12 @@ export class PlanningService {
     )
   }
 
+  removeTaskDependency(taskId: string, prerequisiteTaskId: string): void {
+    if (!this.repository.removeTaskDependency(taskId, prerequisiteTaskId, new Date().toISOString())) {
+      throw notFound('任务依赖')
+    }
+  }
+
   listTaskDependencies(taskId: string): TaskDependency[] {
     if (!this.repository.getTask(taskId)) throw notFound('任务')
     return this.repository.listTaskDependencies(taskId)

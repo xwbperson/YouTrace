@@ -928,6 +928,24 @@ export class PlanningRepository {
       .run(taskId, prerequisiteTaskId, overrideReason, now)
   }
 
+  removeTaskDependency(taskId: string, prerequisiteTaskId: string, now: string): boolean {
+    const result = this.database()
+      .prepare('DELETE FROM task_dependencies WHERE task_id = ? AND prerequisite_task_id = ?')
+      .run(taskId, prerequisiteTaskId)
+    if (result.changes > 0) {
+      this.insertAudit(
+        this.database(),
+        'task',
+        taskId,
+        'dependency_removed',
+        { prerequisiteTaskId },
+        null,
+        now
+      )
+    }
+    return result.changes > 0
+  }
+
   listTaskDependencies(taskId: string): TaskDependency[] {
     const rows = this.database()
       .prepare(

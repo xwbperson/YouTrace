@@ -65,6 +65,7 @@ import {
   updateKnowledgeInputSchema,
   updateLearningTestInputSchema,
   updateMetricInputSchema,
+  updateMetricEntryInputSchema,
   updateMemoInputSchema,
   updateMilestoneInputSchema,
   updateMistakeInputSchema,
@@ -425,6 +426,16 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       planningService.addTaskDependency(addTaskDependencyInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:remove-task-dependency', (event, rawTaskId, rawPrerequisiteTaskId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.removeTaskDependency(
+        z.string().uuid().parse(rawTaskId),
+        z.string().uuid().parse(rawPrerequisiteTaskId)
+      )
     })
   )
 
@@ -797,6 +808,16 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('practice:clear-habit-record', (event, rawHabitId, rawDate) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.clearHabitRecord(
+        z.string().uuid().parse(rawHabitId),
+        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(rawDate)
+      )
+    })
+  )
+
   ipcMain.handle('practice:list-metrics', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)
@@ -823,6 +844,27 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return practiceService.recordMetric(recordMetricInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:list-metric-entries', (event, rawMetricId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listMetricEntries(z.string().uuid().parse(rawMetricId))
+    })
+  )
+
+  ipcMain.handle('practice:update-metric-entry', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.updateMetricEntry(updateMetricEntryInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:delete-metric-entry', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      practiceService.deleteMetricEntry(z.string().uuid().parse(rawId))
     })
   )
 
