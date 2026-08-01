@@ -56,6 +56,7 @@ import {
   timeRangeInputSchema,
   updateEvidenceStatusInputSchema,
   updateEvidenceInputSchema,
+  updateCountdownInputSchema,
   updateAreaInputSchema,
   updateChecklistItemInputSchema,
   updateCourseInputSchema,
@@ -69,6 +70,8 @@ import {
   updateProjectInputSchema,
   updateTaskInputSchema,
   updateReviewInputSchema,
+  updatePlanInputSchema,
+  updateTimeBlockInputSchema,
   userPreferencesSchema,
   type AppBootstrapState,
   type IpcResult,
@@ -898,6 +901,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('temporal:update-plan', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.updatePlan(updatePlanInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:trash-plan', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      temporalService.trashPlan(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('temporal:list-time-blocks', (event, rawInput) =>
     wrap(() => {
       trusted(event)
@@ -909,6 +926,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return temporalService.createTimeBlock(createTimeBlockInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:update-time-block', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.updateTimeBlock(updateTimeBlockInputSchema.parse(rawInput))
     })
   )
 
@@ -937,6 +961,20 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return temporalService.createCountdown(createCountdownInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:update-countdown', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return temporalService.updateCountdown(updateCountdownInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('temporal:trash-countdown', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      temporalService.trashCountdown(z.string().uuid().parse(rawId))
     })
   )
 

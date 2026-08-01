@@ -139,6 +139,9 @@ export interface TrashItem {
     | 'knowledge'
     | 'mistake'
     | 'learning_test'
+    | 'plan'
+    | 'time_block'
+    | 'countdown'
     | 'review'
     | 'evidence'
   entityId: string

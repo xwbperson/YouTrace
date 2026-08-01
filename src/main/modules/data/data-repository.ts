@@ -209,6 +209,9 @@ export class DataRepository {
                   WHEN 'knowledge' THEN COALESCE(k.title, '已删除知识点')
                   WHEN 'mistake' THEN COALESCE(SUBSTR(mk.question, 1, 160), '已删除错题')
                   WHEN 'learning_test' THEN COALESCE(lt.title, '已删除测试')
+                  WHEN 'plan' THEN COALESCE(pp.title, '已删除周期计划')
+                  WHEN 'time_block' THEN COALESCE(tb.title, '已删除时间块')
+                  WHEN 'countdown' THEN COALESCE(cd.title, '已删除倒计时')
                   WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
                   WHEN 'evidence' THEN COALESCE(e.title, '已删除成果')
                 END AS title,
@@ -217,6 +220,7 @@ export class DataRepository {
                   WHEN tr.entity_type = 'project' THEN 1
                   WHEN tr.entity_type = 'review' THEN 1
                   WHEN tr.entity_type = 'evidence' THEN 1
+                  WHEN tr.entity_type IN ('plan', 'time_block', 'countdown') THEN 1
                   WHEN tr.entity_type = 'goal' AND g.id IS NULL THEN 0
                   WHEN tr.entity_type = 'goal' AND g.project_id IS NULL THEN 1
                   WHEN tr.entity_type = 'goal' AND EXISTS(
@@ -277,6 +281,9 @@ export class DataRepository {
            LEFT JOIN knowledge_items k ON tr.entity_type = 'knowledge' AND k.id = tr.entity_id
            LEFT JOIN mistakes mk ON tr.entity_type = 'mistake' AND mk.id = tr.entity_id
            LEFT JOIN learning_tests lt ON tr.entity_type = 'learning_test' AND lt.id = tr.entity_id
+           LEFT JOIN plan_periods pp ON tr.entity_type = 'plan' AND pp.id = tr.entity_id
+           LEFT JOIN time_blocks tb ON tr.entity_type = 'time_block' AND tb.id = tr.entity_id
+           LEFT JOIN countdowns cd ON tr.entity_type = 'countdown' AND cd.id = tr.entity_id
            LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
            LEFT JOIN evidence e ON tr.entity_type = 'evidence' AND e.id = tr.entity_id
           WHERE tr.purged_at IS NULL
@@ -352,6 +359,12 @@ export class DataRepository {
         this.upsertSearch(database, 'mistake', item.entityId, mistake.question.slice(0, 160), mistake.analysis)
       } else if (item.entityType === 'learning_test') {
         database.prepare('UPDATE learning_tests SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'plan') {
+        database.prepare('UPDATE plan_periods SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'time_block') {
+        database.prepare('UPDATE time_blocks SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
+      } else if (item.entityType === 'countdown') {
+        database.prepare('UPDATE countdowns SET deleted_at = NULL, updated_at = ? WHERE id = ?').run(now, item.entityId)
       } else if (item.entityType === 'evidence') {
         database
           .prepare('UPDATE evidence SET deleted_at = NULL, updated_at = ? WHERE id = ?')
@@ -458,6 +471,23 @@ export class DataRepository {
         orphanPaths.push(...this.detachAttachments(database, 'learning_test', [item.entityId]))
         this.deleteRelations(database, 'learning_test', [item.entityId])
         database.prepare('DELETE FROM learning_tests WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'plan') {
+        orphanPaths.push(...this.detachAttachments(database, 'plan', [item.entityId]))
+        this.deleteRelations(database, 'plan', [item.entityId])
+        database.prepare('DELETE FROM plan_items WHERE plan_id = ?').run(item.entityId)
+        database.prepare('DELETE FROM plan_periods WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'time_block') {
+        this.deleteReminders(database, 'time_block', [item.entityId])
+        orphanPaths.push(...this.detachAttachments(database, 'time_block', [item.entityId]))
+        this.deleteRelations(database, 'time_block', [item.entityId])
+        database.prepare('DELETE FROM time_blocks WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'countdown') {
+        this.deleteReminders(database, 'countdown', [item.entityId])
+        orphanPaths.push(...this.detachAttachments(database, 'countdown', [item.entityId]))
+        this.deleteRelations(database, 'countdown', [item.entityId])
+        database.prepare("DELETE FROM tag_assignments WHERE entity_type = 'countdown' AND entity_id = ?").run(item.entityId)
+        database.prepare('DELETE FROM countdown_workload WHERE countdown_id = ?').run(item.entityId)
+        database.prepare('DELETE FROM countdowns WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'evidence') {
         const attachments = database
           .prepare(

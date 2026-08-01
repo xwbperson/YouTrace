@@ -17,6 +17,8 @@ export const createPlanInputSchema = z.object({
   })).max(100).default([])
 })
 
+export const updatePlanInputSchema = createPlanInputSchema.partial().extend({ id: z.string().uuid() })
+
 export const createTimeBlockInputSchema = z.object({
   taskId: z.string().uuid().nullable().default(null),
   title: z.string().trim().min(1).max(240),
@@ -25,6 +27,8 @@ export const createTimeBlockInputSchema = z.object({
   endsAt: instantSchema,
   timezone: z.string().trim().min(1).max(100)
 })
+
+export const updateTimeBlockInputSchema = createTimeBlockInputSchema.partial().extend({ id: z.string().uuid() })
 
 export const moveTimeBlockInputSchema = z.object({
   id: z.string().uuid(),
@@ -49,6 +53,8 @@ export const createCountdownInputSchema = z.object({
   remainingMinutes: z.number().int().min(0).max(10_000_000).nullable().default(null),
   tagIds: z.array(z.string().uuid()).max(50).default([])
 })
+
+export const updateCountdownInputSchema = createCountdownInputSchema.partial().extend({ id: z.string().uuid() })
 
 export interface PlanItem {
   id: string
@@ -113,7 +119,10 @@ export interface Countdown {
 }
 
 export type CreatePlanInput = z.infer<typeof createPlanInputSchema>
+export type UpdatePlanInput = z.infer<typeof updatePlanInputSchema>
 export type CreateTimeBlockInput = z.infer<typeof createTimeBlockInputSchema>
+export type UpdateTimeBlockInput = z.infer<typeof updateTimeBlockInputSchema>
 export type MoveTimeBlockInput = z.infer<typeof moveTimeBlockInputSchema>
 export type TimeRangeInput = z.infer<typeof timeRangeInputSchema>
 export type CreateCountdownInput = z.infer<typeof createCountdownInputSchema>
+export type UpdateCountdownInput = z.infer<typeof updateCountdownInputSchema>

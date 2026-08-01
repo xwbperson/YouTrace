@@ -2,6 +2,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DataRepository } from '../../src/main/modules/data/data-repository'
 import { ExecutionRepository } from '../../src/main/modules/execution/execution-repository'
 import { ExecutionService } from '../../src/main/modules/execution/execution-service'
 import { PlanningRepository } from '../../src/main/modules/planning/planning-repository'
@@ -17,6 +18,7 @@ let planning: PlanningService
 let temporal: TemporalService
 let execution: ExecutionService
 let settings: SettingsService
+let dataRepository: DataRepository
 
 beforeEach(async () => {
   const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-temporal-test-'))
@@ -28,6 +30,7 @@ beforeEach(async () => {
     new TemporalRepository(() => workspaceManager.getDatabase()),
     planningRepository
   )
+  dataRepository = new DataRepository(() => workspaceManager.getDatabase())
   execution = new ExecutionService(
     new ExecutionRepository(() => workspaceManager.getDatabase()),
     planningRepository,
@@ -308,5 +311,69 @@ describe('plans, calendar and countdowns', () => {
       startedAt: effort.startedAt,
       endedAt: effort.endedAt
     })
+  })
+
+  it('edits plans, time blocks and countdowns through the trash lifecycle', () => {
+    const plan = temporal.createPlan({
+      periodType: 'week',
+      startDate: '2026-07-27',
+      endDate: '2026-08-02',
+      title: '原计划',
+      focusResult: '',
+      capacityMinutes: 300,
+      items: []
+    })
+    const block = temporal.createTimeBlock({
+      taskId: null,
+      title: '原时间块',
+      note: '',
+      startsAt: '2026-07-30T01:00:00.000Z',
+      endsAt: '2026-07-30T02:00:00.000Z',
+      timezone: 'Asia/Shanghai'
+    })
+    const countdown = temporal.createCountdown({
+      title: '原倒计时',
+      targetAt: '2026-08-06T12:00:00.000Z',
+      timezone: 'Asia/Shanghai',
+      workingDays: [1, 2, 3, 4, 5],
+      bufferDays: 1,
+      importance: 'normal',
+      entityType: null,
+      entityId: null,
+      remainingMinutes: 120,
+      tagIds: []
+    })
+
+    expect(temporal.updatePlan({ id: plan.id, title: '修改后的计划', capacityMinutes: 480 })).toMatchObject({
+      title: '修改后的计划',
+      capacityMinutes: 480
+    })
+    expect(temporal.updateTimeBlock({ id: block.id, title: '修改后的时间块', note: '保留上下文' })).toMatchObject({
+      title: '修改后的时间块',
+      note: '保留上下文'
+    })
+    expect(temporal.updateCountdown({ id: countdown.id, title: '修改后的倒计时', bufferDays: 2 })).toMatchObject({
+      title: '修改后的倒计时',
+      bufferDays: 2
+    })
+
+    temporal.trashPlan(plan.id)
+    temporal.trashTimeBlock(block.id)
+    temporal.trashCountdown(countdown.id)
+    const trash = dataRepository.listTrash()
+    expect(trash.map((item) => item.entityType).sort()).toEqual(['countdown', 'plan', 'time_block'])
+
+    for (const item of trash) expect(dataRepository.restoreTrash(item.id, new Date().toISOString())).not.toBeNull()
+    expect(temporal.listPlans('2026-07-27', '2026-08-02')).toHaveLength(1)
+    expect(temporal.listTimeBlocks({ start: '2026-07-30T00:00:00.000Z', end: '2026-07-31T00:00:00.000Z' })).toHaveLength(1)
+    expect(temporal.listCountdowns('2026-07-30T12:00:00.000Z')).toHaveLength(1)
+
+    temporal.trashPlan(plan.id)
+    temporal.trashTimeBlock(block.id)
+    temporal.trashCountdown(countdown.id)
+    for (const item of dataRepository.listTrash()) expect(dataRepository.purgeTrash(item.id, new Date().toISOString())).not.toBeNull()
+    expect(temporal.listPlans('2026-07-27', '2026-08-02')).toHaveLength(0)
+    expect(temporal.listTimeBlocks({ start: '2026-07-30T00:00:00.000Z', end: '2026-07-31T00:00:00.000Z' })).toHaveLength(0)
+    expect(temporal.listCountdowns('2026-07-30T12:00:00.000Z')).toHaveLength(0)
   })
 })

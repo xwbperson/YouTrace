@@ -150,12 +150,17 @@ const api: YouTraceApi = {
     listPlans: (startDate, endDate) =>
       ipcRenderer.invoke('temporal:list-plans', startDate, endDate),
     createPlan: (input) => ipcRenderer.invoke('temporal:create-plan', input),
+    updatePlan: (input) => ipcRenderer.invoke('temporal:update-plan', input),
+    trashPlan: (id) => ipcRenderer.invoke('temporal:trash-plan', id),
     listTimeBlocks: (input) => ipcRenderer.invoke('temporal:list-time-blocks', input),
     createTimeBlock: (input) => ipcRenderer.invoke('temporal:create-time-block', input),
+    updateTimeBlock: (input) => ipcRenderer.invoke('temporal:update-time-block', input),
     moveTimeBlock: (input) => ipcRenderer.invoke('temporal:move-time-block', input),
     trashTimeBlock: (id) => ipcRenderer.invoke('temporal:trash-time-block', id),
     listCountdowns: (now) => ipcRenderer.invoke('temporal:list-countdowns', now),
-    createCountdown: (input) => ipcRenderer.invoke('temporal:create-countdown', input)
+    createCountdown: (input) => ipcRenderer.invoke('temporal:create-countdown', input),
+    updateCountdown: (input) => ipcRenderer.invoke('temporal:update-countdown', input),
+    trashCountdown: (id) => ipcRenderer.invoke('temporal:trash-countdown', id)
   },
   workflow: {
     listReviews: () => ipcRenderer.invoke('workflow:list-reviews'),

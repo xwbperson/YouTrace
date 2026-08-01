@@ -133,6 +133,46 @@ export class TemporalRepository {
     transaction()
   }
 
+  updatePlan(id: string, input: CreatePlanInput, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const before = this.getPlan(id)
+      if (!before) return false
+      database
+        .prepare(
+          `UPDATE plan_periods
+              SET period_type = ?, start_date = ?, end_date = ?, title = ?, focus_result = ?,
+                  capacity_minutes = ?, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`
+        )
+        .run(
+          input.periodType,
+          input.startDate,
+          input.endDate,
+          input.title,
+          input.focusResult,
+          input.capacityMinutes,
+          now,
+          id
+        )
+      database.prepare('DELETE FROM plan_items WHERE plan_id = ?').run(id)
+      const insertItem = database.prepare(
+        `INSERT INTO plan_items(
+           id, plan_id, entity_type, entity_id, title_snapshot, committed, sort_order, created_at
+         ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`
+      )
+      input.items.forEach((item, index) => {
+        insertItem.run(crypto.randomUUID(), id, item.entityType, item.entityId, item.titleSnapshot, index, now)
+      })
+      this.insertAudit(database, 'plan', id, 'updated', { before, after: input }, now)
+      return true
+    })()
+  }
+
+  trashPlan(id: string, now: string): boolean {
+    return this.trashEntity('plan_periods', 'plan', id, now)
+  }
+
   listTimeBlocks(start: string, end: string): TimeBlockRow[] {
     return this.database()
       .prepare(
@@ -171,6 +211,20 @@ export class TemporalRepository {
     this.insertAudit(database, 'time_block', id, 'created', input, now)
   }
 
+  updateTimeBlock(id: string, input: CreateTimeBlockInput, now: string): boolean {
+    const database = this.database()
+    const before = this.getTimeBlock(id)
+    const result = database
+      .prepare(
+        `UPDATE time_blocks
+            SET task_id = ?, title = ?, note = ?, starts_at = ?, ends_at = ?, timezone = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .run(input.taskId, input.title, input.note, input.startsAt, input.endsAt, input.timezone, now, id)
+    if (result.changes > 0) this.insertAudit(database, 'time_block', id, 'updated', { before, after: input }, now)
+    return result.changes > 0
+  }
+
   moveTimeBlock(id: string, startsAt: string, endsAt: string, now: string): boolean {
     const before = this.getTimeBlock(id)
     const result = this.database()
@@ -186,11 +240,7 @@ export class TemporalRepository {
   }
 
   trashTimeBlock(id: string, now: string): boolean {
-    const result = this.database()
-      .prepare('UPDATE time_blocks SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
-      .run(now, now, id)
-    if (result.changes > 0) this.insertAudit(this.database(), 'time_block', id, 'trashed', null, now)
-    return result.changes > 0
+    return this.trashEntity('time_blocks', 'time_block', id, now)
   }
 
   listCountdowns(): CountdownRow[] {
@@ -256,6 +306,50 @@ export class TemporalRepository {
     transaction()
   }
 
+  updateCountdown(id: string, input: CreateCountdownInput, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const before = this.getCountdown(id)
+      if (!before) return false
+      database
+        .prepare(
+          `UPDATE countdowns
+              SET title = ?, target_at = ?, timezone = ?, workday_rule_json = ?, buffer_days = ?,
+                  importance = ?, entity_type = ?, entity_id = ?, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL`
+        )
+        .run(
+          input.title,
+          input.targetAt,
+          input.timezone,
+          JSON.stringify({ workingDays: input.workingDays }),
+          input.bufferDays,
+          input.importance,
+          input.entityType,
+          input.entityId,
+          now,
+          id
+        )
+      database
+        .prepare('UPDATE countdown_workload SET remaining_minutes = ?, updated_at = ? WHERE countdown_id = ?')
+        .run(input.remainingMinutes, now, id)
+      database
+        .prepare("DELETE FROM tag_assignments WHERE entity_type = 'countdown' AND entity_id = ?")
+        .run(id)
+      const insertTag = database.prepare(
+        `INSERT INTO tag_assignments(tag_id, entity_type, entity_id, created_at)
+         VALUES (?, 'countdown', ?, ?)`
+      )
+      for (const tagId of [...new Set(input.tagIds)]) insertTag.run(tagId, id, now)
+      this.insertAudit(database, 'countdown', id, 'updated', { before, after: input }, now)
+      return true
+    })()
+  }
+
+  trashCountdown(id: string, now: string): boolean {
+    return this.trashEntity('countdowns', 'countdown', id, now)
+  }
+
   getRecentDailyMinutes(entityType: string | null, entityId: string | null, since: string): number | null {
     if (!entityType || !entityId) return null
     const result = this.database()
@@ -286,6 +380,21 @@ export class TemporalRepository {
          ) VALUES (?, ?, ?, ?, ?, ?)`
       )
       .run(crypto.randomUUID(), entityType, entityId, action, after === null ? null : JSON.stringify(after), now)
+  }
+
+  private trashEntity(table: 'plan_periods' | 'time_blocks' | 'countdowns', entityType: string, id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database
+        .prepare(`UPDATE ${table} SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`)
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare('INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at) VALUES (?, ?, ?, ?)')
+        .run(crypto.randomUUID(), entityType, id, now)
+      this.insertAudit(database, entityType, id, 'trashed', null, now)
+      return true
+    })()
   }
 }
 

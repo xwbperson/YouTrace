@@ -87,7 +87,10 @@ import type {
   MoveTimeBlockInput,
   PlanPeriod,
   TimeBlock,
-  TimeRangeInput
+  TimeRangeInput,
+  UpdateCountdownInput,
+  UpdatePlanInput,
+  UpdateTimeBlockInput
 } from './temporal'
 import type {
   AppliedTemplate,
@@ -327,12 +330,17 @@ export interface YouTraceApi {
   temporal: {
     listPlans(startDate: string, endDate: string): Promise<IpcResult<PlanPeriod[]>>
     createPlan(input: CreatePlanInput): Promise<IpcResult<PlanPeriod>>
+    updatePlan(input: UpdatePlanInput): Promise<IpcResult<PlanPeriod>>
+    trashPlan(id: string): Promise<IpcResult<void>>
     listTimeBlocks(input: TimeRangeInput): Promise<IpcResult<TimeBlock[]>>
     createTimeBlock(input: CreateTimeBlockInput): Promise<IpcResult<TimeBlock>>
+    updateTimeBlock(input: UpdateTimeBlockInput): Promise<IpcResult<TimeBlock>>
     moveTimeBlock(input: MoveTimeBlockInput): Promise<IpcResult<TimeBlock>>
     trashTimeBlock(id: string): Promise<IpcResult<void>>
     listCountdowns(now: string): Promise<IpcResult<Countdown[]>>
     createCountdown(input: CreateCountdownInput): Promise<IpcResult<Countdown>>
+    updateCountdown(input: UpdateCountdownInput): Promise<IpcResult<Countdown>>
+    trashCountdown(id: string): Promise<IpcResult<void>>
   }
   workflow: {
     listReviews(): Promise<IpcResult<Review[]>>

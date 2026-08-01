@@ -3394,6 +3394,41 @@ kbd {
   right: 6px;
 }
 
+.calendar-item-actions {
+  display: flex;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.calendar-item-actions button,
+.temporal-card-heading-actions button {
+  display: inline-flex;
+  min-width: 26px;
+  min-height: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 6px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.calendar-item-actions button:hover,
+.temporal-card-heading-actions button:hover {
+  color: var(--trace);
+  border-color: color-mix(in srgb, var(--trace) 45%, var(--border));
+}
+
+.calendar-item-actions button:last-child:hover,
+.temporal-card-heading-actions button.danger:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+}
+
 .day-empty {
   display: grid;
   min-height: 54px;
@@ -3447,6 +3482,23 @@ kbd {
   color: var(--faint);
   font-size: var(--text-xs);
   font-weight: 500;
+}
+
+.temporal-card-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-card .temporal-card-heading-actions > strong {
+  margin-right: 5px;
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.countdown-card > header .temporal-card-heading-actions {
+  margin-left: auto;
 }
 
 .plan-card > p {

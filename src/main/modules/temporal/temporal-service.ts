@@ -7,7 +7,10 @@ import type {
   MoveTimeBlockInput,
   PlanPeriod,
   TimeBlock,
-  TimeRangeInput
+  TimeRangeInput,
+  UpdateCountdownInput,
+  UpdatePlanInput,
+  UpdateTimeBlockInput
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
 import type { PlanningRepository } from '../planning/planning-repository'
@@ -42,6 +45,33 @@ export class TemporalService {
     return mapPlan(row, this.repository.listPlanItems(id))
   }
 
+  updatePlan(input: UpdatePlanInput): PlanPeriod {
+    const current = this.repository.getPlan(input.id)
+    if (!current) throw notFound('计划')
+    const currentItems = this.repository.listPlanItems(input.id).map((item) => ({
+      entityType: item.entity_type,
+      entityId: item.entity_id,
+      titleSnapshot: item.title_snapshot
+    }))
+    const merged: CreatePlanInput = {
+      periodType: input.periodType ?? current.period_type,
+      startDate: input.startDate ?? current.start_date,
+      endDate: input.endDate ?? current.end_date,
+      title: input.title ?? current.title,
+      focusResult: input.focusResult ?? current.focus_result,
+      capacityMinutes: input.capacityMinutes === undefined ? current.capacity_minutes : input.capacityMinutes,
+      items: input.items ?? currentItems
+    }
+    if (merged.endDate < merged.startDate) throw invalidTime('计划结束日期不能早于开始日期。')
+    for (const item of merged.items) this.assertEntity(item.entityType, item.entityId)
+    if (!this.repository.updatePlan(input.id, merged, new Date().toISOString())) throw notFound('计划')
+    return mapPlan(this.repository.getPlan(input.id)!, this.repository.listPlanItems(input.id))
+  }
+
+  trashPlan(id: string): void {
+    if (!this.repository.trashPlan(id, new Date().toISOString())) throw notFound('计划')
+  }
+
   listTimeBlocks(input: TimeRangeInput): TimeBlock[] {
     if (Date.parse(input.end) <= Date.parse(input.start)) throw invalidTime('时间范围无效。')
     const rows = this.repository.listTimeBlocks(input.start, input.end)
@@ -66,6 +96,23 @@ export class TemporalService {
     const id = randomUUID()
     this.repository.insertTimeBlock(id, input, new Date().toISOString())
     return this.requireTimeBlock(id)
+  }
+
+  updateTimeBlock(input: UpdateTimeBlockInput): TimeBlock {
+    const current = this.repository.getTimeBlock(input.id)
+    if (!current) throw notFound('时间块')
+    const merged: CreateTimeBlockInput = {
+      taskId: input.taskId === undefined ? current.task_id : input.taskId,
+      title: input.title ?? current.title,
+      note: input.note ?? current.note,
+      startsAt: input.startsAt ?? current.starts_at,
+      endsAt: input.endsAt ?? current.ends_at,
+      timezone: input.timezone ?? current.timezone
+    }
+    this.assertTimeRange(merged.startsAt, merged.endsAt)
+    if (merged.taskId && !this.planningRepository.getTask(merged.taskId)) throw notFound('任务')
+    if (!this.repository.updateTimeBlock(input.id, merged, new Date().toISOString())) throw notFound('时间块')
+    return this.requireTimeBlock(input.id)
   }
 
   moveTimeBlock(input: MoveTimeBlockInput): TimeBlock {
@@ -102,6 +149,31 @@ export class TemporalService {
     const row = this.repository.getCountdown(id)
     if (!row) throw notFound('倒计时')
     return this.mapCountdown(row, now)
+  }
+
+  updateCountdown(input: UpdateCountdownInput): Countdown {
+    const current = this.repository.getCountdown(input.id)
+    if (!current) throw notFound('倒计时')
+    const merged: CreateCountdownInput = {
+      title: input.title ?? current.title,
+      targetAt: input.targetAt ?? current.target_at,
+      timezone: input.timezone ?? current.timezone,
+      workingDays: input.workingDays ?? parseWorkingDays(current.workday_rule_json),
+      bufferDays: input.bufferDays ?? current.buffer_days,
+      importance: input.importance ?? current.importance,
+      entityType: input.entityType === undefined ? current.entity_type as CreateCountdownInput['entityType'] : input.entityType,
+      entityId: input.entityId === undefined ? current.entity_id : input.entityId,
+      remainingMinutes: input.remainingMinutes === undefined ? current.remaining_minutes : input.remainingMinutes,
+      tagIds: input.tagIds ?? (current.tag_ids ? current.tag_ids.split(',') : [])
+    }
+    this.validateCountdown(merged)
+    const now = new Date()
+    if (!this.repository.updateCountdown(input.id, merged, now.toISOString())) throw notFound('倒计时')
+    return this.mapCountdown(this.repository.getCountdown(input.id)!, now)
+  }
+
+  trashCountdown(id: string): void {
+    if (!this.repository.trashCountdown(id, new Date().toISOString())) throw notFound('倒计时')
   }
 
   private requireTimeBlock(id: string): TimeBlock {
@@ -168,6 +240,18 @@ export class TemporalService {
     if (Date.parse(endsAt) <= Date.parse(startsAt)) {
       throw invalidTime('时间块结束时间必须晚于开始时间。')
     }
+  }
+
+  private validateCountdown(input: CreateCountdownInput): void {
+    if (input.entityType && input.entityId) this.assertEntity(input.entityType, input.entityId)
+    if ((input.entityType === null) !== (input.entityId === null)) {
+      throw new YouTraceError({
+        code: 'COUNTDOWN_RELATION_INCOMPLETE',
+        message: '倒计时的关联类型和对象需要同时设置。'
+      })
+    }
+    const tags = new Set(this.planningRepository.listTags().map((tag) => tag.id))
+    if (input.tagIds.some((id) => !tags.has(id))) throw notFound('标签')
   }
 
   private assertEntity(entityType: string, entityId: string): void {
