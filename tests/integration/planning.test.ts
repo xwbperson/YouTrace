@@ -33,6 +33,18 @@ describe('planning application service', () => {
       successCriteria: '完成章节测试并形成证据',
       progressMode: 'workload'
     })
+    const updatedProject = planning.updateProject({
+      id: project.id,
+      name: '网络空间安全数学原理',
+      targetDate: '2027-01-15'
+    })
+    expect(updatedProject).toMatchObject({
+      id: project.id,
+      name: '网络空间安全数学原理',
+      targetDate: '2027-01-15',
+      description: project.description,
+      progressMode: project.progressMode
+    })
     const tag = planning.createTag({
       name: '计算机网络',
       color: '#216E65',
@@ -58,7 +70,9 @@ describe('planning application service', () => {
       tagIds: [tag.id]
     })
 
-    expect(planning.listProjects()).toHaveLength(1)
+    expect(planning.listProjects()).toMatchObject([
+      { id: project.id, name: '网络空间安全数学原理', targetDate: '2027-01-15' }
+    ])
     expect(planning.listTasks({ projectId: project.id, statuses: [], tagIds: [], includeDeleted: false, limit: 100, offset: 0 })).toMatchObject([
       {
         id: task.id,
@@ -78,7 +92,7 @@ describe('planning application service', () => {
 
     expect(
       planning.search({ query: '网络', entityTypes: [], limit: 20 }).map((result) => result.title)
-    ).toEqual(expect.arrayContaining(['计算机网络课程', '阅读网络体系结构']))
+    ).toEqual(expect.arrayContaining(['网络空间安全数学原理', '阅读网络体系结构']))
     expect(
       planning
         .search({ query: '体系结构', entityTypes: ['task'], limit: 20 })

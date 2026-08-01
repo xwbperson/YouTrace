@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  BookOpen,
   CalendarClock,
   Check,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   Layers3,
   ListChecks,
   ListPlus,
+  Pencil,
   Plus,
   Repeat2,
   Tag,
@@ -69,6 +71,7 @@ export function PlanningPage(): React.JSX.Element {
   const [section, setSection] = useState<'projects' | 'practice'>('projects')
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false)
   const [goalDialogOpen, setGoalDialogOpen] = useState(false)
@@ -136,6 +139,22 @@ export function PlanningPage(): React.JSX.Element {
   const goals = goalsQuery.data ?? []
   const completedCount = tasks.filter((task) => task.status === 'completed').length
 
+  const openCreateProjectDialog = (): void => {
+    setEditingProject(null)
+    setProjectDialogOpen(true)
+  }
+
+  const openEditProjectDialog = (): void => {
+    if (!selectedProject) return
+    setEditingProject(selectedProject)
+    setProjectDialogOpen(true)
+  }
+
+  const changeProjectDialogOpen = (open: boolean): void => {
+    setProjectDialogOpen(open)
+    if (!open) setEditingProject(null)
+  }
+
   const updateTask = useMutation({
     mutationFn: async (input: { id: string; status: Task['status'] }) =>
       unwrap(await window.youtrace.planning.updateTask(input)),
@@ -161,7 +180,7 @@ export function PlanningPage(): React.JSX.Element {
             <Target size={15} />
             领域
           </button>
-          <button className="button button-secondary" type="button" onClick={() => setProjectDialogOpen(true)}>
+          <button className="button button-secondary" type="button" onClick={openCreateProjectDialog}>
             <Layers3 size={16} />
             新建项目
           </button>
@@ -206,7 +225,7 @@ export function PlanningPage(): React.JSX.Element {
               <Layers3 size={24} />
               <strong>还没有项目</strong>
               <p>先定义一个想得到的结果，再把它拆成可执行任务。</p>
-              <button className="button button-secondary" onClick={() => setProjectDialogOpen(true)}>
+              <button className="button button-secondary" onClick={openCreateProjectDialog}>
                 创建第一个项目
               </button>
             </div>
@@ -256,7 +275,7 @@ export function PlanningPage(): React.JSX.Element {
               <header className="project-header">
                 <div>
                   <div className="project-meta">
-                    <span>{projectStatusLabels[selectedProject.status]}</span>
+                    <span className="project-status-badge">{projectStatusLabels[selectedProject.status]}</span>
                     <select
                       className="project-progress-mode"
                       aria-label="主进度模式"
@@ -280,6 +299,14 @@ export function PlanningPage(): React.JSX.Element {
                       <option value="equal">等权进度</option>
                       <option value="workload">工作量进度</option>
                     </select>
+                    <button
+                      type="button"
+                      className="project-edit-action"
+                      onClick={openEditProjectDialog}
+                    >
+                      <Pencil size={14} />
+                      编辑项目
+                    </button>
                   </div>
                   <h2>{selectedProject.name}</h2>
                   <p>{selectedProject.description || '还没有项目说明。'}</p>
@@ -342,6 +369,25 @@ export function PlanningPage(): React.JSX.Element {
                 </div>
               </div>
 
+              {milestones.length === 0 && tasks.length === 0 ? (
+                <section className="project-structure-guide" aria-labelledby="project-structure-title">
+                  <span className="project-structure-icon" aria-hidden="true">
+                    <BookOpen size={19} />
+                  </span>
+                  <div>
+                    <span className="section-label">建议下一步</span>
+                    <h3 id="project-structure-title">先按章节搭骨架，再添加每章实际需要的阶段</h3>
+                    <p>
+                      把每个章节建成里程碑；预习、听课、复习、习题或测试建成任务并关联章节。每章需要哪些阶段都可以不同。
+                    </p>
+                  </div>
+                  <button className="button button-secondary" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                    <Plus size={15} />
+                    添加第一章
+                  </button>
+                </section>
+              ) : null}
+
               <section className="goal-section">
                 <div className="task-section-heading">
                   <div><span className="section-label">成功标准与衡量方式</span><h3>目标</h3></div>
@@ -371,8 +417,8 @@ export function PlanningPage(): React.JSX.Element {
                   <button className="milestone-empty" type="button" onClick={() => setMilestoneDialogOpen(true)}>
                     <span className="trace-node current" />
                     <span>
-                      <strong>把项目拆成可验证的阶段结果</strong>
-                      <small>例如教材章节、功能版本或训练周期。</small>
+                      <strong>先添加第一章（章节作为里程碑）</strong>
+                      <small>以后每新增一章，就新增一个里程碑。</small>
                     </span>
                   </button>
                 ) : (
@@ -412,11 +458,19 @@ export function PlanningPage(): React.JSX.Element {
                 {tasksQuery.isPending ? (
                   <p className="rail-message">正在读取任务…</p>
                 ) : tasks.length === 0 ? (
-                  <button className="task-empty" type="button" onClick={() => setTaskDialogOpen(true)}>
+                  <button
+                    className="task-empty"
+                    type="button"
+                    onClick={() => milestones.length === 0 ? setMilestoneDialogOpen(true) : setTaskDialogOpen(true)}
+                  >
                     <Plus size={18} />
                     <span>
-                      <strong>写下这个项目的第一步</strong>
-                      <small>任务标题应当是一个可以直接开始的动作。</small>
+                      <strong>{milestones.length === 0 ? '先建立章节里程碑' : '为章节添加实际需要的阶段'}</strong>
+                      <small>
+                        {milestones.length === 0
+                          ? '章节建好后，再把预习、复习、习题等任务关联到对应章节。'
+                          : '预习、复习、习题或测试都可以作为任务，不要求每章相同。'}
+                      </small>
                     </span>
                   </button>
                 ) : (
@@ -512,11 +566,15 @@ export function PlanningPage(): React.JSX.Element {
 
       <ProjectDialog
         open={projectDialogOpen}
-        onOpenChange={setProjectDialogOpen}
+        onOpenChange={changeProjectDialogOpen}
         areas={areasQuery.data ?? []}
-        onCreated={async (project) => {
+        project={editingProject}
+        onSaved={async (project) => {
           setSelectedProjectId(project.id)
-          await queryClient.invalidateQueries({ queryKey: ['projects'] })
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+            queryClient.invalidateQueries({ queryKey: ['project-history'] })
+          ])
         }}
       />
       <TaskDialog
@@ -636,10 +694,11 @@ interface ProjectDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   areas: Area[]
-  onCreated: (project: Project) => Promise<void>
+  project: Project | null
+  onSaved: (project: Project) => Promise<void>
 }
 
-function ProjectDialog({ open, onOpenChange, areas, onCreated }: ProjectDialogProps): React.JSX.Element {
+function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectDialogProps): React.JSX.Element {
   const [name, setName] = useState('')
   const [areaId, setAreaId] = useState('')
   const [description, setDescription] = useState('')
@@ -648,30 +707,45 @@ function ProjectDialog({ open, onOpenChange, areas, onCreated }: ProjectDialogPr
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  useEffect(() => {
+    if (!open) return
+    setName(project?.name ?? '')
+    setAreaId(project?.areaId ?? '')
+    setDescription(project?.description ?? '')
+    setTargetDate(project?.targetDate ?? '')
+    setProgressMode(project?.progressMode ?? 'equal')
+    setError('')
+    setBusy(false)
+  }, [open, project])
+
   const submit = async (): Promise<void> => {
     setBusy(true)
     setError('')
-    const input: CreateProjectInput = {
-      areaId: areaId || null,
-      name,
-      description,
-      status: 'active',
-      startDate: new Date().toISOString().slice(0, 10),
-      targetDate: targetDate || null,
-      successCriteria: '',
-      progressMode
-    }
-    const result = await window.youtrace.planning.createProject(input)
+    const result = project
+      ? await window.youtrace.planning.updateProject({
+          id: project.id,
+          areaId: areaId || null,
+          name,
+          description,
+          targetDate: targetDate || null,
+          progressMode
+        })
+      : await window.youtrace.planning.createProject({
+          areaId: areaId || null,
+          name,
+          description,
+          status: 'active',
+          startDate: new Date().toISOString().slice(0, 10),
+          targetDate: targetDate || null,
+          successCriteria: '',
+          progressMode
+        } satisfies CreateProjectInput)
     setBusy(false)
     if (!result.ok) {
       setError(result.error.message)
       return
     }
-    await onCreated(result.data)
-    setName('')
-    setAreaId('')
-    setDescription('')
-    setTargetDate('')
+    await onSaved(result.data)
     onOpenChange(false)
   }
 
@@ -682,9 +756,11 @@ function ProjectDialog({ open, onOpenChange, areas, onCreated }: ProjectDialogPr
         <Dialog.Content className="dialog-content">
           <div className="dialog-heading">
             <div>
-              <span className="section-label">定义一个结果容器</span>
-              <Dialog.Title>新建项目</Dialog.Title>
-              <Dialog.Description>项目承载成功标准、里程碑、任务和真实投入。</Dialog.Description>
+              <span className="section-label">{project ? '更新项目范围' : '定义一个结果容器'}</span>
+              <Dialog.Title>{project ? '编辑项目' : '新建项目'}</Dialog.Title>
+              <Dialog.Description>
+                {project ? '修改名称、说明、目标日期、所属领域或进度方式。' : '项目承载成功标准、里程碑、任务和真实投入。'}
+              </Dialog.Description>
             </div>
             <Dialog.Close className="dialog-close" aria-label="关闭">
               <X size={18} />
@@ -724,7 +800,7 @@ function ProjectDialog({ open, onOpenChange, areas, onCreated }: ProjectDialogPr
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
             <button className="button button-primary" disabled={!name.trim() || busy} onClick={() => void submit()}>
-              {busy ? '正在创建…' : '创建项目'}
+              {busy ? (project ? '正在保存…' : '正在创建…') : (project ? '保存修改' : '创建项目')}
             </button>
           </div>
         </Dialog.Content>

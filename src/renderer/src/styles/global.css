@@ -3983,16 +3983,23 @@ kbd {
 
 .project-meta {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
-.project-meta span {
-  padding: 3px 7px;
+.project-status-badge {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 9px;
   color: var(--trace-strong);
   background: var(--trace-soft);
   border-radius: 5px;
   font-size: var(--text-sm);
   font-weight: 650;
+  line-height: 1;
 }
 
 .project-progress-mode {
@@ -4014,6 +4021,28 @@ kbd {
 .project-progress-mode:focus-visible {
   outline: 2px solid var(--trace);
   outline-offset: 2px;
+}
+
+.project-edit-action {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  color: var(--trace-strong);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.project-edit-action:hover,
+.project-edit-action:focus-visible {
+  color: var(--trace);
+  background: var(--trace-soft);
+  border-color: var(--trace);
 }
 
 .project-header h2 {
@@ -4101,6 +4130,45 @@ kbd {
 .project-facts span,
 .project-facts strong {
   display: block;
+}
+
+.project-structure-guide {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  margin: -9px 0 25px;
+  padding: 14px 15px;
+  background: color-mix(in srgb, var(--trace-soft) 72%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--trace) 24%, var(--border));
+  border-radius: 9px;
+}
+
+.project-structure-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--trace);
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.project-structure-guide h3 {
+  margin: 3px 0 4px;
+  color: var(--ink);
+  font-size: var(--text-md);
+}
+
+.project-structure-guide p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.project-structure-guide .button {
+  white-space: nowrap;
 }
 
 .project-facts span {
