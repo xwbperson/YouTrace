@@ -4654,6 +4654,115 @@ kbd {
   font-size: var(--text-sm);
 }
 
+.task-milestone-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.task-milestone-group {
+  position: relative;
+  padding-left: 15px;
+  border-left: 2px solid color-mix(in srgb, var(--trace) 32%, var(--border));
+}
+
+.task-milestone-group > header {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px 8px;
+}
+
+.task-group-heading-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.task-group-node {
+  position: absolute;
+  top: 12px;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border: 2px solid var(--trace);
+  border-radius: 50%;
+}
+
+.task-group-heading-copy > div {
+  min-width: 0;
+}
+
+.task-group-heading-copy strong,
+.task-group-heading-copy small {
+  display: block;
+}
+
+.task-group-heading-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-group-heading-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.task-group-add,
+.task-group-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--trace);
+  background: transparent;
+  cursor: pointer;
+}
+
+.task-group-add {
+  flex: none;
+  padding: 5px 7px;
+  font-size: var(--text-sm);
+  border-radius: 6px;
+}
+
+.task-group-add:hover,
+.task-group-add:focus-visible {
+  background: var(--trace-soft);
+}
+
+.task-group-empty {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 13px 14px;
+  font-size: var(--text-sm);
+  text-align: left;
+  background: var(--canvas);
+  border: 1px dashed var(--border);
+  border-radius: 9px;
+}
+
+.task-group-empty:hover,
+.task-group-empty:focus-visible {
+  border-color: var(--trace);
+}
+
+.task-milestone-group.unavailable,
+.task-milestone-group.unassigned {
+  border-left-color: var(--border-strong);
+}
+
+.task-milestone-group.unavailable .task-group-node,
+.task-milestone-group.unassigned .task-group-node {
+  border-color: var(--muted);
+}
+
 .task-list {
   overflow: hidden;
   border: 1px solid var(--border);

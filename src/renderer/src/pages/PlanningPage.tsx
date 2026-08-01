@@ -38,6 +38,7 @@ import type {
   Task
 } from '../../../shared/contracts'
 import { PracticePage } from './PracticePage'
+import { groupTasksByMilestone } from './planning-task-groups'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -80,6 +81,7 @@ export function PlanningPage(): React.JSX.Element {
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [taskMilestonePresetId, setTaskMilestonePresetId] = useState<string | null>(null)
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false)
   const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null)
   const [goalDialogOpen, setGoalDialogOpen] = useState(false)
@@ -149,6 +151,7 @@ export function PlanningPage(): React.JSX.Element {
   const tasks = tasksQuery.data ?? []
   const milestones = milestonesQuery.data ?? []
   const goals = goalsQuery.data ?? []
+  const taskGroups = useMemo(() => groupTasksByMilestone(tasks, milestones), [tasks, milestones])
   const completedCount = tasks.filter((task) => task.status === 'completed').length
 
   const openCreateProjectDialog = (): void => {
@@ -167,14 +170,18 @@ export function PlanningPage(): React.JSX.Element {
     if (!open) setEditingProject(null)
   }
 
-  const openCreateTaskDialog = (): void => {
+  const openCreateTaskDialog = (milestoneId: string | null = null): void => {
     setEditingTask(null)
+    setTaskMilestonePresetId(milestoneId)
     setTaskDialogOpen(true)
   }
 
   const changeTaskDialogOpen = (open: boolean): void => {
     setTaskDialogOpen(open)
-    if (!open) setEditingTask(null)
+    if (!open) {
+      setEditingTask(null)
+      setTaskMilestonePresetId(null)
+    }
   }
 
   const openCreateMilestoneDialog = (): void => {
@@ -230,7 +237,7 @@ export function PlanningPage(): React.JSX.Element {
             className="button button-primary"
             type="button"
             disabled={!selectedProject}
-            onClick={openCreateTaskDialog}
+            onClick={() => openCreateTaskDialog()}
           >
             <Plus size={17} />
             新建任务
@@ -514,7 +521,7 @@ export function PlanningPage(): React.JSX.Element {
                     <span className="section-label">下一步行动</span>
                     <h3>任务</h3>
                   </div>
-                   <button className="text-action" type="button" onClick={openCreateTaskDialog}>
+                   <button className="text-action" type="button" onClick={() => openCreateTaskDialog()}>
                     <Plus size={14} />
                     添加任务
                   </button>
@@ -522,63 +529,101 @@ export function PlanningPage(): React.JSX.Element {
 
                 {tasksQuery.isPending ? (
                   <p className="rail-message">正在读取任务…</p>
-                ) : tasks.length === 0 ? (
+                ) : tasks.length === 0 && milestones.length === 0 ? (
                   <button
                     className="task-empty"
                     type="button"
-                    onClick={() => milestones.length === 0 ? openCreateMilestoneDialog() : openCreateTaskDialog()}
+                    onClick={openCreateMilestoneDialog}
                   >
                     <Plus size={18} />
                     <span>
-                      <strong>{milestones.length === 0 ? '先建立章节里程碑' : '为章节添加实际需要的阶段'}</strong>
-                      <small>
-                        {milestones.length === 0
-                          ? '章节建好后，再把预习、复习、习题等任务关联到对应章节。'
-                          : '预习、复习、习题或测试都可以作为任务，不要求每章相同。'}
-                      </small>
+                      <strong>先建立章节里程碑</strong>
+                      <small>章节建好后，再把预习、复习、习题等任务关联到对应章节。</small>
                     </span>
                   </button>
                 ) : (
-                  <div className="task-list">
-                    {tasks.map((task) => (
-                      <article key={task.id} className={task.status === 'completed' ? 'completed' : ''}>
-                        <button
-                          type="button"
-                          className="task-check"
-                          aria-label={task.status === 'completed' ? '重新打开任务' : '完成任务'}
-                          onClick={() =>
-                            updateTask.mutate({
-                              id: task.id,
-                              status: task.status === 'completed' ? 'ready' : 'completed'
-                            })
-                          }
-                        >
-                          {task.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}
-                        </button>
-                        <button type="button" className="task-copy task-detail-trigger" onClick={() => setSelectedTask(task)}>
-                          <strong>{task.title}</strong>
-                          <div>
-                            <span>{taskStatusLabels[task.status]}</span>
-                            {task.estimatedMinutes && <span>{task.estimatedMinutes} 分钟</span>}
-                            {task.difficulty && <span>难度 {task.difficulty}</span>}
-                            {(task.parentTaskId === null || task.checklistProgressEnabled) && <span>进度 {Math.round(task.progress * 100)}%</span>}
-                            <span className={`priority priority-${task.priority}`}>
-                              <Flag size={11} />
-                              {priorityLabels[task.priority]}
-                            </span>
+                  <div className="task-milestone-groups">
+                    {taskGroups.map((group) => (
+                      <section className={`task-milestone-group ${group.kind}`} key={group.key}>
+                        <header>
+                          <div className="task-group-heading-copy">
+                            <span className="task-group-node" aria-hidden="true" />
+                            <div>
+                              <strong>{group.label}</strong>
+                              <small>
+                                {group.tasks.length} 个任务
+                                {group.milestone?.plannedDate ? ` · 计划 ${group.milestone.plannedDate}` : ''}
+                              </small>
+                            </div>
+                            {group.milestone?.importanceRating !== null && group.milestone?.importanceRating !== undefined ? (
+                              <ImportanceStars value={group.milestone.importanceRating} compact />
+                            ) : null}
                           </div>
-                        </button>
-                        <div className="task-tags">
-                          {task.tagIds.map((tagId) => {
-                            const tag = tagsQuery.data?.find((candidate) => candidate.id === tagId)
-                            return tag ? (
-                              <span key={tag.id} style={{ '--tag-color': tag.color ?? '#216E65' } as React.CSSProperties}>
-                                {tag.name}
-                              </span>
-                            ) : null
-                          })}
-                        </div>
-                      </article>
+                          {group.kind !== 'unavailable' ? (
+                            <button
+                              className="task-group-add"
+                              type="button"
+                              onClick={() => openCreateTaskDialog(group.milestone?.id ?? null)}
+                            >
+                              <Plus size={13} />
+                              添加任务
+                            </button>
+                          ) : null}
+                        </header>
+                        {group.tasks.length === 0 ? (
+                          <button
+                            className="task-group-empty"
+                            type="button"
+                            onClick={() => openCreateTaskDialog(group.milestone?.id ?? null)}
+                          >
+                            <Plus size={14} />
+                            为本章添加预习、复习、习题或测试
+                          </button>
+                        ) : (
+                          <div className="task-list">
+                            {group.tasks.map((task) => (
+                              <article key={task.id} className={task.status === 'completed' ? 'completed' : ''}>
+                                <button
+                                  type="button"
+                                  className="task-check"
+                                  aria-label={task.status === 'completed' ? '重新打开任务' : '完成任务'}
+                                  onClick={() =>
+                                    updateTask.mutate({
+                                      id: task.id,
+                                      status: task.status === 'completed' ? 'ready' : 'completed'
+                                    })
+                                  }
+                                >
+                                  {task.status === 'completed' ? <Check size={14} /> : <Circle size={14} />}
+                                </button>
+                                <button type="button" className="task-copy task-detail-trigger" onClick={() => setSelectedTask(task)}>
+                                  <strong>{task.title}</strong>
+                                  <div>
+                                    <span>{taskStatusLabels[task.status]}</span>
+                                    {task.estimatedMinutes && <span>{task.estimatedMinutes} 分钟</span>}
+                                    {task.difficulty && <span>难度 {task.difficulty}</span>}
+                                    {(task.parentTaskId === null || task.checklistProgressEnabled) && <span>进度 {Math.round(task.progress * 100)}%</span>}
+                                    <span className={`priority priority-${task.priority}`}>
+                                      <Flag size={11} />
+                                      {priorityLabels[task.priority]}
+                                    </span>
+                                  </div>
+                                </button>
+                                <div className="task-tags">
+                                  {task.tagIds.map((tagId) => {
+                                    const tag = tagsQuery.data?.find((candidate) => candidate.id === tagId)
+                                    return tag ? (
+                                      <span key={tag.id} style={{ '--tag-color': tag.color ?? '#216E65' } as React.CSSProperties}>
+                                        {tag.name}
+                                      </span>
+                                    ) : null
+                                  })}
+                                </div>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </section>
                     ))}
                   </div>
                 )}
@@ -667,6 +712,7 @@ export function PlanningPage(): React.JSX.Element {
         onOpenChange={changeTaskDialogOpen}
         project={selectedProject}
         task={editingTask}
+        defaultMilestoneId={taskMilestonePresetId}
         tags={tagsQuery.data ?? []}
         milestones={milestones}
         goals={goals}
@@ -720,6 +766,7 @@ export function PlanningPage(): React.JSX.Element {
         onOpenChange={(open) => { if (!open) setSelectedTask(null) }}
         onEdit={(task) => {
           setSelectedTask(null)
+          setTaskMilestonePresetId(null)
           setEditingTask(task)
           setTaskDialogOpen(true)
         }}
@@ -939,6 +986,7 @@ interface TaskDialogProps {
   onOpenChange: (open: boolean) => void
   project: Project | null
   task: Task | null
+  defaultMilestoneId: string | null
   tags: Array<{ id: string; name: string; color: string | null }>
   milestones: Milestone[]
   goals: Goal[]
@@ -946,7 +994,7 @@ interface TaskDialogProps {
   onSaved: () => Promise<void>
 }
 
-function TaskDialog({ open, onOpenChange, project, task, tags, milestones, goals, tasks, onSaved }: TaskDialogProps): React.JSX.Element {
+function TaskDialog({ open, onOpenChange, project, task, defaultMilestoneId, tags, milestones, goals, tasks, onSaved }: TaskDialogProps): React.JSX.Element {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<Task['status']>('ready')
@@ -981,12 +1029,12 @@ function TaskDialog({ open, onOpenChange, project, task, tags, milestones, goals
     setVerificationCriteria(task?.verificationCriteria ?? '')
     setIncludeInProgress(task?.includeInProgress ?? true)
     setSelectedTagIds(task?.tagIds ?? [])
-    setMilestoneId(task?.milestoneId ?? '')
+    setMilestoneId(task?.milestoneId ?? defaultMilestoneId ?? '')
     setGoalId(task?.goalId ?? '')
     setParentTaskId(task?.parentTaskId ?? '')
     setError('')
     setBusy(false)
-  }, [open, task])
+  }, [defaultMilestoneId, open, task])
 
   const submit = async (): Promise<void> => {
     if (!project) return
