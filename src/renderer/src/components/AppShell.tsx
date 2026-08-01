@@ -1,4 +1,6 @@
+import * as Dialog from '@radix-ui/react-dialog'
 import {
+  AlertTriangle,
   Archive,
   CalendarDays,
   ChevronRight,
@@ -14,7 +16,8 @@ import {
   Search,
   Settings,
   Tags,
-  TimerReset
+  TimerReset,
+  X
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
@@ -51,6 +54,12 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
   const queryClient = useQueryClient()
   const [active, setActive] = useState<string>('home')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [workspacePrompt, setWorkspacePrompt] = useState<{
+    kind: 'locked' | 'error'
+    rootPath: string | null
+    message: string
+    recovery: string | null
+  } | null>(null)
   const today = useMemo(
     () =>
       new Intl.DateTimeFormat('zh-CN', {
@@ -167,24 +176,39 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
   const switchWorkspace = async (): Promise<void> => {
     const selection = await window.youtrace.dialog.selectDirectory()
     if (!selection.ok || !selection.data) return
-    let result = await window.youtrace.workspace.open({
+    const result = await window.youtrace.workspace.open({
       rootPath: selection.data,
       readOnly: false
     })
-    if (
-      !result.ok &&
-      result.error.code === 'WORKSPACE_LOCKED' &&
-      window.confirm(`${result.error.message}\n\n是否改为只读打开？`)
-    ) {
-      result = await window.youtrace.workspace.open({
-        rootPath: selection.data,
-        readOnly: true
-      })
-    }
     if (!result.ok) {
-      window.alert(result.error.recovery ? `${result.error.message}\n${result.error.recovery}` : result.error.message)
+      setWorkspacePrompt({
+        kind: result.error.code === 'WORKSPACE_LOCKED' ? 'locked' : 'error',
+        rootPath: selection.data,
+        message: result.error.message,
+        recovery: result.error.recovery ?? null
+      })
       return
     }
+    queryClient.clear()
+    onWorkspaceChange(result.data)
+  }
+
+  const openWorkspaceReadOnly = async (): Promise<void> => {
+    if (!workspacePrompt?.rootPath) return
+    const result = await window.youtrace.workspace.open({
+      rootPath: workspacePrompt.rootPath,
+      readOnly: true
+    })
+    if (!result.ok) {
+      setWorkspacePrompt({
+        kind: 'error',
+        rootPath: workspacePrompt.rootPath,
+        message: result.error.message,
+        recovery: result.error.recovery ?? null
+      })
+      return
+    }
+    setWorkspacePrompt(null)
     queryClient.clear()
     onWorkspaceChange(result.data)
   }
@@ -422,6 +446,26 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
           else setActive('plan')
         }}
       />
+      <Dialog.Root open={workspacePrompt !== null} onOpenChange={(open) => { if (!open) setWorkspacePrompt(null) }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content className="dialog-content destructive-dialog">
+            <div className="dialog-heading">
+              <div>
+                <span className="section-label"><AlertTriangle size={14} />工作区无法正常打开</span>
+                <Dialog.Title>{workspacePrompt?.kind === 'locked' ? '工作区正在被使用' : '打开工作区失败'}</Dialog.Title>
+                <Dialog.Description>{workspacePrompt?.message}</Dialog.Description>
+              </div>
+              <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
+            </div>
+            {workspacePrompt?.recovery ? <div className="inline-error">{workspacePrompt.recovery}</div> : null}
+            <div className="dialog-actions">
+              <Dialog.Close className="button button-secondary">关闭</Dialog.Close>
+              {workspacePrompt?.kind === 'locked' ? <button className="button button-primary" type="button" onClick={() => void openWorkspaceReadOnly()}>以只读方式打开</button> : null}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }
