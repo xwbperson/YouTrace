@@ -224,6 +224,7 @@ export interface YouTraceApi {
     listAreas(includeArchived?: boolean): Promise<IpcResult<Area[]>>
     createArea(input: CreateAreaInput): Promise<IpcResult<Area>>
     updateArea(input: UpdateAreaInput): Promise<IpcResult<Area>>
+    trashArea(id: string): Promise<IpcResult<void>>
     listProjects(includeArchived?: boolean): Promise<IpcResult<Project[]>>
     createProject(input: CreateProjectInput): Promise<IpcResult<Project>>
     updateProject(input: UpdateProjectInput): Promise<IpcResult<Project>>
@@ -232,9 +233,11 @@ export interface YouTraceApi {
     listGoals(projectId: string | null): Promise<IpcResult<Goal[]>>
     createGoal(input: CreateGoalInput): Promise<IpcResult<Goal>>
     updateGoal(input: UpdateGoalInput): Promise<IpcResult<Goal>>
+    trashGoal(id: string): Promise<IpcResult<void>>
     listMilestones(projectId: string): Promise<IpcResult<Milestone[]>>
     createMilestone(input: CreateMilestoneInput): Promise<IpcResult<Milestone>>
     updateMilestone(input: UpdateMilestoneInput): Promise<IpcResult<Milestone>>
+    trashMilestone(id: string): Promise<IpcResult<void>>
     listTasks(input: TaskListInput): Promise<IpcResult<Task[]>>
     createTask(input: CreateTaskInput): Promise<IpcResult<Task>>
     updateTask(input: UpdateTaskInput): Promise<IpcResult<Task>>

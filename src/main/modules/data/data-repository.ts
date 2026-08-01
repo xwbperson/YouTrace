@@ -198,15 +198,32 @@ export class DataRepository {
       .prepare(
         `SELECT tr.id, tr.entity_type, tr.entity_id, tr.deleted_at,
                 CASE tr.entity_type
+                  WHEN 'area' THEN COALESCE(a.name, '已删除领域')
                   WHEN 'project' THEN COALESCE(p.name, '已删除项目')
+                  WHEN 'goal' THEN COALESCE(g.title, '已删除目标')
+                  WHEN 'milestone' THEN COALESCE(m.title, '已删除里程碑')
                   WHEN 'task' THEN COALESCE(t.title, '已删除任务')
                   WHEN 'review' THEN COALESCE(r.title, '已删除复盘')
                   WHEN 'evidence' THEN COALESCE(e.title, '已删除成果')
                 END AS title,
                 CASE
+                  WHEN tr.entity_type = 'area' THEN 1
                   WHEN tr.entity_type = 'project' THEN 1
                   WHEN tr.entity_type = 'review' THEN 1
                   WHEN tr.entity_type = 'evidence' THEN 1
+                  WHEN tr.entity_type = 'goal' AND g.id IS NULL THEN 0
+                  WHEN tr.entity_type = 'goal' AND g.project_id IS NULL THEN 1
+                  WHEN tr.entity_type = 'goal' AND EXISTS(
+                    SELECT 1 FROM projects parent
+                     WHERE parent.id = g.project_id AND parent.deleted_at IS NULL
+                  ) THEN 1
+                  WHEN tr.entity_type = 'goal' THEN 0
+                  WHEN tr.entity_type = 'milestone' AND m.id IS NULL THEN 0
+                  WHEN tr.entity_type = 'milestone' AND EXISTS(
+                    SELECT 1 FROM projects parent
+                     WHERE parent.id = m.project_id AND parent.deleted_at IS NULL
+                  ) THEN 1
+                  WHEN tr.entity_type = 'milestone' THEN 0
                   WHEN t.id IS NULL THEN 0
                   WHEN EXISTS(
                     SELECT 1 FROM audit_events ae
@@ -218,34 +235,19 @@ export class DataRepository {
                   WHEN EXISTS(SELECT 1 FROM projects parent WHERE parent.id = t.project_id AND parent.deleted_at IS NULL) THEN 1
                   ELSE 0
                 END AS parent_available,
-                CASE tr.entity_type
-                  WHEN 'task' THEN (
-                    SELECT COUNT(*) FROM entity_attachments ea
-                     WHERE ea.entity_type = 'task' AND ea.entity_id = tr.entity_id
-                  )
-                  WHEN 'evidence' THEN (
-                    SELECT COUNT(*) FROM entity_attachments ea
-                     WHERE ea.entity_type = 'evidence' AND ea.entity_id = tr.entity_id
-                  )
-                  ELSE 0
-                END AS attachment_count,
-                CASE tr.entity_type
-                  WHEN 'task' THEN (
-                    SELECT COUNT(*) FROM entity_attachments ea
-                     WHERE ea.entity_type = 'task' AND ea.entity_id = tr.entity_id
-                       AND (SELECT COUNT(*) FROM entity_attachments shared
-                             WHERE shared.attachment_id = ea.attachment_id) > 1
-                  )
-                  WHEN 'evidence' THEN (
-                    SELECT COUNT(*) FROM entity_attachments ea
-                     WHERE ea.entity_type = 'evidence' AND ea.entity_id = tr.entity_id
-                       AND (SELECT COUNT(*) FROM entity_attachments shared
-                             WHERE shared.attachment_id = ea.attachment_id) > 1
-                  )
-                  ELSE 0
-                END AS shared_attachment_count
+                (SELECT COUNT(*) FROM entity_attachments ea
+                  WHERE ea.entity_type = tr.entity_type AND ea.entity_id = tr.entity_id)
+                  AS attachment_count,
+                (SELECT COUNT(*) FROM entity_attachments ea
+                  WHERE ea.entity_type = tr.entity_type AND ea.entity_id = tr.entity_id
+                    AND (SELECT COUNT(*) FROM entity_attachments shared
+                          WHERE shared.attachment_id = ea.attachment_id) > 1)
+                  AS shared_attachment_count
            FROM trash_entries tr
+           LEFT JOIN areas a ON tr.entity_type = 'area' AND a.id = tr.entity_id
            LEFT JOIN projects p ON tr.entity_type = 'project' AND p.id = tr.entity_id
+           LEFT JOIN goals g ON tr.entity_type = 'goal' AND g.id = tr.entity_id
+           LEFT JOIN milestones m ON tr.entity_type = 'milestone' AND m.id = tr.entity_id
            LEFT JOIN tasks t ON tr.entity_type = 'task' AND t.id = tr.entity_id
            LEFT JOIN reviews r ON tr.entity_type = 'review' AND r.id = tr.entity_id
            LEFT JOIN evidence e ON tr.entity_type = 'evidence' AND e.id = tr.entity_id
@@ -261,7 +263,11 @@ export class DataRepository {
     if (!item) return null
     const database = this.database()
     const transaction = database.transaction(() => {
-      if (item.entityType === 'project') {
+      if (item.entityType === 'area') {
+        database
+          .prepare('UPDATE areas SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+          .run(now, item.entityId)
+      } else if (item.entityType === 'project') {
         database
           .prepare('UPDATE projects SET deleted_at = NULL, updated_at = ? WHERE id = ?')
           .run(now, item.entityId)
@@ -269,6 +275,22 @@ export class DataRepository {
           .prepare('SELECT name, description FROM projects WHERE id = ?')
           .get(item.entityId) as { name: string; description: string }
         this.upsertSearch(database, 'project', item.entityId, project.name, project.description)
+      } else if (item.entityType === 'goal') {
+        database
+          .prepare('UPDATE goals SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+          .run(now, item.entityId)
+        const goal = database
+          .prepare('SELECT title, success_criteria FROM goals WHERE id = ?')
+          .get(item.entityId) as { title: string; success_criteria: string }
+        this.upsertSearch(database, 'goal', item.entityId, goal.title, goal.success_criteria)
+      } else if (item.entityType === 'milestone') {
+        database
+          .prepare('UPDATE milestones SET deleted_at = NULL, updated_at = ? WHERE id = ?')
+          .run(now, item.entityId)
+        const milestone = database
+          .prepare('SELECT title, description FROM milestones WHERE id = ?')
+          .get(item.entityId) as { title: string; description: string }
+        this.upsertSearch(database, 'milestone', item.entityId, milestone.title, milestone.description)
       } else if (item.entityType === 'task') {
         if (!item.parentAvailable) {
           database
@@ -312,7 +334,12 @@ export class DataRepository {
     const database = this.database()
     const orphanPaths: string[] = []
     const transaction = database.transaction(() => {
-      if (item.entityType === 'task') {
+      if (item.entityType === 'area') {
+        database.prepare('UPDATE projects SET area_id = NULL WHERE area_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'area', [item.entityId]))
+        this.deleteRelations(database, 'area', [item.entityId])
+        database.prepare('DELETE FROM areas WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'task') {
         const attachments = database
           .prepare(
             `SELECT a.id, a.relative_path,
@@ -343,6 +370,19 @@ export class DataRepository {
         database.prepare('DELETE FROM tasks WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'project') {
         orphanPaths.push(...this.purgeProject(database, item.entityId, now))
+      } else if (item.entityType === 'goal') {
+        database.prepare('UPDATE milestones SET goal_id = NULL WHERE goal_id = ?').run(item.entityId)
+        database.prepare('UPDATE tasks SET goal_id = NULL WHERE goal_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'goal', [item.entityId]))
+        this.deleteRelations(database, 'goal', [item.entityId])
+        database.prepare('DELETE FROM goals WHERE id = ?').run(item.entityId)
+      } else if (item.entityType === 'milestone') {
+        database.prepare('UPDATE tasks SET milestone_id = NULL WHERE milestone_id = ?').run(item.entityId)
+        database.prepare('UPDATE knowledge_items SET milestone_id = NULL WHERE milestone_id = ?').run(item.entityId)
+        database.prepare('UPDATE learning_tests SET milestone_id = NULL WHERE milestone_id = ?').run(item.entityId)
+        orphanPaths.push(...this.detachAttachments(database, 'milestone', [item.entityId]))
+        this.deleteRelations(database, 'milestone', [item.entityId])
+        database.prepare('DELETE FROM milestones WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'evidence') {
         const attachments = database
           .prepare(
@@ -605,6 +645,12 @@ export class DataRepository {
     projectId: string,
     now: string
   ): string[] {
+    const goalIds = (
+      database.prepare('SELECT id FROM goals WHERE project_id = ?').all(projectId) as Array<{ id: string }>
+    ).map((row) => row.id)
+    const milestoneIds = (
+      database.prepare('SELECT id FROM milestones WHERE project_id = ?').all(projectId) as Array<{ id: string }>
+    ).map((row) => row.id)
     const taskIds = (
       database.prepare('SELECT id FROM tasks WHERE project_id = ?').all(projectId) as Array<{ id: string }>
     ).map((row) => row.id)
@@ -641,7 +687,18 @@ export class DataRepository {
     const orphanPaths = this.detachAttachments(database, 'task', purgedTaskIds)
     this.deleteRelations(database, 'task', purgedTaskIds)
     database.prepare('DELETE FROM tasks WHERE project_id = ?').run(projectId)
-    database.prepare("DELETE FROM searchable_content WHERE entity_type IN ('milestone', 'goal') AND entity_id IN (SELECT id FROM milestones WHERE project_id = ? UNION SELECT id FROM goals WHERE project_id = ?)").run(projectId, projectId)
+    orphanPaths.push(...this.detachAttachments(database, 'milestone', milestoneIds))
+    orphanPaths.push(...this.detachAttachments(database, 'goal', goalIds))
+    this.deleteRelations(database, 'milestone', milestoneIds)
+    this.deleteRelations(database, 'goal', goalIds)
+    database
+      .prepare(
+        `UPDATE trash_entries SET purged_at = ?
+          WHERE purged_at IS NULL
+            AND ((entity_type = 'milestone' AND entity_id IN (SELECT id FROM milestones WHERE project_id = ?))
+              OR (entity_type = 'goal' AND entity_id IN (SELECT id FROM goals WHERE project_id = ?)))`
+      )
+      .run(now, projectId, projectId)
     database.prepare('DELETE FROM milestones WHERE project_id = ?').run(projectId)
     database.prepare('DELETE FROM goals WHERE project_id = ?').run(projectId)
     const courseIds = (

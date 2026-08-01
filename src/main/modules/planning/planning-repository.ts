@@ -221,7 +221,16 @@ export class PlanningRepository {
         now,
         id
       )
-    this.insertAudit(this.database(), 'area', id, archived ? 'archived' : 'updated', before, input, now)
+    const action = archived && !before.archived
+      ? 'archived'
+      : !archived && before.archived
+        ? 'restored'
+        : 'updated'
+    this.insertAudit(this.database(), 'area', id, action, before, input, now)
+  }
+
+  trashArea(id: string, now: string): boolean {
+    return this.trashEntity('areas', 'area', id, now, false)
   }
 
   listProjects(includeArchived = false): ProjectRow[] {
@@ -528,6 +537,10 @@ export class PlanningRepository {
     this.insertAudit(database, 'goal', id, 'updated', before, input, now)
   }
 
+  trashGoal(id: string, now: string): boolean {
+    return this.trashEntity('goals', 'goal', id, now)
+  }
+
   listMilestones(projectId: string): MilestoneRow[] {
     return this.database()
       .prepare(
@@ -621,6 +634,10 @@ export class PlanningRepository {
       )
     this.upsertSearch(database, 'milestone', id, input.title, input.description)
     this.insertAudit(database, 'milestone', id, 'updated', before, input, now)
+  }
+
+  trashMilestone(id: string, now: string): boolean {
+    return this.trashEntity('milestones', 'milestone', id, now)
   }
 
   getMilestoneProgressFacts(projectId: string): MilestoneProgressFact[] {
@@ -1476,6 +1493,36 @@ export class PlanningRepository {
           GROUP BY t.id`
       )
       .all(...parameters) as TaskRow[]
+  }
+
+  private trashEntity(
+    table: 'areas' | 'goals' | 'milestones',
+    entityType: 'area' | 'goal' | 'milestone',
+    id: string,
+    now: string,
+    searchable = true
+  ): boolean {
+    const database = this.database()
+    const transaction = database.transaction(() => {
+      const result = database
+        .prepare(`UPDATE ${table} SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL`)
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare(
+          `INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at)
+           VALUES (?, ?, ?, ?)`
+        )
+        .run(crypto.randomUUID(), entityType, id, now)
+      if (searchable) {
+        database
+          .prepare('DELETE FROM searchable_content WHERE entity_type = ? AND entity_id = ?')
+          .run(entityType, id)
+      }
+      this.insertAudit(database, entityType, id, 'trashed', null, null, now)
+      return true
+    })
+    return transaction()
   }
 
   private replaceTags(

@@ -514,6 +514,17 @@ export class DataService {
   }
 
   restoreTrash(id: string): TrashItem {
+    const candidate = this.repository.listTrash().find((item) => item.id === id)
+    if (
+      candidate &&
+      !candidate.parentAvailable &&
+      (candidate.entityType === 'goal' || candidate.entityType === 'milestone')
+    ) {
+      throw new YouTraceError({
+        code: 'TRASH_PARENT_RESTORE_REQUIRED',
+        message: '请先恢复这个内容所属的项目，再恢复当前内容。'
+      })
+    }
     const item = this.repository.restoreTrash(id, new Date().toISOString())
     if (!item) throw notFound('回收站内容')
     return item

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Circle,
   Archive,
+  ArchiveRestore,
   Flag,
   Gauge,
   History,
@@ -19,6 +20,7 @@ import {
   Repeat2,
   Tag,
   Target,
+  Trash2,
   X
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -73,8 +75,11 @@ export function PlanningPage(): React.JSX.Element {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false)
+  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null)
   const [goalDialogOpen, setGoalDialogOpen] = useState(false)
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
   const [areaDialogOpen, setAreaDialogOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showArchived, setShowArchived] = useState(false)
@@ -86,7 +91,7 @@ export function PlanningPage(): React.JSX.Element {
   })
   const areasQuery = useQuery({
     queryKey: ['areas'],
-    queryFn: async () => unwrap(await window.youtrace.planning.listAreas())
+    queryFn: async () => unwrap(await window.youtrace.planning.listAreas(true))
   })
   const tagsQuery = useQuery({
     queryKey: ['tags'],
@@ -155,6 +160,36 @@ export function PlanningPage(): React.JSX.Element {
     if (!open) setEditingProject(null)
   }
 
+  const openCreateTaskDialog = (): void => {
+    setEditingTask(null)
+    setTaskDialogOpen(true)
+  }
+
+  const changeTaskDialogOpen = (open: boolean): void => {
+    setTaskDialogOpen(open)
+    if (!open) setEditingTask(null)
+  }
+
+  const openCreateMilestoneDialog = (): void => {
+    setEditingMilestone(null)
+    setMilestoneDialogOpen(true)
+  }
+
+  const changeMilestoneDialogOpen = (open: boolean): void => {
+    setMilestoneDialogOpen(open)
+    if (!open) setEditingMilestone(null)
+  }
+
+  const openCreateGoalDialog = (): void => {
+    setEditingGoal(null)
+    setGoalDialogOpen(true)
+  }
+
+  const changeGoalDialogOpen = (open: boolean): void => {
+    setGoalDialogOpen(open)
+    if (!open) setEditingGoal(null)
+  }
+
   const updateTask = useMutation({
     mutationFn: async (input: { id: string; status: Task['status'] }) =>
       unwrap(await window.youtrace.planning.updateTask(input)),
@@ -188,7 +223,7 @@ export function PlanningPage(): React.JSX.Element {
             className="button button-primary"
             type="button"
             disabled={!selectedProject}
-            onClick={() => setTaskDialogOpen(true)}
+            onClick={openCreateTaskDialog}
           >
             <Plus size={17} />
             新建任务
@@ -328,16 +363,35 @@ export function PlanningPage(): React.JSX.Element {
                     type="button"
                     className="project-archive-action"
                     onClick={async () => {
-                      await window.youtrace.planning.updateProject({
-                        id: selectedProject.id,
-                        status: selectedProject.status === 'archived' ? 'active' : 'archived'
-                      })
+                      const result = selectedProject.status === 'archived'
+                        ? await window.youtrace.planning.trashProject(selectedProject.id)
+                        : await window.youtrace.planning.updateProject({
+                            id: selectedProject.id,
+                            status: 'archived'
+                          })
+                      if (!result.ok) {
+                        setProjectActionError(result.error.message)
+                        return
+                      }
                       await queryClient.invalidateQueries({ queryKey: ['projects'] })
                     }}
                   >
-                    <Archive size={12} />
-                    {selectedProject.status === 'archived' ? '取消归档' : '归档项目'}
+                    {selectedProject.status === 'archived' ? <Trash2 size={12} /> : <Archive size={12} />}
+                    {selectedProject.status === 'archived' ? '移至回收站' : '归档项目'}
                   </button>
+                  {selectedProject.status === 'archived' ? (
+                    <button
+                      type="button"
+                      className="project-archive-action"
+                      onClick={async () => {
+                        const result = await window.youtrace.planning.updateProject({ id: selectedProject.id, status: 'active' })
+                        if (!result.ok) return setProjectActionError(result.error.message)
+                        await queryClient.invalidateQueries({ queryKey: ['projects'] })
+                      }}
+                    >
+                      <ArchiveRestore size={12} />取消归档
+                    </button>
+                  ) : null}
                 </div>
               </header>
 
@@ -381,7 +435,7 @@ export function PlanningPage(): React.JSX.Element {
                       把每个章节建成里程碑；预习、听课、复习、习题或测试建成任务并关联章节。每章需要哪些阶段都可以不同。
                     </p>
                   </div>
-                  <button className="button button-secondary" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                   <button className="button button-secondary" type="button" onClick={openCreateMilestoneDialog}>
                     <Plus size={15} />
                     添加第一章
                   </button>
@@ -391,13 +445,13 @@ export function PlanningPage(): React.JSX.Element {
               <section className="goal-section">
                 <div className="task-section-heading">
                   <div><span className="section-label">成功标准与衡量方式</span><h3>目标</h3></div>
-                  <button className="text-action" type="button" onClick={() => setGoalDialogOpen(true)}><Plus size={14} />添加目标</button>
+                   <button className="text-action" type="button" onClick={openCreateGoalDialog}><Plus size={14} />添加目标</button>
                 </div>
                 {goals.length === 0 ? (
-                  <button className="goal-empty" type="button" onClick={() => setGoalDialogOpen(true)}><Target size={16} /><span><strong>定义可验证的目标</strong><small>目标可以使用里程碑、指标、工作量或人工确认衡量。</small></span></button>
+                   <button className="goal-empty" type="button" onClick={openCreateGoalDialog}><Target size={16} /><span><strong>定义可验证的目标</strong><small>目标可以使用里程碑、指标、工作量或人工确认衡量。</small></span></button>
                 ) : (
                   <div className="goal-strip">
-                    {goals.map((goal) => <article key={goal.id}><Target size={14} /><div><strong>{goal.title}</strong><span>{goal.successCriteria || '未填写成功标准'}</span></div><small>{measureLabel(goal.measureType)} · {goal.targetDate ?? '未设日期'}</small></article>)}
+                    {goals.map((goal) => <article key={goal.id}><Target size={14} /><div><strong>{goal.title}</strong><span>{goal.successCriteria || '未填写成功标准'}</span></div><small>{measureLabel(goal.measureType)} · {goal.targetDate ?? '未设日期'}</small><div className="entity-card-actions"><button type="button" aria-label={`编辑目标：${goal.title}`} onClick={() => { setEditingGoal(goal); setGoalDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除目标：${goal.title}`} onClick={async () => { const result = await window.youtrace.planning.trashGoal(goal.id); if (!result.ok) return setProjectActionError(result.error.message); await Promise.all([queryClient.invalidateQueries({ queryKey: ['goals'] }), queryClient.invalidateQueries({ queryKey: ['milestones'] }), queryClient.invalidateQueries({ queryKey: ['tasks'] })]) }}><Trash2 size={13} /></button></div></article>)}
                   </div>
                 )}
               </section>
@@ -408,13 +462,13 @@ export function PlanningPage(): React.JSX.Element {
                     <span className="section-label">阶段结果</span>
                     <h3>里程碑</h3>
                   </div>
-                  <button className="text-action" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                   <button className="text-action" type="button" onClick={openCreateMilestoneDialog}>
                     <Plus size={14} />
                     添加里程碑
                   </button>
                 </div>
                 {milestones.length === 0 ? (
-                  <button className="milestone-empty" type="button" onClick={() => setMilestoneDialogOpen(true)}>
+                   <button className="milestone-empty" type="button" onClick={openCreateMilestoneDialog}>
                     <span className="trace-node current" />
                     <span>
                       <strong>先添加第一章（章节作为里程碑）</strong>
@@ -437,6 +491,7 @@ export function PlanningPage(): React.JSX.Element {
                           </span>
                         </div>
                         <small>{milestone.plannedDate ?? '未设日期'}</small>
+                        <div className="entity-card-actions"><button type="button" aria-label={`编辑里程碑：${milestone.title}`} onClick={() => { setEditingMilestone(milestone); setMilestoneDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除里程碑：${milestone.title}`} onClick={async () => { const result = await window.youtrace.planning.trashMilestone(milestone.id); if (!result.ok) return setProjectActionError(result.error.message); await Promise.all([queryClient.invalidateQueries({ queryKey: ['milestones'] }), queryClient.invalidateQueries({ queryKey: ['tasks'] }), queryClient.invalidateQueries({ queryKey: ['projects'] })]) }}><Trash2 size={13} /></button></div>
                       </article>
                     ))}
                   </div>
@@ -449,7 +504,7 @@ export function PlanningPage(): React.JSX.Element {
                     <span className="section-label">下一步行动</span>
                     <h3>任务</h3>
                   </div>
-                  <button className="text-action" type="button" onClick={() => setTaskDialogOpen(true)}>
+                   <button className="text-action" type="button" onClick={openCreateTaskDialog}>
                     <Plus size={14} />
                     添加任务
                   </button>
@@ -461,7 +516,7 @@ export function PlanningPage(): React.JSX.Element {
                   <button
                     className="task-empty"
                     type="button"
-                    onClick={() => milestones.length === 0 ? setMilestoneDialogOpen(true) : setTaskDialogOpen(true)}
+                    onClick={() => milestones.length === 0 ? openCreateMilestoneDialog() : openCreateTaskDialog()}
                   >
                     <Plus size={18} />
                     <span>
@@ -579,13 +634,14 @@ export function PlanningPage(): React.JSX.Element {
       />
       <TaskDialog
         open={taskDialogOpen}
-        onOpenChange={setTaskDialogOpen}
+        onOpenChange={changeTaskDialogOpen}
         project={selectedProject}
+        task={editingTask}
         tags={tagsQuery.data ?? []}
         milestones={milestones}
         goals={goals}
         tasks={tasks}
-        onCreated={async () => {
+        onSaved={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['tasks'] }),
             queryClient.invalidateQueries({ queryKey: ['projects'] }),
@@ -595,10 +651,11 @@ export function PlanningPage(): React.JSX.Element {
       />
       <MilestoneDialog
         open={milestoneDialogOpen}
-        onOpenChange={setMilestoneDialogOpen}
+        onOpenChange={changeMilestoneDialogOpen}
         project={selectedProject}
+        milestone={editingMilestone}
         goals={goals}
-        onCreated={async () => {
+        onSaved={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['milestones'] }),
             queryClient.invalidateQueries({ queryKey: ['projects'] }),
@@ -608,9 +665,10 @@ export function PlanningPage(): React.JSX.Element {
       />
       <GoalDialog
         open={goalDialogOpen}
-        onOpenChange={setGoalDialogOpen}
+        onOpenChange={changeGoalDialogOpen}
         project={selectedProject}
-        onCreated={async () => {
+        goal={editingGoal}
+        onSaved={async () => {
           await queryClient.invalidateQueries({ queryKey: ['goals'] })
           await queryClient.invalidateQueries({ queryKey: ['project-history'] })
         }}
@@ -630,6 +688,21 @@ export function PlanningPage(): React.JSX.Element {
         task={selectedTask}
         tasks={tasks}
         onOpenChange={(open) => { if (!open) setSelectedTask(null) }}
+        onEdit={(task) => {
+          setSelectedTask(null)
+          setEditingTask(task)
+          setTaskDialogOpen(true)
+        }}
+        onTrash={async (task) => {
+          const result = await window.youtrace.planning.trashTask(task.id)
+          if (!result.ok) return setProjectActionError(result.error.message)
+          setSelectedTask(null)
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+            queryClient.invalidateQueries({ queryKey: ['projects'] }),
+            queryClient.invalidateQueries({ queryKey: ['project-history'] })
+          ])
+        }}
         onChanged={async () => {
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['tasks'] }),
@@ -702,6 +775,9 @@ function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectD
   const [name, setName] = useState('')
   const [areaId, setAreaId] = useState('')
   const [description, setDescription] = useState('')
+  const [successCriteria, setSuccessCriteria] = useState('')
+  const [status, setStatus] = useState<Project['status']>('active')
+  const [startDate, setStartDate] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [progressMode, setProgressMode] = useState<Project['progressMode']>('equal')
   const [error, setError] = useState('')
@@ -712,6 +788,9 @@ function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectD
     setName(project?.name ?? '')
     setAreaId(project?.areaId ?? '')
     setDescription(project?.description ?? '')
+    setSuccessCriteria(project?.successCriteria ?? '')
+    setStatus(project?.status ?? 'active')
+    setStartDate(project?.startDate ?? new Date().toISOString().slice(0, 10))
     setTargetDate(project?.targetDate ?? '')
     setProgressMode(project?.progressMode ?? 'equal')
     setError('')
@@ -727,6 +806,9 @@ function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectD
           areaId: areaId || null,
           name,
           description,
+          successCriteria,
+          status,
+          startDate: startDate || null,
           targetDate: targetDate || null,
           progressMode
         })
@@ -734,10 +816,10 @@ function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectD
           areaId: areaId || null,
           name,
           description,
-          status: 'active',
-          startDate: new Date().toISOString().slice(0, 10),
+          status,
+          startDate: startDate || null,
           targetDate: targetDate || null,
-          successCriteria: '',
+          successCriteria,
           progressMode
         } satisfies CreateProjectInput)
     setBusy(false)
@@ -775,18 +857,31 @@ function ProjectDialog({ open, onOpenChange, areas, project, onSaved }: ProjectD
               <span>所属领域</span>
               <select value={areaId} onChange={(event) => setAreaId(event.target.value)}>
                 <option value="">未归属领域</option>
-                {areas.map((area) => <option key={area.id} value={area.id}>{area.name}</option>)}
+                {areas.filter((area) => !area.archived || area.id === project?.areaId).map((area) => <option key={area.id} value={area.id}>{area.name}{area.archived ? '（已归档）' : ''}</option>)}
               </select>
             </label>
             <label>
               <span>项目说明</span>
               <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="这段工作为什么重要？" />
             </label>
-            <div className="form-row">
+            <label><span>成功标准</span><textarea value={successCriteria} onChange={(event) => setSuccessCriteria(event.target.value)} placeholder="达到什么结果才算项目完成？" /></label>
+            <div className="form-row form-row-three">
+              <label>
+                <span>状态</span>
+                <select value={status} onChange={(event) => setStatus(event.target.value as Project['status'])}>
+                  {Object.entries(projectStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>开始日期</span>
+                <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              </label>
               <label>
                 <span>目标日期</span>
                 <input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
               </label>
+            </div>
+            <div className="form-row">
               <label>
                 <span>主进度模式</span>
                 <select value={progressMode} onChange={(event) => setProgressMode(event.target.value as Project['progressMode'])}>
@@ -813,18 +908,26 @@ interface TaskDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   project: Project | null
+  task: Task | null
   tags: Array<{ id: string; name: string; color: string | null }>
   milestones: Milestone[]
   goals: Goal[]
   tasks: Task[]
-  onCreated: () => Promise<void>
+  onSaved: () => Promise<void>
 }
 
-function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, tasks, onCreated }: TaskDialogProps): React.JSX.Element {
+function TaskDialog({ open, onOpenChange, project, task, tags, milestones, goals, tasks, onSaved }: TaskDialogProps): React.JSX.Element {
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [status, setStatus] = useState<Task['status']>('ready')
   const [difficulty, setDifficulty] = useState('')
   const [priority, setPriority] = useState<Task['priority']>('medium')
   const [estimatedMinutes, setEstimatedMinutes] = useState('')
+  const [progressWeight, setProgressWeight] = useState('')
+  const [startDate, setStartDate] = useState('')
+  const [dueAt, setDueAt] = useState('')
+  const [verificationCriteria, setVerificationCriteria] = useState('')
+  const [includeInProgress, setIncludeInProgress] = useState(true)
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
   const [milestoneId, setMilestoneId] = useState('')
   const [goalId, setGoalId] = useState('')
@@ -833,6 +936,27 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
   const [busy, setBusy] = useState(false)
 
   const projectName = useMemo(() => project?.name ?? '', [project])
+
+  useEffect(() => {
+    if (!open) return
+    setTitle(task?.title ?? '')
+    setDescription(task?.description ?? '')
+    setStatus(task?.status ?? 'ready')
+    setDifficulty(task?.difficulty?.toString() ?? '')
+    setPriority(task?.priority ?? 'medium')
+    setEstimatedMinutes(task?.estimatedMinutes?.toString() ?? '')
+    setProgressWeight(task?.progressWeight?.toString() ?? '')
+    setStartDate(task?.startDate ?? '')
+    setDueAt(task?.dueAt ? toDateTimeLocal(task.dueAt) : '')
+    setVerificationCriteria(task?.verificationCriteria ?? '')
+    setIncludeInProgress(task?.includeInProgress ?? true)
+    setSelectedTagIds(task?.tagIds ?? [])
+    setMilestoneId(task?.milestoneId ?? '')
+    setGoalId(task?.goalId ?? '')
+    setParentTaskId(task?.parentTaskId ?? '')
+    setError('')
+    setBusy(false)
+  }, [open, task])
 
   const submit = async (): Promise<void> => {
     if (!project) return
@@ -844,32 +968,27 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
       goalId: goalId || null,
       milestoneId: milestoneId || null,
       title,
-      description: '',
-      status: 'ready',
+      description,
+      status,
       difficulty: difficulty ? Number(difficulty) : null,
       priority,
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
-      progressWeight: null,
-      startDate: null,
-      dueAt: null,
-      verificationCriteria: '',
-      includeInProgress: true,
+      progressWeight: progressWeight ? Number(progressWeight) : null,
+      startDate: startDate || null,
+      dueAt: dueAt ? new Date(dueAt).toISOString() : null,
+      verificationCriteria,
+      includeInProgress,
       tagIds: selectedTagIds
     }
-    const result = await window.youtrace.planning.createTask(input)
+    const result = task
+      ? await window.youtrace.planning.updateTask({ id: task.id, ...input })
+      : await window.youtrace.planning.createTask(input)
     setBusy(false)
     if (!result.ok) {
       setError(result.error.message)
       return
     }
-    await onCreated()
-    setTitle('')
-    setDifficulty('')
-    setEstimatedMinutes('')
-    setSelectedTagIds([])
-    setMilestoneId('')
-    setGoalId('')
-    setParentTaskId('')
+    await onSaved()
     onOpenChange(false)
   }
 
@@ -881,8 +1000,8 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
           <div className="dialog-heading">
             <div>
               <span className="section-label">{projectName}</span>
-              <Dialog.Title>新建任务</Dialog.Title>
-              <Dialog.Description>写成一个可以直接开始、可以明确完成的动作。</Dialog.Description>
+              <Dialog.Title>{task ? '编辑任务' : '新建任务'}</Dialog.Title>
+              <Dialog.Description>{task ? '修改任务内容、归属、时间和完成标准。' : '写成一个可以直接开始、可以明确完成的动作。'}</Dialog.Description>
             </div>
             <Dialog.Close className="dialog-close" aria-label="关闭">
               <X size={18} />
@@ -893,7 +1012,17 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
               <span>下一步是什么？</span>
               <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：阅读第一章并整理分层模型" />
             </label>
+            <label>
+              <span>任务说明</span>
+              <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="补充范围、资料或注意事项" />
+            </label>
             <div className="form-row form-row-three">
+              <label>
+                <span>状态</span>
+                <select value={status} onChange={(event) => setStatus(event.target.value as Task['status'])}>
+                  {Object.entries(taskStatusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
               <label>
                 <span>难度</span>
                 <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}>
@@ -914,11 +1043,13 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
                   <option value="critical">关键</option>
                 </select>
               </label>
-              <label>
-                <span>预计分钟</span>
-                <input type="number" min="1" value={estimatedMinutes} onChange={(event) => setEstimatedMinutes(event.target.value)} />
-              </label>
             </div>
+            <div className="form-row form-row-three">
+              <label><span>预计分钟</span><input type="number" min="1" value={estimatedMinutes} onChange={(event) => setEstimatedMinutes(event.target.value)} /></label>
+              <label><span>进度权重</span><input type="number" min="0.01" step="0.01" value={progressWeight} onChange={(event) => setProgressWeight(event.target.value)} /></label>
+              <label><span>开始日期</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label>
+            </div>
+            <label><span>截止时间</span><input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label>
             {milestones.length > 0 && (
               <label>
                 <span>所属里程碑</span>
@@ -944,7 +1075,7 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
                 <span>父任务（创建子任务）</span>
                 <select value={parentTaskId} onChange={(event) => setParentTaskId(event.target.value)}>
                   <option value="">顶层任务</option>
-                  {tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled').map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
+                  {tasks.filter((candidate) => candidate.id !== task?.id && candidate.status !== 'completed' && candidate.status !== 'cancelled').map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}
                 </select>
               </label>
             </div>
@@ -972,12 +1103,14 @@ function TaskDialog({ open, onOpenChange, project, tags, milestones, goals, task
                 </div>
               </fieldset>
             )}
+            <label><span>完成验证标准</span><textarea value={verificationCriteria} onChange={(event) => setVerificationCriteria(event.target.value)} placeholder="什么事实能证明任务已经完成？" /></label>
+            <label className="checklist-progress-mode"><input type="checkbox" checked={includeInProgress} onChange={(event) => setIncludeInProgress(event.target.checked)} />纳入项目进度</label>
             {error && <div className="inline-error">{error}</div>}
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
             <button className="button button-primary" disabled={!title.trim() || busy || !project} onClick={() => void submit()}>
-              {busy ? '正在创建…' : '创建任务'}
+              {busy ? '正在保存…' : task ? '保存修改' : '创建任务'}
             </button>
           </div>
         </Dialog.Content>
@@ -990,55 +1123,74 @@ interface MilestoneDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   project: Project | null
+  milestone: Milestone | null
   goals: Goal[]
-  onCreated: () => Promise<void>
+  onSaved: () => Promise<void>
 }
 
 function MilestoneDialog({
   open,
   onOpenChange,
   project,
+  milestone,
   goals,
-  onCreated
+  onSaved
 }: MilestoneDialogProps): React.JSX.Element {
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [plannedDate, setPlannedDate] = useState('')
   const [estimatedMinutes, setEstimatedMinutes] = useState('')
   const [manualWeight, setManualWeight] = useState('')
+  const [mastery, setMastery] = useState('')
   const [verificationCriteria, setVerificationCriteria] = useState('')
   const [goalId, setGoalId] = useState('')
+  const [status, setStatus] = useState<Milestone['status']>('not_started')
+  const [includeInProgress, setIncludeInProgress] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setTitle(milestone?.title ?? '')
+    setDescription(milestone?.description ?? '')
+    setPlannedDate(milestone?.plannedDate ?? '')
+    setEstimatedMinutes(milestone?.estimatedMinutes?.toString() ?? '')
+    setManualWeight(milestone?.manualWeight?.toString() ?? '')
+    setMastery(milestone?.mastery?.toString() ?? '')
+    setVerificationCriteria(milestone?.verificationCriteria ?? '')
+    setGoalId(milestone?.goalId ?? '')
+    setStatus(milestone?.status ?? 'not_started')
+    setIncludeInProgress(milestone?.includeInProgress ?? true)
+    setError('')
+    setBusy(false)
+  }, [open, milestone])
 
   const submit = async (): Promise<void> => {
     if (!project) return
     setBusy(true)
     setError('')
-    const result = await window.youtrace.planning.createMilestone({
+    const input = {
       projectId: project.id,
       goalId: goalId || null,
       title,
-      description: '',
+      description,
       plannedDate: plannedDate || null,
       estimatedMinutes: estimatedMinutes ? Number(estimatedMinutes) : null,
       manualWeight: manualWeight ? Number(manualWeight) : null,
-      mastery: null,
+      mastery: mastery ? Number(mastery) : null,
       verificationCriteria,
-      status: 'not_started',
-      includeInProgress: true
-    })
+      status,
+      includeInProgress
+    }
+    const result = milestone
+      ? await window.youtrace.planning.updateMilestone({ id: milestone.id, ...input })
+      : await window.youtrace.planning.createMilestone(input)
     setBusy(false)
     if (!result.ok) {
       setError(result.error.message)
       return
     }
-    await onCreated()
-    setTitle('')
-    setPlannedDate('')
-    setEstimatedMinutes('')
-    setManualWeight('')
-    setVerificationCriteria('')
-    setGoalId('')
+    await onSaved()
     onOpenChange(false)
   }
 
@@ -1050,8 +1202,8 @@ function MilestoneDialog({
           <div className="dialog-heading">
             <div>
               <span className="section-label">{project?.name ?? '当前项目'}</span>
-              <Dialog.Title>新建里程碑</Dialog.Title>
-              <Dialog.Description>里程碑是一项阶段性、可以验证的结果。</Dialog.Description>
+              <Dialog.Title>{milestone ? '编辑里程碑' : '新建里程碑'}</Dialog.Title>
+              <Dialog.Description>{milestone ? '修改章节或阶段结果的范围、日期与验证方式。' : '里程碑是一项阶段性、可以验证的结果。'}</Dialog.Description>
             </div>
             <Dialog.Close className="dialog-close" aria-label="关闭">
               <X size={18} />
@@ -1062,6 +1214,7 @@ function MilestoneDialog({
               <span>里程碑名称</span>
               <input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：完成教材第一章" />
             </label>
+            <label><span>说明</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             <label>
               <span>所属目标</span>
               <select value={goalId} onChange={(event) => setGoalId(event.target.value)}>
@@ -1083,16 +1236,21 @@ function MilestoneDialog({
                 <input type="number" min="0.01" step="0.01" value={manualWeight} onChange={(event) => setManualWeight(event.target.value)} />
               </label>
             </div>
+            <div className="form-row">
+              <label><span>状态</span><select value={status} onChange={(event) => setStatus(event.target.value as Milestone['status'])}><option value="not_started">未开始</option><option value="in_progress">进行中</option><option value="completed">已完成</option><option value="verified">已验证</option><option value="accepted">已认可</option><option value="paused">暂停</option><option value="cancelled">已取消</option></select></label>
+              <label><span>掌握度</span><input type="number" min="0" max="100" value={mastery} onChange={(event) => setMastery(event.target.value)} /></label>
+            </div>
             <label>
               <span>验证标准</span>
               <textarea value={verificationCriteria} onChange={(event) => setVerificationCriteria(event.target.value)} placeholder="什么事实可以证明这个阶段已经完成？" />
             </label>
+            <label className="checklist-progress-mode"><input type="checkbox" checked={includeInProgress} onChange={(event) => setIncludeInProgress(event.target.checked)} />纳入项目进度</label>
             {error && <div className="inline-error">{error}</div>}
           </div>
           <div className="dialog-actions">
             <Dialog.Close className="button button-secondary">取消</Dialog.Close>
             <button className="button button-primary" disabled={!title.trim() || busy || !project} onClick={() => void submit()}>
-              {busy ? '正在创建…' : '创建里程碑'}
+              {busy ? '正在保存…' : milestone ? '保存修改' : '创建里程碑'}
             </button>
           </div>
         </Dialog.Content>
@@ -1105,36 +1263,84 @@ function GoalDialog({
   open,
   onOpenChange,
   project,
-  onCreated
+  goal,
+  onSaved
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   project: Project | null
-  onCreated: () => Promise<void>
+  goal: Goal | null
+  onSaved: () => Promise<void>
 }): React.JSX.Element {
   const [title, setTitle] = useState('')
   const [successCriteria, setSuccessCriteria] = useState('')
   const [targetDate, setTargetDate] = useState('')
   const [measureType, setMeasureType] = useState<Goal['measureType']>('milestone')
+  const [status, setStatus] = useState<Goal['status']>('active')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    setTitle(goal?.title ?? '')
+    setSuccessCriteria(goal?.successCriteria ?? '')
+    setTargetDate(goal?.targetDate ?? '')
+    setMeasureType(goal?.measureType ?? 'milestone')
+    setStatus(goal?.status ?? 'active')
+    setError('')
+    setBusy(false)
+  }, [open, goal])
+
   const submit = async (): Promise<void> => {
     if (!project) return
-    const result = await window.youtrace.planning.createGoal({
+    setBusy(true)
+    const input = {
       projectId: project.id,
       title,
       successCriteria,
       targetDate: targetDate || null,
       measureType,
-      status: 'active'
-    })
+      status
+    }
+    const result = goal
+      ? await window.youtrace.planning.updateGoal({ id: goal.id, ...input })
+      : await window.youtrace.planning.createGoal(input)
+    setBusy(false)
     if (!result.ok) return setError(result.error.message)
-    await onCreated()
-    setTitle('')
-    setSuccessCriteria('')
-    setTargetDate('')
+    await onSaved()
     onOpenChange(false)
   }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content"><div className="dialog-heading"><div><span className="section-label">{project?.name ?? '独立目标'}</span><Dialog.Title>新建目标</Dialog.Title><Dialog.Description>先定义什么结果算成功，再选择衡量方式。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="dialog-form"><label><span>目标名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label><label><span>成功标准</span><textarea value={successCriteria} onChange={(event) => setSuccessCriteria(event.target.value)} /></label><div className="form-row"><label><span>目标日期</span><input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} /></label><label><span>衡量方式</span><select value={measureType} onChange={(event) => setMeasureType(event.target.value as Goal['measureType'])}><option value="milestone">里程碑完成度</option><option value="metric">数值指标</option><option value="workload">累计工作量</option><option value="manual">人工确认</option></select></label></div>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!title.trim() || !project} onClick={() => void submit()}>创建目标</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content">
+          <div className="dialog-heading">
+            <div>
+              <span className="section-label">{project?.name ?? '独立目标'}</span>
+              <Dialog.Title>{goal ? '编辑目标' : '新建目标'}</Dialog.Title>
+              <Dialog.Description>{goal ? '修改目标、成功标准、日期与衡量方式。' : '先定义什么结果算成功，再选择衡量方式。'}</Dialog.Description>
+            </div>
+            <Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close>
+          </div>
+          <div className="dialog-form">
+            <label><span>目标名称</span><input autoFocus value={title} onChange={(event) => setTitle(event.target.value)} /></label>
+            <label><span>成功标准</span><textarea value={successCriteria} onChange={(event) => setSuccessCriteria(event.target.value)} /></label>
+            <div className="form-row form-row-three">
+              <label><span>目标日期</span><input type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} /></label>
+              <label><span>衡量方式</span><select value={measureType} onChange={(event) => setMeasureType(event.target.value as Goal['measureType'])}><option value="milestone">里程碑完成度</option><option value="metric">数值指标</option><option value="workload">累计工作量</option><option value="manual">人工确认</option></select></label>
+              <label><span>状态</span><select value={status} onChange={(event) => setStatus(event.target.value as Goal['status'])}><option value="planned">计划中</option><option value="active">进行中</option><option value="paused">暂停</option><option value="completed">已完成</option><option value="cancelled">已取消</option></select></label>
+            </div>
+            {error && <div className="inline-error">{error}</div>}
+          </div>
+          <div className="dialog-actions">
+            <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+            <button className="button button-primary" disabled={!title.trim() || !project || busy} onClick={() => void submit()}>{busy ? '正在保存…' : goal ? '保存修改' : '创建目标'}</button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
 }
 
 function AreaDialog({
@@ -1152,30 +1358,80 @@ function AreaDialog({
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('#216E65')
   const [error, setError] = useState('')
-  const create = async (): Promise<void> => {
-    const result = await window.youtrace.planning.createArea({
-      name,
-      description,
-      color,
-      icon: null
-    })
-    if (!result.ok) return setError(result.error.message)
+  const [editingArea, setEditingArea] = useState<Area | null>(null)
+
+  const resetForm = (): void => {
+    setEditingArea(null)
     setName('')
     setDescription('')
+    setColor('#216E65')
+    setError('')
+  }
+
+  const edit = (area: Area): void => {
+    setEditingArea(area)
+    setName(area.name)
+    setDescription(area.description)
+    setColor(area.color ?? '#216E65')
+    setError('')
+  }
+
+  const save = async (): Promise<void> => {
+    const input = { name, description, color, icon: editingArea?.icon ?? null }
+    const result = editingArea
+      ? await window.youtrace.planning.updateArea({ id: editingArea.id, ...input })
+      : await window.youtrace.planning.createArea(input)
+    if (!result.ok) return setError(result.error.message)
+    resetForm()
     await onChanged()
   }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content area-dialog"><div className="dialog-heading"><div><span className="section-label">长期责任分类</span><Dialog.Title>领域</Dialog.Title><Dialog.Description>预设可编辑和归档；项目只引用稳定领域 ID。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div><div className="area-list">{areas.map((area) => <article key={area.id}><span style={{ background: area.color ?? '#216E65' }} /><div><strong>{area.name}</strong><small>{area.description || '没有说明'}</small></div><button type="button" onClick={async () => { await window.youtrace.planning.updateArea({ id: area.id, archived: true }); await onChanged() }}><Archive size={12} />归档</button></article>)}</div><div className="dialog-form"><div className="form-row"><label><span>新领域名称</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label><span>颜色</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label></div><label><span>说明</span><input value={description} onChange={(event) => setDescription(event.target.value)} /></label>{error && <div className="inline-error">{error}</div>}</div><div className="dialog-actions"><Dialog.Close className="button button-secondary">完成</Dialog.Close><button className="button button-primary" disabled={!name.trim()} onClick={() => void create()}><Plus size={14} />添加领域</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return (
+    <Dialog.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen) resetForm(); onOpenChange(nextOpen) }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="dialog-content area-dialog">
+          <div className="dialog-heading"><div><span className="section-label">长期责任分类</span><Dialog.Title>领域</Dialog.Title><Dialog.Description>可修改名称和说明；归档后可恢复或移入回收站。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div>
+          <div className="area-list">
+            {areas.map((area) => (
+              <article key={area.id} className={area.archived ? 'archived' : ''}>
+                <span style={{ background: area.color ?? '#216E65' }} />
+                <div><strong>{area.name}{area.archived ? ' · 已归档' : ''}</strong><small>{area.description || '没有说明'}</small></div>
+                <div className="area-row-actions">
+                  <button type="button" onClick={() => edit(area)}><Pencil size={12} />编辑</button>
+                  <button type="button" onClick={async () => { const result = await window.youtrace.planning.updateArea({ id: area.id, archived: !area.archived }); if (!result.ok) return setError(result.error.message); await onChanged() }}>{area.archived ? <ArchiveRestore size={12} /> : <Archive size={12} />}{area.archived ? '恢复' : '归档'}</button>
+                  {area.archived ? <button type="button" className="danger" onClick={async () => { const result = await window.youtrace.planning.trashArea(area.id); if (!result.ok) return setError(result.error.message); if (editingArea?.id === area.id) resetForm(); await onChanged() }}><Trash2 size={12} />回收站</button> : null}
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="dialog-form">
+            <div className="form-row"><label><span>{editingArea ? '领域名称' : '新领域名称'}</span><input value={name} onChange={(event) => setName(event.target.value)} /></label><label><span>颜色</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label></div>
+            <label><span>说明</span><input value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+            {error && <div className="inline-error">{error}</div>}
+          </div>
+          <div className="dialog-actions">
+            {editingArea ? <button className="button button-secondary" type="button" onClick={resetForm}>取消编辑</button> : <Dialog.Close className="button button-secondary">完成</Dialog.Close>}
+            <button className="button button-primary" disabled={!name.trim()} onClick={() => void save()}>{editingArea ? <Pencil size={14} /> : <Plus size={14} />}{editingArea ? '保存修改' : '添加领域'}</button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  )
 }
 
 function TaskInspector({
   task,
   tasks,
   onOpenChange,
+  onEdit,
+  onTrash,
   onChanged
 }: {
   task: Task | null
   tasks: Task[]
   onOpenChange: (open: boolean) => void
+  onEdit: (task: Task) => void
+  onTrash: (task: Task) => Promise<void>
   onChanged: () => Promise<void>
 }): React.JSX.Element {
   const queryClient = useQueryClient()
@@ -1225,7 +1481,7 @@ function TaskInspector({
     if (!result.ok) return setError(result.error.message)
     await refresh()
   }
-  return <Dialog.Root open={task !== null} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content task-inspector"><div className="dialog-heading"><div><span className="section-label">任务结构与快速操作</span><Dialog.Title>{task?.title}</Dialog.Title><Dialog.Description>子任务是独立对象；检查项是否参与进度由你明确选择。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div>{task && <div className="task-inspector-body"><section><header><ListPlus size={15} /><strong>检查清单</strong><small>{checklistEnabled ? '检查项参与进度' : '默认不参与进度'}</small></header><label className="checklist-progress-mode"><input type="checkbox" checked={checklistEnabled} onChange={async (event) => { setChecklistEnabled(event.target.checked); await window.youtrace.planning.setChecklistProgress({ taskId: task.id, enabled: event.target.checked }); await refresh() }} />使用检查清单计算这个任务的进度</label><div className="checklist-items">{(checklistQuery.data ?? []).map((item) => <label key={item.id}><input type="checkbox" checked={item.checked} onChange={async (event) => { await window.youtrace.planning.updateChecklistItem({ id: item.id, checked: event.target.checked }); await refresh() }} /><span>{item.text}</span><button type="button" aria-label={`删除检查项：${item.text}`} onClick={async () => { await window.youtrace.planning.deleteChecklistItem(item.id); await refresh() }}><X size={11} /></button></label>)}</div><div className="inline-create"><input aria-label="检查项内容" value={checkText} onChange={(event) => setCheckText(event.target.value)} /><button type="button" disabled={!checkText.trim()} onClick={async () => { await window.youtrace.planning.createChecklistItem({ taskId: task.id, text: checkText }); setCheckText(''); await refresh() }}><Plus size={12} />添加</button></div></section><section><header><Link2 size={15} /><strong>前置依赖</strong><small>未完成的前置项会显示阻塞来源</small></header><div className="dependency-list">{(dependenciesQuery.data ?? []).map((dependency) => <span key={dependency.prerequisiteTaskId}>{dependency.prerequisiteTitle}<em>{taskStatusLabels[dependency.prerequisiteStatus]}</em></span>)}</div><div className="form-row"><select aria-label="选择前置任务" value={dependencyId} onChange={(event) => setDependencyId(event.target.value)}><option value="">选择前置任务</option>{tasks.filter((candidate) => candidate.id !== task.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><input aria-label="覆盖原因" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="强制越过时的原因" /></div><button className="text-action" disabled={!dependencyId} onClick={async () => { const result = await window.youtrace.planning.addTaskDependency({ taskId: task.id, prerequisiteTaskId: dependencyId, overrideReason: overrideReason || null }); if (!result.ok) return setError(result.error.message); setDependencyId(''); setOverrideReason(''); await refresh() }}><Plus size={12} />添加依赖</button></section><section><header><Repeat2 size={15} /><strong>周期实例</strong><small>完成后生成独立的新实例，历史不变</small></header><div className="form-row form-row-three"><select aria-label="周期频率" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}><option value="daily">每日</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="weekdays">工作日</option><option value="interval">自定义间隔</option></select><input aria-label="周期间隔" type="number" min="1" value={intervalValue} onChange={(event) => setIntervalValue(event.target.value)} /><input aria-label="下次发生日期" type="date" value={nextOccurrence} onChange={(event) => setNextOccurrence(event.target.value)} /></div><div className="inspector-actions"><button className="button button-secondary" onClick={async () => { await window.youtrace.planning.setTaskRecurrence({ taskId: task.id, rule: null }); setNextOccurrence(''); await refresh() }}>取消周期</button><button className="button button-secondary" disabled={!nextOccurrence} onClick={async () => { const result = await window.youtrace.planning.setTaskRecurrence({ taskId: task.id, rule: { frequency, intervalValue: Number(intervalValue), weekdays: frequency === 'weekdays' ? [1, 2, 3, 4, 5] : [], nextOccurrence } }); if (!result.ok) return setError(result.error.message); await refresh() }}><Repeat2 size={12} />保存周期</button></div></section><section className="task-quick-actions"><button onClick={() => void quickUpdate({ id: task.id, status: 'blocked' })}>标为阻塞</button><button onClick={() => void quickUpdate({ id: task.id, startDate: addLocalDays(1) })}>转明日</button><button onClick={() => void quickUpdate({ id: task.id, dueAt: task.dueAt ? new Date(Date.parse(task.dueAt) + 86_400_000).toISOString() : new Date(Date.now() + 86_400_000).toISOString() })}>延期一天</button><button onClick={() => void quickUpdate({ id: task.id, includeInProgress: !task.includeInProgress })}>{task.includeInProgress ? '设为仅参考' : '纳入进度'}</button></section>{error && <div className="inline-error">{error}</div>}</div>}</Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root open={task !== null} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="dialog-content task-inspector"><div className="dialog-heading"><div><span className="section-label">任务结构与快速操作</span><Dialog.Title>{task?.title}</Dialog.Title><Dialog.Description>子任务是独立对象；检查项是否参与进度由你明确选择。</Dialog.Description></div><Dialog.Close className="dialog-close" aria-label="关闭"><X size={18} /></Dialog.Close></div>{task && <div className="task-inspector-body"><section><header><ListPlus size={15} /><strong>检查清单</strong><small>{checklistEnabled ? '检查项参与进度' : '默认不参与进度'}</small></header><label className="checklist-progress-mode"><input type="checkbox" checked={checklistEnabled} onChange={async (event) => { setChecklistEnabled(event.target.checked); await window.youtrace.planning.setChecklistProgress({ taskId: task.id, enabled: event.target.checked }); await refresh() }} />使用检查清单计算这个任务的进度</label><div className="checklist-items">{(checklistQuery.data ?? []).map((item) => <label key={item.id}><input type="checkbox" checked={item.checked} onChange={async (event) => { await window.youtrace.planning.updateChecklistItem({ id: item.id, checked: event.target.checked }); await refresh() }} /><input className="checklist-text-input" aria-label={`编辑检查项：${item.text}`} defaultValue={item.text} onBlur={async (event) => { const text = event.target.value.trim(); if (!text || text === item.text) return; await window.youtrace.planning.updateChecklistItem({ id: item.id, text }); await refresh() }} /><button type="button" aria-label={`删除检查项：${item.text}`} onClick={async () => { await window.youtrace.planning.deleteChecklistItem(item.id); await refresh() }}><X size={11} /></button></label>)}</div><div className="inline-create"><input aria-label="检查项内容" value={checkText} onChange={(event) => setCheckText(event.target.value)} /><button type="button" disabled={!checkText.trim()} onClick={async () => { await window.youtrace.planning.createChecklistItem({ taskId: task.id, text: checkText }); setCheckText(''); await refresh() }}><Plus size={12} />添加</button></div></section><section><header><Link2 size={15} /><strong>前置依赖</strong><small>未完成的前置项会显示阻塞来源</small></header><div className="dependency-list">{(dependenciesQuery.data ?? []).map((dependency) => <span key={dependency.prerequisiteTaskId}>{dependency.prerequisiteTitle}<em>{taskStatusLabels[dependency.prerequisiteStatus]}</em></span>)}</div><div className="form-row"><select aria-label="选择前置任务" value={dependencyId} onChange={(event) => setDependencyId(event.target.value)}><option value="">选择前置任务</option>{tasks.filter((candidate) => candidate.id !== task.id).map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title}</option>)}</select><input aria-label="覆盖原因" value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="强制越过时的原因" /></div><button className="text-action" disabled={!dependencyId} onClick={async () => { const result = await window.youtrace.planning.addTaskDependency({ taskId: task.id, prerequisiteTaskId: dependencyId, overrideReason: overrideReason || null }); if (!result.ok) return setError(result.error.message); setDependencyId(''); setOverrideReason(''); await refresh() }}><Plus size={12} />添加依赖</button></section><section><header><Repeat2 size={15} /><strong>周期实例</strong><small>完成后生成独立的新实例，历史不变</small></header><div className="form-row form-row-three"><select aria-label="周期频率" value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}><option value="daily">每日</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="weekdays">工作日</option><option value="interval">自定义间隔</option></select><input aria-label="周期间隔" type="number" min="1" value={intervalValue} onChange={(event) => setIntervalValue(event.target.value)} /><input aria-label="下次发生日期" type="date" value={nextOccurrence} onChange={(event) => setNextOccurrence(event.target.value)} /></div><div className="inspector-actions"><button className="button button-secondary" onClick={async () => { await window.youtrace.planning.setTaskRecurrence({ taskId: task.id, rule: null }); setNextOccurrence(''); await refresh() }}>取消周期</button><button className="button button-secondary" disabled={!nextOccurrence} onClick={async () => { const result = await window.youtrace.planning.setTaskRecurrence({ taskId: task.id, rule: { frequency, intervalValue: Number(intervalValue), weekdays: frequency === 'weekdays' ? [1, 2, 3, 4, 5] : [], nextOccurrence } }); if (!result.ok) return setError(result.error.message); await refresh() }}><Repeat2 size={12} />保存周期</button></div></section><section className="task-quick-actions"><button onClick={() => void quickUpdate({ id: task.id, status: 'blocked' })}>标为阻塞</button><button onClick={() => void quickUpdate({ id: task.id, startDate: addLocalDays(1) })}>转明日</button><button onClick={() => void quickUpdate({ id: task.id, dueAt: task.dueAt ? new Date(Date.parse(task.dueAt) + 86_400_000).toISOString() : new Date(Date.now() + 86_400_000).toISOString() })}>延期一天</button><button onClick={() => void quickUpdate({ id: task.id, includeInProgress: !task.includeInProgress })}>{task.includeInProgress ? '设为仅参考' : '纳入进度'}</button></section><div className="dialog-actions inspector-entity-actions"><button className="button button-secondary" type="button" onClick={() => onEdit(task)}><Pencil size={13} />编辑任务</button><button className="button button-danger" type="button" onClick={() => void onTrash(task)}><Trash2 size={13} />移至回收站</button></div>{error && <div className="inline-error">{error}</div>}</div>}</Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function addLocalDays(amount: number): string {
@@ -1233,6 +1489,12 @@ function addLocalDays(amount: number): string {
   date.setDate(date.getDate() + amount)
   const offset = date.getTimezoneOffset() * 60_000
   return new Date(date.getTime() - offset).toISOString().slice(0, 10)
+}
+
+function toDateTimeLocal(value: string): string {
+  const date = new Date(value)
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
 function measureLabel(value: Goal['measureType']): string {

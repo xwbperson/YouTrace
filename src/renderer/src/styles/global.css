@@ -3990,6 +3990,7 @@ kbd {
 
 .project-status-badge {
   display: inline-flex;
+  height: 36px;
   min-height: 36px;
   align-items: center;
   justify-content: center;
@@ -4000,6 +4001,7 @@ kbd {
   font-size: var(--text-sm);
   font-weight: 650;
   line-height: 1;
+  box-sizing: border-box;
 }
 
 .project-progress-mode {
@@ -4272,6 +4274,38 @@ kbd {
   grid-column: 2;
 }
 
+.entity-card-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.goal-strip .entity-card-actions {
+  grid-column: 2;
+  justify-content: flex-end;
+}
+
+.entity-card-actions button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.entity-card-actions button:hover {
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+}
+
+.entity-card-actions button:last-child:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
 .milestone-empty {
   display: flex;
   width: 100%;
@@ -4326,7 +4360,7 @@ kbd {
 .milestone-track article {
   z-index: 1;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 12px;
   min-height: 54px;
@@ -4831,6 +4865,16 @@ kbd {
   border-radius: 7px;
 }
 
+.area-list article.archived {
+  opacity: 0.72;
+}
+
+.area-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .area-list article > span {
   width: 10px;
   height: 10px;
@@ -4865,6 +4909,11 @@ kbd {
 }
 
 .area-list button:hover {
+  color: var(--trace-strong);
+  background: var(--trace-soft);
+}
+
+.area-list button.danger:hover {
   color: var(--danger);
   background: var(--danger-soft);
 }
@@ -4941,8 +4990,27 @@ kbd {
   font-size: var(--text-sm);
 }
 
-.checklist-items label > span {
+.checklist-items label > span,
+.checklist-text-input {
   flex: 1;
+}
+
+.task-inspector-body .checklist-text-input {
+  min-height: 27px;
+  padding: 3px 5px;
+  background: transparent;
+  border-color: transparent;
+  font-size: var(--text-sm);
+}
+
+.task-inspector-body .checklist-text-input:focus {
+  background: var(--canvas);
+  border-color: var(--trace);
+  outline: 0;
+}
+
+.inspector-entity-actions {
+  margin-top: 2px;
 }
 
 .checklist-items button {

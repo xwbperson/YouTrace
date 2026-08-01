@@ -72,6 +72,10 @@ export class PlanningService {
     return this.repository.getArea(input.id)!
   }
 
+  trashArea(id: string): void {
+    if (!this.repository.trashArea(id, new Date().toISOString())) throw notFound('领域')
+  }
+
   listProjects(includeArchived = false): Project[] {
     return this.repository.listProjects(includeArchived).map((row) => this.mapProject(row))
   }
@@ -134,6 +138,10 @@ export class PlanningService {
     return this.requireGoal(input.id)
   }
 
+  trashGoal(id: string): void {
+    if (!this.repository.trashGoal(id, new Date().toISOString())) throw notFound('目标')
+  }
+
   listMilestones(projectId: string): Milestone[] {
     return this.repository
       .listMilestones(projectId)
@@ -178,6 +186,10 @@ export class PlanningService {
     }
     this.repository.updateMilestone(input.id, merged, current, new Date().toISOString())
     return this.requireMilestone(input.id)
+  }
+
+  trashMilestone(id: string): void {
+    if (!this.repository.trashMilestone(id, new Date().toISOString())) throw notFound('里程碑')
   }
 
   listTasks(input: TaskListInput): Task[] {

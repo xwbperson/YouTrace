@@ -298,6 +298,91 @@ describe('workspace backup, restore and portable files', () => {
       .toEqual({ count: 0 })
   })
 
+  it('restores and permanently deletes planning hierarchy items without deleting their children', async () => {
+    const area = planning.createArea({
+      name: '待清理领域',
+      color: '#216E65',
+      icon: null,
+      description: ''
+    })
+    const project = planning.createProject({
+      areaId: area.id,
+      name: '层级关系项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const goal = planning.createGoal({
+      projectId: project.id,
+      title: '可恢复目标',
+      successCriteria: '',
+      targetDate: null,
+      measureType: 'milestone',
+      status: 'active'
+    })
+    const milestone = planning.createMilestone({
+      projectId: project.id,
+      goalId: goal.id,
+      title: '可恢复里程碑',
+      description: '',
+      plannedDate: null,
+      estimatedMinutes: null,
+      manualWeight: null,
+      mastery: null,
+      verificationCriteria: '',
+      status: 'not_started',
+      includeInProgress: true
+    })
+    const task = planning.createTask({
+      parentTaskId: null,
+      projectId: project.id,
+      goalId: goal.id,
+      milestoneId: milestone.id,
+      title: '保留的子任务',
+      description: '',
+      status: 'ready',
+      difficulty: null,
+      priority: 'medium',
+      estimatedMinutes: null,
+      progressWeight: null,
+      startDate: null,
+      dueAt: null,
+      verificationCriteria: '',
+      includeInProgress: true,
+      tagIds: []
+    })
+
+    planning.trashGoal(goal.id)
+    const goalTrash = data.listTrash().find((item) => item.entityId === goal.id)!
+    expect(goalTrash).toMatchObject({ entityType: 'goal', title: '可恢复目标' })
+    expect(data.restoreTrash(goalTrash.id).entityId).toBe(goal.id)
+    expect(planning.listGoals(project.id)).toHaveLength(1)
+
+    planning.trashGoal(goal.id)
+    planning.trashMilestone(milestone.id)
+    planning.trashArea(area.id)
+    await data.createBackup('计划层级永久删除保护点')
+    const trash = data.listTrash()
+    await data.purgeTrash(trash.find((item) => item.entityId === goal.id)!.id, '永久删除')
+    await data.purgeTrash(trash.find((item) => item.entityId === milestone.id)!.id, '永久删除')
+    await data.purgeTrash(trash.find((item) => item.entityId === area.id)!.id, '永久删除')
+
+    const database = workspaceManager.getDatabase()
+    expect(database.prepare('SELECT goal_id, milestone_id FROM tasks WHERE id = ?').get(task.id))
+      .toEqual({ goal_id: null, milestone_id: null })
+    expect(database.prepare('SELECT area_id FROM projects WHERE id = ?').get(project.id))
+      .toEqual({ area_id: null })
+    expect(database.prepare('SELECT COUNT(*) AS count FROM goals WHERE id = ?').get(goal.id))
+      .toEqual({ count: 0 })
+    expect(database.prepare('SELECT COUNT(*) AS count FROM milestones WHERE id = ?').get(milestone.id))
+      .toEqual({ count: 0 })
+    expect(database.prepare('SELECT COUNT(*) AS count FROM areas WHERE id = ?').get(area.id))
+      .toEqual({ count: 0 })
+  })
+
   it('migrates by verified copy and preserves the active source when a later target is invalid', async () => {
     createProjectAndTask('迁移保留任务')
     const originalRoot = workspaceManager.getCurrentPath()

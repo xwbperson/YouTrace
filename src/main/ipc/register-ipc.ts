@@ -279,6 +279,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:trash-area', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashArea(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('planning:list-projects', (event, rawIncludeArchived) =>
     wrap(() => {
       trusted(event)
@@ -338,6 +345,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
+  ipcMain.handle('planning:trash-goal', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashGoal(z.string().uuid().parse(rawId))
+    })
+  )
+
   ipcMain.handle('planning:list-milestones', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)
@@ -356,6 +370,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return planningService.updateMilestone(updateMilestoneInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:trash-milestone', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      planningService.trashMilestone(z.string().uuid().parse(rawId))
     })
   )
 
