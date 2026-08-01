@@ -67,7 +67,7 @@ describe('global UI legibility contract', () => {
       /\.planning-page-projects \.planning-layout\s*\{[\s\S]+?flex:\s*1 1 auto;[\s\S]+?min-height:\s*0;[\s\S]+?overflow:\s*hidden;/
     )
     expect(stylesheet).toMatch(
-      /\.planning-page-projects \.project-list\s*\{[\s\S]+?overflow-y:\s*auto;/
+      /\.planning-page-projects \.project-list\s*\{[^}]*align-content:\s*start;[^}]*overflow-y:\s*auto;/
     )
     expect(stylesheet).toMatch(
       /\.planning-page-projects \.project-workspace\s*\{[\s\S]+?overflow-y:\s*auto;/
