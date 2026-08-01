@@ -217,7 +217,7 @@ export function PlanningPage(): React.JSX.Element {
   })
 
   return (
-    <div className="planning-page">
+    <div className={`planning-page ${section === 'projects' ? 'planning-page-projects' : ''}`}>
       <header className="planning-toolbar">
         <div>
           <span className="page-kicker">从结果拆到下一步</span>
@@ -310,7 +310,7 @@ export function PlanningPage(): React.JSX.Element {
           )}
         </aside>
 
-        <main className="project-workspace panel">
+        <main key={selectedProjectId ?? 'no-project'} className="project-workspace panel">
           {!selectedProject ? (
             <div className="large-empty">
               <div className="focus-orbit">

@@ -98,6 +98,38 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*[data-scrolling='true'] {
+  scrollbar-color: color-mix(in srgb, var(--muted) 52%, transparent) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  transition: background-color 160ms ease;
+}
+
+*[data-scrolling='true']::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted) 52%, transparent);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--trace) 72%, transparent);
 }
 
 html,
@@ -3865,6 +3897,19 @@ kbd {
   padding: 30px 34px 36px;
 }
 
+.planning-page.planning-page-projects {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.planning-page-projects .planning-toolbar,
+.planning-page-projects .planning-section-tabs {
+  flex: none;
+}
+
 .planning-toolbar {
   display: flex;
   align-items: flex-end;
@@ -3894,8 +3939,22 @@ kbd {
   gap: 14px;
 }
 
+.planning-page-projects .planning-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .project-rail {
   padding: 12px;
+}
+
+.planning-page-projects .project-rail {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .rail-heading {
@@ -3974,6 +4033,15 @@ kbd {
   gap: 4px;
 }
 
+.planning-page-projects .project-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .project-list > button {
   display: grid;
   width: 100%;
@@ -4045,6 +4113,14 @@ kbd {
 .project-workspace {
   min-height: 650px;
   padding: 25px 27px;
+}
+
+.planning-page-projects .project-workspace {
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .large-empty {

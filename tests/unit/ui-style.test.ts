@@ -6,6 +6,14 @@ const stylesheet = readFileSync(
   join(process.cwd(), 'src/renderer/src/styles/global.css'),
   'utf8'
 )
+const planningPage = readFileSync(
+  join(process.cwd(), 'src/renderer/src/pages/PlanningPage.tsx'),
+  'utf8'
+)
+const appRoot = readFileSync(
+  join(process.cwd(), 'src/renderer/src/app/App.tsx'),
+  'utf8'
+)
 
 describe('global UI legibility contract', () => {
   it('does not reintroduce fixed micro text or retired color variables', () => {
@@ -46,6 +54,34 @@ describe('global UI legibility contract', () => {
     )
     expect(stylesheet).toMatch(
       /@media \(max-height:\s*760px\)\s*\{[\s\S]+?\.dialog-content\s*\{[\s\S]+?max-height:\s*calc\(100dvh - 20px\);/
+    )
+  })
+
+  it('keeps the planning project rail stable while project details scroll independently', () => {
+    expect(planningPage).toContain("section === 'projects' ? 'planning-page-projects' : ''")
+    expect(planningPage).toContain("key={selectedProjectId ?? 'no-project'}")
+    expect(stylesheet).toMatch(
+      /\.planning-page\.planning-page-projects\s*\{[\s\S]+?height:\s*100%;[\s\S]+?min-height:\s*0;[\s\S]+?overflow:\s*hidden;/
+    )
+    expect(stylesheet).toMatch(
+      /\.planning-page-projects \.planning-layout\s*\{[\s\S]+?flex:\s*1 1 auto;[\s\S]+?min-height:\s*0;[\s\S]+?overflow:\s*hidden;/
+    )
+    expect(stylesheet).toMatch(
+      /\.planning-page-projects \.project-list\s*\{[\s\S]+?overflow-y:\s*auto;/
+    )
+    expect(stylesheet).toMatch(
+      /\.planning-page-projects \.project-workspace\s*\{[\s\S]+?overflow-y:\s*auto;/
+    )
+  })
+
+  it('uses subtle auto-hiding scrollbars across application scroll regions', () => {
+    expect(appRoot).toContain("document.addEventListener('scroll', revealScrollbar, true)")
+    expect(appRoot).toContain("target.dataset.scrolling = 'true'")
+    expect(stylesheet).toMatch(
+      /\*::\-webkit-scrollbar\s*\{[\s\S]+?width:\s*8px;[\s\S]+?height:\s*8px;/
+    )
+    expect(stylesheet).toMatch(
+      /\*\[data-scrolling='true'\]::\-webkit-scrollbar-thumb[\s\S]+?background-color:\s*color-mix\(in srgb, var\(--muted\) 52%, transparent\);/
     )
   })
 })

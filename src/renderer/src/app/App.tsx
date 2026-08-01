@@ -50,6 +50,32 @@ export function App(): React.JSX.Element {
     []
   )
 
+  useEffect(() => {
+    const hideTimers = new Map<HTMLElement, number>()
+    const revealScrollbar = (event: Event): void => {
+      const target = event.target
+      if (!(target instanceof HTMLElement)) return
+      target.dataset.scrolling = 'true'
+      const existingTimer = hideTimers.get(target)
+      if (existingTimer !== undefined) window.clearTimeout(existingTimer)
+      const nextTimer = window.setTimeout(() => {
+        delete target.dataset.scrolling
+        hideTimers.delete(target)
+      }, 700)
+      hideTimers.set(target, nextTimer)
+    }
+
+    document.addEventListener('scroll', revealScrollbar, true)
+    return () => {
+      document.removeEventListener('scroll', revealScrollbar, true)
+      hideTimers.forEach((timer, target) => {
+        window.clearTimeout(timer)
+        delete target.dataset.scrolling
+      })
+      hideTimers.clear()
+    }
+  }, [])
+
   if (bootstrap.isPending) {
     return (
       <div className="app-frame">
