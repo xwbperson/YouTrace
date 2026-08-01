@@ -72,8 +72,10 @@ import {
   updateTaskInputSchema,
   updateTagInputSchema,
   updateReviewInputSchema,
+  updateProjectTemplateInputSchema,
   updatePlanInputSchema,
   updateTimeBlockInputSchema,
+  updateSavedViewInputSchema,
   userPreferencesSchema,
   type AppBootstrapState,
   type IpcResult,
@@ -559,6 +561,13 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return planningService.saveView(saveViewInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:update-saved-view', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.updateSavedView(updateSavedViewInputSchema.parse(rawInput))
     })
   )
 
@@ -1048,10 +1057,10 @@ export function registerIpc(options: RegisterIpcOptions): void {
     })
   )
 
-  ipcMain.handle('workflow:list-templates', (event) =>
+  ipcMain.handle('workflow:list-templates', (event, rawIncludeArchived) =>
     wrap(() => {
       trusted(event)
-      return workflowService.listTemplates()
+      return workflowService.listTemplates(z.boolean().optional().parse(rawIncludeArchived) ?? false)
     })
   )
 
@@ -1073,6 +1082,30 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return workflowService.saveProjectTemplate(saveProjectTemplateInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:update-project-template', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.updateProjectTemplate(updateProjectTemplateInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('workflow:archive-template', (event, rawId, rawArchived) =>
+    wrap(() => {
+      trusted(event)
+      return workflowService.archiveTemplate(
+        z.string().uuid().parse(rawId),
+        z.boolean().parse(rawArchived)
+      )
+    })
+  )
+
+  ipcMain.handle('workflow:trash-template', (event, rawId) =>
+    wrap(() => {
+      trusted(event)
+      workflowService.trashTemplate(z.string().uuid().parse(rawId))
     })
   )
 

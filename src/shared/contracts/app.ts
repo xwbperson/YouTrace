@@ -33,6 +33,7 @@ import type {
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
+  UpdateSavedViewInput,
   UpdateTagInput,
   UpdateTaskInput
 } from './planning'
@@ -103,6 +104,7 @@ import type {
   Review,
   SaveProjectTemplateInput,
   TemplatePreview,
+  UpdateProjectTemplateInput,
   UpdateReviewInput
 } from './workflow'
 import type {
@@ -273,6 +275,7 @@ export interface YouTraceApi {
     search(input: SearchInput): Promise<IpcResult<SearchResult[]>>
     listSavedViews(): Promise<IpcResult<SavedView[]>>
     saveView(input: SaveViewInput): Promise<IpcResult<SavedView>>
+    updateSavedView(input: UpdateSavedViewInput): Promise<IpcResult<SavedView>>
     deleteSavedView(id: string): Promise<IpcResult<void>>
   }
   execution: {
@@ -354,10 +357,13 @@ export interface YouTraceApi {
     updateReview(input: UpdateReviewInput): Promise<IpcResult<Review>>
     trashReview(id: string): Promise<IpcResult<void>>
     applyReviewAdjustments(input: ApplyReviewAdjustmentsInput): Promise<IpcResult<Review>>
-    listTemplates(): Promise<IpcResult<ProjectTemplate[]>>
+    listTemplates(includeArchived?: boolean): Promise<IpcResult<ProjectTemplate[]>>
     previewTemplate(input: PreviewTemplateInput): Promise<IpcResult<TemplatePreview>>
     applyTemplate(input: PreviewTemplateInput): Promise<IpcResult<AppliedTemplate>>
     saveProjectTemplate(input: SaveProjectTemplateInput): Promise<IpcResult<ProjectTemplate>>
+    updateProjectTemplate(input: UpdateProjectTemplateInput): Promise<IpcResult<ProjectTemplate>>
+    archiveTemplate(id: string, archived: boolean): Promise<IpcResult<ProjectTemplate>>
+    trashTemplate(id: string): Promise<IpcResult<void>>
   }
   reminders: {
     getSettings(): Promise<IpcResult<NotificationSettings>>

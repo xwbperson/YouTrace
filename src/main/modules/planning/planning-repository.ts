@@ -1349,12 +1349,37 @@ export class PlanningRepository {
     return this.listSavedViews().find((view) => view.id === id)!
   }
 
-  deleteSavedView(id: string, now: string): boolean {
-    return this.database()
+  getSavedView(id: string): SavedView | null {
+    return this.listSavedViews().find((view) => view.id === id) ?? null
+  }
+
+  updateSavedView(id: string, input: SaveViewInput, now: string): boolean {
+    const before = this.getSavedView(id)
+    const result = this.database()
       .prepare(
-        'UPDATE saved_views SET deleted_at = ?, updated_at = ? WHERE id = ? AND is_preset = 0 AND deleted_at IS NULL'
+        `UPDATE saved_views SET name = ?, filters_json = ?, updated_at = ?
+          WHERE id = ? AND is_preset = 0 AND deleted_at IS NULL`
       )
-      .run(now, now, id).changes > 0
+      .run(input.name, JSON.stringify(input.filters), now, id)
+    if (result.changes > 0) this.insertAudit(this.database(), 'saved_view', id, 'updated', before, input, now)
+    return result.changes > 0
+  }
+
+  deleteSavedView(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database
+        .prepare(
+          'UPDATE saved_views SET deleted_at = ?, updated_at = ? WHERE id = ? AND is_preset = 0 AND deleted_at IS NULL'
+        )
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare("INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at) VALUES (?, 'saved_view', ?, ?)")
+        .run(crypto.randomUUID(), id, now)
+      this.insertAudit(database, 'saved_view', id, 'trashed', null, null, now)
+      return true
+    })()
   }
 
   search(input: ParsedSearchInput): SearchResult[] {

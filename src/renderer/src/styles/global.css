@@ -2915,8 +2915,25 @@ kbd {
   gap: 8px;
 }
 
-.template-gallery > button {
+.template-gallery-item {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.template-gallery-item.active {
+  border-color: color-mix(in srgb, var(--trace) 35%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trace) 8%, transparent);
+}
+
+.template-gallery-item.archived .template-select {
+  opacity: 0.7;
+}
+
+.template-select {
   display: grid;
+  width: 100%;
   min-height: 105px;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -2924,14 +2941,33 @@ kbd {
   padding: 13px;
   text-align: left;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 9px;
   cursor: pointer;
 }
 
-.template-gallery > button.active {
-  border-color: color-mix(in srgb, var(--trace) 35%, var(--border));
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--trace) 8%, transparent);
+.template-gallery-item > footer {
+  display: flex;
+  gap: 12px;
+  padding: 8px 13px;
+  border-top: 1px solid var(--border);
+}
+
+.template-gallery-item > footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.template-gallery-item > footer button:hover {
+  color: var(--trace);
+}
+
+.template-gallery-item > footer button.danger {
+  color: var(--danger);
 }
 
 .template-icon {
@@ -2974,7 +3010,7 @@ kbd {
   font-style: normal;
 }
 
-.template-gallery > button > svg {
+.template-select > svg {
   color: var(--faint);
 }
 

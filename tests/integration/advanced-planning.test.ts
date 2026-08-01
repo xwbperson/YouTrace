@@ -264,6 +264,8 @@ describe('advanced planning lifecycle', () => {
         expect.objectContaining({ isPreset: true })
       ])
     )
+    const renamed = planning.updateSavedView({ id: custom.id, name: '网络高风险任务' })
+    expect(renamed).toMatchObject({ id: custom.id, name: '网络高风险任务', isPreset: false })
 
     const statsBefore = planning.getTagStats(source.id)
     expect(statsBefore.entityCounts).toMatchObject({ project: 1, task: 1 })
@@ -282,6 +284,16 @@ describe('advanced planning lifecycle', () => {
         offset: 0
       })
     ).toMatchObject([{ id: task.id }])
+
+    planning.deleteSavedView(custom.id)
+    const savedViewTrash = dataRepository.listTrash().find((item) => item.entityType === 'saved_view')!
+    expect(savedViewTrash.title).toBe('网络高风险任务')
+    expect(dataRepository.restoreTrash(savedViewTrash.id, new Date().toISOString())).not.toBeNull()
+    expect(planning.listSavedViews()).toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id })]))
+    planning.deleteSavedView(custom.id)
+    const restoredViewTrash = dataRepository.listTrash().find((item) => item.entityType === 'saved_view')!
+    expect(dataRepository.purgeTrash(restoredViewTrash.id, new Date().toISOString())).not.toBeNull()
+    expect(planning.listSavedViews()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id })]))
   })
 
   it('edits tags and moves archived tags through the trash lifecycle', () => {

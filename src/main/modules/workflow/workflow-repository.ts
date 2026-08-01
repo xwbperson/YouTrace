@@ -42,6 +42,7 @@ export interface CustomTemplateRow {
   definition_json: string
   created_at: string
   updated_at: string
+  archived_at: string | null
 }
 
 export class WorkflowRepository {
@@ -287,19 +288,19 @@ export class WorkflowRepository {
       )
   }
 
-  listCustomTemplates(): CustomTemplateRow[] {
+  listCustomTemplates(includeArchived = false): CustomTemplateRow[] {
     return this.database()
       .prepare(
-        `SELECT id, name, description, source_project_id, definition_json, created_at, updated_at
+        `SELECT id, name, description, source_project_id, definition_json, created_at, updated_at, archived_at
            FROM project_templates
-          WHERE deleted_at IS NULL AND archived_at IS NULL
+          WHERE deleted_at IS NULL ${includeArchived ? '' : 'AND archived_at IS NULL'}
           ORDER BY created_at DESC`
       )
       .all() as CustomTemplateRow[]
   }
 
-  getCustomTemplate(id: string): CustomTemplateRow | null {
-    return this.listCustomTemplates().find((template) => template.id === id) ?? null
+  getCustomTemplate(id: string, includeArchived = false): CustomTemplateRow | null {
+    return this.listCustomTemplates(includeArchived).find((template) => template.id === id) ?? null
   }
 
   insertCustomTemplate(
@@ -318,6 +319,49 @@ export class WorkflowRepository {
       )
       .run(id, name, description, projectId, JSON.stringify(definition), now, now)
     this.insertAudit(this.database(), 'template', id, 'created', { name, projectId }, now)
+  }
+
+  updateCustomTemplate(
+    id: string,
+    name: string,
+    description: string,
+    projectId: string,
+    definition: TemplateDefinition,
+    now: string
+  ): boolean {
+    const before = this.getCustomTemplate(id, true)
+    const result = this.database()
+      .prepare(
+        `UPDATE project_templates
+            SET name = ?, description = ?, source_project_id = ?, definition_json = ?, updated_at = ?
+          WHERE id = ? AND deleted_at IS NULL`
+      )
+      .run(name, description, projectId, JSON.stringify(definition), now, id)
+    if (result.changes > 0) this.insertAudit(this.database(), 'template', id, 'updated', { before, name, projectId }, now)
+    return result.changes > 0
+  }
+
+  archiveTemplate(id: string, archived: boolean, now: string): boolean {
+    const result = this.database()
+      .prepare('UPDATE project_templates SET archived_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL')
+      .run(archived ? now : null, now, id)
+    if (result.changes > 0) this.insertAudit(this.database(), 'template', id, archived ? 'archived' : 'restored_from_archive', null, now)
+    return result.changes > 0
+  }
+
+  trashTemplate(id: string, now: string): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const result = database
+        .prepare('UPDATE project_templates SET deleted_at = ?, updated_at = ? WHERE id = ? AND archived_at IS NOT NULL AND deleted_at IS NULL')
+        .run(now, now, id)
+      if (result.changes === 0) return false
+      database
+        .prepare("INSERT INTO trash_entries(id, entity_type, entity_id, deleted_at) VALUES (?, 'template', ?, ?)")
+        .run(crypto.randomUUID(), id, now)
+      this.insertAudit(database, 'template', id, 'trashed', null, now)
+      return true
+    })()
   }
 
   private insertAudit(

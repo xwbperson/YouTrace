@@ -218,5 +218,27 @@ describe('review snapshots and project templates', () => {
       templateId: custom.id,
       projectName: '新课程'
     }).milestones).toHaveLength(5)
+
+    const updated = workflow.updateProjectTemplate({
+      id: custom.id,
+      projectId: applied.project.id,
+      name: '更新后的课程结构',
+      description: '重新读取来源项目'
+    })
+    expect(updated).toMatchObject({ name: '更新后的课程结构', milestoneCount: 5, archived: false })
+    expect(workflow.archiveTemplate(custom.id, true).archived).toBe(true)
+    expect(workflow.listTemplates()).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id })]))
+    expect(workflow.listTemplates(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id, archived: true })]))
+
+    workflow.trashTemplate(custom.id)
+    const dataRepository = new DataRepository(() => workspaceManager.getDatabase())
+    const trash = dataRepository.listTrash().find((item) => item.entityType === 'template')!
+    expect(trash.title).toBe('更新后的课程结构')
+    expect(dataRepository.restoreTrash(trash.id, new Date().toISOString())).not.toBeNull()
+    expect(workflow.listTemplates(true)).toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id })]))
+    workflow.trashTemplate(custom.id)
+    const restoredTemplateTrash = dataRepository.listTrash().find((item) => item.entityType === 'template')!
+    expect(dataRepository.purgeTrash(restoredTemplateTrash.id, new Date().toISOString())).not.toBeNull()
+    expect(workflow.listTemplates(true)).not.toEqual(expect.arrayContaining([expect.objectContaining({ id: custom.id })]))
   })
 })

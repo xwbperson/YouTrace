@@ -33,6 +33,7 @@ import type {
   UpdateGoalInput,
   UpdateMilestoneInput,
   UpdateProjectInput,
+  UpdateSavedViewInput,
   UpdateTagInput,
   UpdateTaskInput
 } from '../../../shared/contracts'
@@ -428,6 +429,22 @@ export class PlanningService {
 
   saveView(input: SaveViewInput): SavedView {
     return this.repository.insertSavedView(randomUUID(), input, false, new Date().toISOString())
+  }
+
+  updateSavedView(input: UpdateSavedViewInput): SavedView {
+    const current = this.repository.getSavedView(input.id)
+    if (!current || current.isPreset) {
+      throw new YouTraceError({ code: 'SAVED_VIEW_UPDATE_DENIED', message: '预设视图不能修改，或该视图已经不存在。' })
+    }
+    if (!this.repository.updateSavedView(
+      input.id,
+      {
+        name: input.name ?? current.name,
+        filters: input.filters ?? current.filters
+      },
+      new Date().toISOString()
+    )) throw notFound('保存视图')
+    return this.repository.getSavedView(input.id)!
   }
 
   deleteSavedView(id: string): void {

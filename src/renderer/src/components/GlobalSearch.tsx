@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookmarkPlus, FileText, Filter, Layers3, Search, Tag, TimerReset, Trash2, X } from 'lucide-react'
+import { BookmarkPlus, FileText, Filter, Layers3, Pencil, Search, Tag, TimerReset, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { IpcResult, ParsedSearchInput, SearchResult } from '../../../shared/contracts'
 
@@ -32,6 +32,7 @@ export function GlobalSearch({
   const [hasEvidence, setHasEvidence] = useState('')
   const [saveName, setSaveName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingViewId, setEditingViewId] = useState('')
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -117,10 +118,13 @@ export function GlobalSearch({
   const saveView = async (): Promise<void> => {
     if (!saveName.trim()) return
     setSaving(true)
-    const result = await window.youtrace.planning.saveView({ name: saveName, filters })
+    const result = editingViewId
+      ? await window.youtrace.planning.updateSavedView({ id: editingViewId, name: saveName, filters })
+      : await window.youtrace.planning.saveView({ name: saveName, filters })
     setSaving(false)
     if (result.ok) {
       setSaveName('')
+      setEditingViewId('')
       await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
     }
   }
@@ -156,16 +160,27 @@ export function GlobalSearch({
               <span key={view.id}>
                 <button type="button" onClick={() => applyView(view.filters)}>{view.name}</button>
                 {!view.isPreset && (
-                  <button
+                  <><button
+                    type="button"
+                    aria-label={`编辑视图：${view.name}`}
+                    onClick={() => {
+                      applyView(view.filters)
+                      setSaveName(view.name)
+                      setEditingViewId(view.id)
+                    }}
+                  >
+                    <Pencil size={10} />
+                  </button><button
                     type="button"
                     aria-label={`删除视图：${view.name}`}
                     onClick={async () => {
                       await window.youtrace.planning.deleteSavedView(view.id)
+                      if (editingViewId === view.id) { setEditingViewId(''); setSaveName('') }
                       await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
                     }}
                   >
                     <Trash2 size={10} />
-                  </button>
+                  </button></>
                 )}
               </span>
             ))}
@@ -196,7 +211,8 @@ export function GlobalSearch({
             <label><input type="checkbox" checked={untaggedOnly} onChange={(event) => { setUntaggedOnly(event.target.checked); if (event.target.checked) setTagId('') }} />没有标签</label>
             <div className="search-save-view">
               <input aria-label="视图名称" value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="命名当前筛选" />
-              <button type="button" disabled={!saveName.trim() || saving} onClick={() => void saveView()}><BookmarkPlus size={13} />保存</button>
+              {editingViewId && <button type="button" onClick={() => { setEditingViewId(''); setSaveName('') }}>取消编辑</button>}
+              <button type="button" disabled={!saveName.trim() || saving} onClick={() => void saveView()}>{editingViewId ? <Pencil size={13} /> : <BookmarkPlus size={13} />}{editingViewId ? '更新' : '保存'}</button>
             </div>
           </div>
           <div className="global-search-results">

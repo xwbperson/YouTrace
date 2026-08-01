@@ -248,6 +248,8 @@ export const saveViewInputSchema = z.object({
   filters: searchInputSchema
 })
 
+export const updateSavedViewInputSchema = saveViewInputSchema.partial().extend({ id: z.string().uuid() })
+
 export const mergeTagsInputSchema = z.object({
   sourceTagId: z.string().uuid(),
   targetTagId: z.string().uuid()
@@ -457,4 +459,5 @@ export type AssignTagInput = z.infer<typeof assignTagInputSchema>
 export type SearchInput = z.input<typeof searchInputSchema>
 export type ParsedSearchInput = z.output<typeof searchInputSchema>
 export type SaveViewInput = z.infer<typeof saveViewInputSchema>
+export type UpdateSavedViewInput = z.infer<typeof updateSavedViewInputSchema>
 export type MergeTagsInput = z.infer<typeof mergeTagsInputSchema>

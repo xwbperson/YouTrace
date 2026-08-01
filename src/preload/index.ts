@@ -86,6 +86,7 @@ const api: YouTraceApi = {
     search: (input) => ipcRenderer.invoke('planning:search', input),
     listSavedViews: () => ipcRenderer.invoke('planning:list-saved-views'),
     saveView: (input) => ipcRenderer.invoke('planning:save-view', input),
+    updateSavedView: (input) => ipcRenderer.invoke('planning:update-saved-view', input),
     deleteSavedView: (id) => ipcRenderer.invoke('planning:delete-saved-view', id)
   },
   execution: {
@@ -173,10 +174,13 @@ const api: YouTraceApi = {
     trashReview: (id) => ipcRenderer.invoke('workflow:trash-review', id),
     applyReviewAdjustments: (input) =>
       ipcRenderer.invoke('workflow:apply-review-adjustments', input),
-    listTemplates: () => ipcRenderer.invoke('workflow:list-templates'),
+    listTemplates: (includeArchived) => ipcRenderer.invoke('workflow:list-templates', includeArchived),
     previewTemplate: (input) => ipcRenderer.invoke('workflow:preview-template', input),
     applyTemplate: (input) => ipcRenderer.invoke('workflow:apply-template', input),
-    saveProjectTemplate: (input) => ipcRenderer.invoke('workflow:save-project-template', input)
+    saveProjectTemplate: (input) => ipcRenderer.invoke('workflow:save-project-template', input),
+    updateProjectTemplate: (input) => ipcRenderer.invoke('workflow:update-project-template', input),
+    archiveTemplate: (id, archived) => ipcRenderer.invoke('workflow:archive-template', id, archived),
+    trashTemplate: (id) => ipcRenderer.invoke('workflow:trash-template', id)
   },
   reminders: {
     getSettings: () => ipcRenderer.invoke('reminders:get-settings'),

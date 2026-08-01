@@ -8,6 +8,7 @@ import type {
   Review,
   SaveProjectTemplateInput,
   TemplatePreview,
+  UpdateProjectTemplateInput,
   UpdateReviewInput
 } from '../../../shared/contracts'
 import { YouTraceError } from '../../../shared/errors'
@@ -185,16 +186,17 @@ export class WorkflowService {
     return this.requireReview(input.reviewId)
   }
 
-  listTemplates(): ProjectTemplate[] {
+  listTemplates(includeArchived = false): ProjectTemplate[] {
     const builtIns = Object.entries(builtInDefinitions).map(([id, template]) =>
-      describeTemplate(`builtin:${id}`, template.name, template.description, true, null, template.definition)
+      describeTemplate(`builtin:${id}`, template.name, template.description, true, false, null, template.definition)
     )
-    const custom = this.repository.listCustomTemplates().map((row) =>
+    const custom = this.repository.listCustomTemplates(includeArchived).map((row) =>
       describeTemplate(
         row.id,
         row.name,
         row.description,
         false,
+        row.archived_at !== null,
         row.source_project_id,
         JSON.parse(row.definition_json) as TemplateDefinition
       )
@@ -273,7 +275,53 @@ export class WorkflowService {
   }
 
   saveProjectTemplate(input: SaveProjectTemplateInput): ProjectTemplate {
-    const project = this.planningService.listProjects().find((item) => item.id === input.projectId)
+    const { projectId, definition } = this.buildTemplateDefinition(input.projectId)
+    const id = randomUUID()
+    this.repository.insertCustomTemplate(
+      id,
+      input.name,
+      input.description,
+      projectId,
+      definition,
+      new Date().toISOString()
+    )
+    return this.requireTemplate(id).template
+  }
+
+  updateProjectTemplate(input: UpdateProjectTemplateInput): ProjectTemplate {
+    const current = this.repository.getCustomTemplate(input.id, true)
+    if (!current) throw notFound('自定义模板')
+    const sourceProjectId = input.projectId ?? current.source_project_id
+    if (!sourceProjectId) throw notFound('来源项目')
+    const { definition } = this.buildTemplateDefinition(sourceProjectId)
+    if (!this.repository.updateCustomTemplate(
+      input.id,
+      input.name ?? current.name,
+      input.description ?? current.description,
+      sourceProjectId,
+      definition,
+      new Date().toISOString()
+    )) throw notFound('自定义模板')
+    return this.describeCustomTemplate(this.repository.getCustomTemplate(input.id, true)!)
+  }
+
+  archiveTemplate(id: string, archived: boolean): ProjectTemplate {
+    if (!this.repository.getCustomTemplate(id, true)) throw notFound('自定义模板')
+    if (!this.repository.archiveTemplate(id, archived, new Date().toISOString())) throw notFound('自定义模板')
+    return this.describeCustomTemplate(this.repository.getCustomTemplate(id, true)!)
+  }
+
+  trashTemplate(id: string): void {
+    const template = this.repository.getCustomTemplate(id, true)
+    if (!template) throw notFound('自定义模板')
+    if (template.archived_at === null) {
+      throw new YouTraceError({ code: 'TEMPLATE_NOT_ARCHIVED', message: '请先归档自定义模板，再将它移入回收站。' })
+    }
+    if (!this.repository.trashTemplate(id, new Date().toISOString())) throw notFound('自定义模板')
+  }
+
+  private buildTemplateDefinition(projectId: string): { projectId: string; definition: TemplateDefinition } {
+    const project = this.planningService.listProjects().find((item) => item.id === projectId)
     if (!project) throw notFound('项目')
     const milestones = this.planningService.listMilestones(project.id)
     const tasks = this.planningService.listTasks({
@@ -313,16 +361,7 @@ export class WorkflowService {
           }))
       })
     }
-    const id = randomUUID()
-    this.repository.insertCustomTemplate(
-      id,
-      input.name,
-      input.description,
-      project.id,
-      definition,
-      new Date().toISOString()
-    )
-    return this.requireTemplate(id).template
+    return { projectId: project.id, definition }
   }
 
   private requireReview(id: string): Review {
@@ -336,7 +375,7 @@ export class WorkflowService {
       const value = builtInDefinitions[id.slice('builtin:'.length)]
       if (!value) throw notFound('模板')
       return {
-        template: describeTemplate(id, value.name, value.description, true, null, value.definition),
+        template: describeTemplate(id, value.name, value.description, true, false, null, value.definition),
         definition: value.definition
       }
     }
@@ -344,9 +383,21 @@ export class WorkflowService {
     if (!row) throw notFound('模板')
     const definition = JSON.parse(row.definition_json) as TemplateDefinition
     return {
-      template: describeTemplate(row.id, row.name, row.description, false, row.source_project_id, definition),
+      template: describeTemplate(row.id, row.name, row.description, false, false, row.source_project_id, definition),
       definition
     }
+  }
+
+  private describeCustomTemplate(row: import('./workflow-repository').CustomTemplateRow): ProjectTemplate {
+    return describeTemplate(
+      row.id,
+      row.name,
+      row.description,
+      false,
+      row.archived_at !== null,
+      row.source_project_id,
+      JSON.parse(row.definition_json) as TemplateDefinition
+    )
   }
 }
 
@@ -355,6 +406,7 @@ function describeTemplate(
   name: string,
   description: string,
   builtIn: boolean,
+  archived: boolean,
   sourceProjectId: string | null,
   definition: TemplateDefinition
 ): ProjectTemplate {
@@ -363,6 +415,7 @@ function describeTemplate(
     name,
     description,
     builtIn,
+    archived,
     sourceProjectId,
     milestoneCount: definition.milestones.length,
     taskCount: definition.milestones.reduce((sum, milestone) => sum + milestone.tasks.length, 0)

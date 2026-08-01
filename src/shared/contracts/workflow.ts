@@ -54,6 +54,10 @@ export const saveProjectTemplateInputSchema = z.object({
   description: z.string().max(5_000).default('')
 })
 
+export const updateProjectTemplateInputSchema = saveProjectTemplateInputSchema.partial().extend({
+  id: z.string().uuid()
+})
+
 export interface ReviewSnapshot {
   generatedAt: string
   period: { startDate: string; endDate: string }
@@ -92,6 +96,7 @@ export interface ProjectTemplate {
   name: string
   description: string
   builtIn: boolean
+  archived: boolean
   sourceProjectId: string | null
   milestoneCount: number
   taskCount: number
@@ -111,6 +116,7 @@ export type UpdateReviewInput = z.infer<typeof updateReviewInputSchema>
 export type ApplyReviewAdjustmentsInput = z.infer<typeof applyReviewAdjustmentsInputSchema>
 export type PreviewTemplateInput = z.infer<typeof previewTemplateInputSchema>
 export type SaveProjectTemplateInput = z.infer<typeof saveProjectTemplateInputSchema>
+export type UpdateProjectTemplateInput = z.infer<typeof updateProjectTemplateInputSchema>
 
 export interface AppliedTemplate {
   project: Project
