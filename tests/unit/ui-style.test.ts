@@ -24,4 +24,28 @@ describe('global UI legibility contract', () => {
       /textarea:focus-visible,[\s\S]+?select:focus-visible[\s\S]+?box-shadow:\s*0 0 0 3px var\(--trace-soft\);/
     )
   })
+
+  it('keeps dialogs and their actions reachable in short windows', () => {
+    expect(stylesheet).toMatch(
+      /\.dialog-content\s*\{[\s\S]+?display:\s*flex;[\s\S]+?max-height:\s*calc\(100dvh - 32px\);[\s\S]+?overflow:\s*hidden;/
+    )
+    expect(stylesheet).toMatch(
+      /\.dialog-content > \.dialog-form\s*\{[\s\S]+?flex:\s*1 1 auto;[\s\S]+?min-height:\s*0;[\s\S]+?overflow-y:\s*auto;/
+    )
+    expect(stylesheet).toMatch(
+      /\.task-inspector-body\s*\{[\s\S]+?flex:\s*1 1 auto;[\s\S]+?overflow-y:\s*auto;/
+    )
+    expect(stylesheet).toMatch(
+      /\.dialog-actions\.inspector-entity-actions\s*\{[\s\S]+?position:\s*absolute;[\s\S]+?bottom:\s*24px;/
+    )
+    expect(stylesheet).toMatch(
+      /\.dialog-actions\s*\{[\s\S]+?flex:\s*none;/
+    )
+    expect(stylesheet).toMatch(
+      /\.workspace-disconnect-actions\s*\{[\s\S]+?position:\s*sticky;[\s\S]+?bottom:\s*0;/
+    )
+    expect(stylesheet).toMatch(
+      /@media \(max-height:\s*760px\)\s*\{[\s\S]+?\.dialog-content\s*\{[\s\S]+?max-height:\s*calc\(100dvh - 20px\);/
+    )
+  })
 })

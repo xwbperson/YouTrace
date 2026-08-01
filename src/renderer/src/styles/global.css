@@ -239,6 +239,7 @@ button:disabled {
   display: grid;
   width: min(620px, 100%);
   max-height: calc(100vh - 48px);
+  max-height: calc(100dvh - 48px);
   gap: 18px;
   padding: 25px;
   overflow: auto;
@@ -337,10 +338,15 @@ button:disabled {
 }
 
 .workspace-disconnect-actions {
+  position: sticky;
+  z-index: 1;
+  bottom: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 9px;
+  padding-top: 10px;
+  background: var(--surface);
 }
 
 .migration-recovery-dialog {
@@ -5061,8 +5067,13 @@ kbd {
   z-index: 201;
   top: 50%;
   left: 50%;
+  display: flex;
   width: min(540px, calc(100vw - 48px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  flex-direction: column;
   padding: 24px;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -5102,6 +5113,7 @@ kbd {
 
 .dialog-heading {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
@@ -5141,6 +5153,15 @@ kbd {
   display: grid;
   gap: 15px;
   margin-top: 24px;
+}
+
+.dialog-content > .dialog-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .dialog-form label {
@@ -5266,13 +5287,19 @@ kbd {
 }
 
 .task-inspector {
-  max-height: min(820px, calc(100vh - 54px));
-  overflow-y: auto;
+  max-height: min(820px, calc(100vh - 32px));
+  max-height: min(820px, calc(100dvh - 32px));
 }
 
 .task-inspector-body {
   display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 10px;
+  padding: 0 4px 84px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   margin-top: 20px;
 }
 
@@ -5356,8 +5383,14 @@ kbd {
   outline: 0;
 }
 
-.inspector-entity-actions {
-  margin-top: 2px;
+.dialog-actions.inspector-entity-actions {
+  position: absolute;
+  z-index: 1;
+  right: 24px;
+  bottom: 24px;
+  left: 24px;
+  margin-top: 0;
+  background: var(--surface);
 }
 
 .checklist-items button {
@@ -5482,11 +5515,52 @@ kbd {
 
 .dialog-actions {
   display: flex;
+  flex: none;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 24px;
   padding-top: 16px;
   border-top: 1px solid var(--border);
+}
+
+@media (max-height: 760px) {
+  .dialog-content {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
+    padding: 16px 18px;
+  }
+
+  .dialog-form {
+    gap: 11px;
+    margin-top: 15px;
+  }
+
+  .dialog-actions {
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+
+  .task-inspector-body {
+    margin-top: 14px;
+    padding-bottom: 68px;
+  }
+
+  .dialog-actions.inspector-entity-actions {
+    right: 18px;
+    bottom: 16px;
+    left: 18px;
+  }
+
+  .workspace-disconnect-overlay {
+    padding: 10px;
+  }
+
+  .workspace-disconnect-dialog {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
+    gap: 12px;
+    padding: 16px 18px;
+  }
 }
 
 @keyframes dialog-fade {
