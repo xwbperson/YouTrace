@@ -17,15 +17,15 @@
 
 Windows 10/11 x64 用户可直接下载：
 
-- [有迹 v1.0.5 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.5/YouTrace-1.0.5-Setup.exe)
-- [有迹 v1.0.5 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.5/YouTrace-1.0.5-Portable.exe)
+- [有迹 v1.0.6 安装版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.6/YouTrace-1.0.6-Setup.exe)
+- [有迹 v1.0.6 便携版](https://github.com/xwbperson/YouTrace/releases/download/v1.0.6/YouTrace-1.0.6-Portable.exe)
 
 安装包目前没有 Authenticode 数字签名，Windows SmartScreen 可能显示“未知发布者”。
 
 | 文件 | SHA-256 |
 |---|---|
-| `YouTrace-1.0.5-Setup.exe` | `E664806843C1486E28AAD9A8EA839A179B00CC2729EA8B1AA747D5D9D516D276` |
-| `YouTrace-1.0.5-Portable.exe` | `E8731BC5F7F65C893621F870B6B6403EFBF88A427EEB38A76F5ED295B70F4A45` |
+| `YouTrace-1.0.6-Setup.exe` | `01E4C0D4AA0F33CB7E341C396A6862F471A7BD103F66033F8A592C064BFFF335` |
+| `YouTrace-1.0.6-Portable.exe` | `C7B01D80878EB04FAABF9FC63A12F5F49C69C57AC5A6D439031711245AE444BE` |
 
 ## 快速开始
 
