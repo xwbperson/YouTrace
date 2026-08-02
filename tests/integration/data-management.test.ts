@@ -90,6 +90,50 @@ function createProjectAndTask(taskTitle: string): { projectId: string; taskId: s
 }
 
 describe('workspace backup, restore and portable files', () => {
+  it('copies multiple course material attachments into the workspace and reopens them', async () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '课程附件项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const course = practice.createCourse({
+      projectId: project.id,
+      courseName: '课程附件测试',
+      examDate: null,
+      textbook: { title: '主教材', author: '', edition: '', isbn: '', publisher: '' }
+    })
+    const material = practice.createCourseMaterial({
+      courseId: course.id,
+      materialType: 'notes',
+      title: '章节笔记',
+      author: '',
+      edition: '',
+      isbn: '',
+      publisher: '',
+      description: ''
+    })
+    const original = join(fixtureRoot, 'chapter-note.md')
+    await writeFile(original, '# chapter note', 'utf8')
+
+    const first = await data.attachCourseMaterialFile(original, material.id)
+    const second = await data.attachCourseMaterialFile(original, material.id)
+
+    expect(first.relativePath).toMatch(/^attachments\/course-materials\//)
+    expect(second).toMatchObject({ id: first.id, reused: true })
+    expect(await readFile(join(sourceRoot, first.relativePath), 'utf8')).toBe('# chapter note')
+    expect(data.listCourseMaterialAttachments(material.id)).toEqual([
+      expect.objectContaining({ id: first.id, originalName: 'chapter-note.md' })
+    ])
+    expect(data.getCourseMaterialAttachmentOpenTarget(first.id)).toBe(
+      join(sourceRoot, first.relativePath)
+    )
+  })
+
   it('imports an optional attachment for text evidence without losing its source', async () => {
     const sourceFile = join(fixtureRoot, 'reading-note.md')
     await writeFile(sourceFile, '# reading note', 'utf8')
@@ -211,7 +255,7 @@ describe('workspace backup, restore and portable files', () => {
     expect(verification).toMatchObject({
       valid: true,
       workspaceId: workspaceManager.getCurrent()!.id,
-      schemaVersion: 12
+      schemaVersion: 13
     })
     planning.createTask({
       parentTaskId: null,

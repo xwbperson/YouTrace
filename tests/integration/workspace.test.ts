@@ -56,7 +56,7 @@ describe('workspace lifecycle', () => {
       .get() as { name: string } | undefined
     database.close()
 
-    expect(migration.version).toBe(12)
+    expect(migration.version).toBe(13)
     expect(searchTable?.name).toBe('searchable_content')
 
     const bootstrapContents = await readFile(join(userDataRoot, 'bootstrap.json'), 'utf8')
@@ -80,7 +80,7 @@ describe('workspace lifecycle', () => {
   })
 
   it('upgrades a schema v9 workspace for recoverable deletion and milestone importance', async () => {
-    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v12-test-'))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v13-test-'))
     const databasePath = join(fixtureRoot, 'youtrace.sqlite3')
     const legacy = new Database(databasePath)
     legacy.exec(`
@@ -120,6 +120,7 @@ describe('workspace lifecycle', () => {
       const columns = migrated.pragma('table_info(reviews)') as Array<{ name: string }>
       const courseColumns = migrated.pragma('table_info(course_profiles)') as Array<{ name: string }>
       const milestoneColumns = migrated.pragma('table_info(milestones)') as Array<{ name: string }>
+      const textbookColumns = migrated.pragma('table_info(textbooks)') as Array<{ name: string }>
       const legacyMilestone = migrated
         .prepare('SELECT importance_rating FROM milestones WHERE id = ?')
         .get('legacy-milestone') as { importance_rating: number | null }
@@ -129,8 +130,11 @@ describe('workspace lifecycle', () => {
       expect(columns.map((column) => column.name)).toContain('deleted_at')
       expect(courseColumns.map((column) => column.name)).toEqual(expect.arrayContaining(['archived_at', 'deleted_at']))
       expect(milestoneColumns.map((column) => column.name)).toContain('importance_rating')
+      expect(textbookColumns.map((column) => column.name)).toEqual(
+        expect.arrayContaining(['material_type', 'description'])
+      )
       expect(legacyMilestone.importance_rating).toBeNull()
-      expect(version.version).toBe(12)
+      expect(version.version).toBe(13)
     } finally {
       manager.close()
     }

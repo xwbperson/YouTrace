@@ -60,6 +60,8 @@ import type {
 } from './execution'
 import type {
   Course,
+  CourseMaterial,
+  CreateCourseMaterialInput,
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
@@ -77,6 +79,7 @@ import type {
   RecordReviewResultInput,
   ReviewQueueItem,
   UpdateCourseInput,
+  UpdateCourseMaterialInput,
   UpdateHabitInput,
   UpdateKnowledgeInput,
   UpdateLearningTestInput,
@@ -328,6 +331,9 @@ export interface YouTraceApi {
     createCourse(input: CreateCourseInput): Promise<IpcResult<Course>>
     updateCourse(input: UpdateCourseInput): Promise<IpcResult<Course>>
     trashCourse(id: string): Promise<IpcResult<void>>
+    listCourseMaterials(courseId: string): Promise<IpcResult<CourseMaterial[]>>
+    createCourseMaterial(input: CreateCourseMaterialInput): Promise<IpcResult<CourseMaterial>>
+    updateCourseMaterial(input: UpdateCourseMaterialInput): Promise<IpcResult<CourseMaterial>>
     listKnowledge(projectId: string): Promise<IpcResult<KnowledgeItem[]>>
     createKnowledge(input: CreateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
     updateKnowledge(input: UpdateKnowledgeInput): Promise<IpcResult<KnowledgeItem>>
@@ -414,6 +420,12 @@ export interface YouTraceApi {
     ): Promise<IpcResult<ImportedEvidence['attachment']>>
     listEvidenceAttachments(evidenceId: string): Promise<IpcResult<EvidenceAttachment[]>>
     openEvidenceAttachment(attachmentId: string): Promise<IpcResult<void>>
+    attachDroppedCourseMaterialFile(
+      file: File,
+      materialId: string
+    ): Promise<IpcResult<EvidenceAttachment & { reused: boolean }>>
+    listCourseMaterialAttachments(materialId: string): Promise<IpcResult<EvidenceAttachment[]>>
+    openCourseMaterialAttachment(attachmentId: string): Promise<IpcResult<void>>
     listTrash(): Promise<IpcResult<TrashItem[]>>
     restoreTrash(input: TrashActionInput): Promise<IpcResult<TrashItem>>
     purgeTrash(input: TrashActionInput): Promise<IpcResult<void>>

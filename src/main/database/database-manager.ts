@@ -72,6 +72,8 @@ export class DatabaseManager {
       ensureColumn(database, 'reviews', 'deleted_at', 'TEXT')
       ensureColumn(database, 'course_profiles', 'archived_at', 'TEXT')
       ensureColumn(database, 'course_profiles', 'deleted_at', 'TEXT')
+      ensureColumn(database, 'textbooks', 'material_type', "TEXT NOT NULL DEFAULT 'textbook'")
+      ensureColumn(database, 'textbooks', 'description', "TEXT NOT NULL DEFAULT ''")
       ensureColumn(
         database,
         'milestones',

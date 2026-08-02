@@ -190,4 +190,66 @@ describe('habit, metric and course practice service', () => {
       planning.search({ query: '分层体系', entityTypes: ['knowledge'], limit: 20 })[0]
     ).toMatchObject({ entityType: 'knowledge', title: '分层体系结构' })
   })
+
+  it('keeps multiple material entries under one course and preserves the primary textbook', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '密码学课程',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const course = practice.createCourse({
+      projectId: project.id,
+      courseName: '现代密码学',
+      examDate: null,
+      textbook: {
+        title: '现代密码学教程',
+        author: 'Alice',
+        edition: '第 2 版',
+        isbn: '',
+        publisher: ''
+      }
+    })
+
+    const notes = practice.createCourseMaterial({
+      courseId: course.id,
+      materialType: 'notes',
+      title: '课堂笔记',
+      author: '我',
+      edition: '',
+      isbn: '',
+      publisher: '',
+      description: '按章节整理的课堂记录'
+    })
+    const paper = practice.createCourseMaterial({
+      courseId: course.id,
+      materialType: 'paper',
+      title: '课程论文原文',
+      author: 'Bob',
+      edition: '',
+      isbn: '',
+      publisher: '',
+      description: '扩展阅读'
+    })
+    const updated = practice.updateCourseMaterial({
+      id: notes.id,
+      description: '已按里程碑整理'
+    })
+
+    expect(updated.description).toBe('已按里程碑整理')
+    expect(practice.listCourseMaterials(course.id)).toMatchObject([
+      { title: '现代密码学教程', materialType: 'textbook' },
+      { id: notes.id, title: '课堂笔记', materialType: 'notes' },
+      { id: paper.id, title: '课程论文原文', materialType: 'paper' }
+    ])
+    expect(practice.listCourses()[0]).toMatchObject({
+      id: course.id,
+      materialCount: 3,
+      textbook: { title: '现代密码学教程' }
+    })
+  })
 })

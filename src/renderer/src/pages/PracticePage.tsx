@@ -8,16 +8,21 @@ import {
   Circle,
   Flame,
   Gauge,
+  FileText,
+  Paperclip,
   Pencil,
   Plus,
   RotateCcw,
   Target,
   Trash2,
+  Upload,
   X
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   Course,
+  CourseMaterial,
+  CreateCourseMaterialInput,
   CreateCourseInput,
   CreateHabitInput,
   CreateKnowledgeInput,
@@ -32,7 +37,8 @@ import type {
   Metric,
   MetricEntry,
   Mistake,
-  Project
+  Project,
+  EvidenceAttachment
 } from '../../../shared/contracts'
 
 type PracticeView = 'habits' | 'metrics' | 'learning'
@@ -62,6 +68,8 @@ export function PracticePage(): React.JSX.Element {
   const [editingMetric, setEditingMetric] = useState<Metric | null>(null)
   const [courseDialogOpen, setCourseDialogOpen] = useState(false)
   const [editingCourse, setEditingCourse] = useState<Course | null>(null)
+  const [materialDialogOpen, setMaterialDialogOpen] = useState(false)
+  const [editingMaterial, setEditingMaterial] = useState<CourseMaterial | null>(null)
   const [metricToRecord, setMetricToRecord] = useState<Metric | null>(null)
   const [knowledgeDialogOpen, setKnowledgeDialogOpen] = useState(false)
   const [editingKnowledge, setEditingKnowledge] = useState<KnowledgeItem | null>(null)
@@ -108,6 +116,13 @@ export function PracticePage(): React.JSX.Element {
     }
   }, [courses, selectedCourseId])
   const selectedCourse = courses.find((course) => course.id === selectedCourseId) ?? null
+
+  const courseMaterialsQuery = useQuery({
+    queryKey: ['course-materials', selectedCourse?.id],
+    enabled: selectedCourse !== null,
+    queryFn: async () =>
+      unwrap(await window.youtrace.practice.listCourseMaterials(selectedCourse!.id))
+  })
 
   const knowledgeQuery = useQuery({
     queryKey: ['knowledge', selectedCourse?.projectId],
@@ -361,6 +376,10 @@ export function PracticePage(): React.JSX.Element {
           ) : (
             <div className="learning-layout">
               <aside className="course-rail">
+                <div className="course-rail-heading">
+                  <span>按课程筛选资料</span>
+                  <strong>{courses.length}</strong>
+                </div>
                 {courses.map((course) => (
                   <button
                     type="button"
@@ -370,7 +389,7 @@ export function PracticePage(): React.JSX.Element {
                   >
                     <strong>{course.courseName}</strong>
                     <span>
-                      {course.knowledgeCount} 知识 · {course.mistakeCount} 错题
+                      {course.materialCount} 资料 · {course.knowledgeCount} 知识 · {course.mistakeCount} 错题
                     </span>
                     {course.pendingReviewCount > 0 && <em>{course.pendingReviewCount} 待复习</em>}
                   </button>
@@ -400,6 +419,18 @@ export function PracticePage(): React.JSX.Element {
                        <button className="button button-danger" type="button" onClick={async () => { await window.youtrace.practice.trashCourse(selectedCourse.id); await queryClient.invalidateQueries({ queryKey: ['courses'] }) }}><Trash2 size={14} />删除课程</button>
                     </div>
                   </header>
+                  <CourseMaterialsSection
+                    course={selectedCourse}
+                    materials={courseMaterialsQuery.data ?? []}
+                    onCreate={() => {
+                      setEditingMaterial(null)
+                      setMaterialDialogOpen(true)
+                    }}
+                    onEdit={(material) => {
+                      setEditingMaterial(material)
+                      setMaterialDialogOpen(true)
+                    }}
+                  />
                   <div className="learning-columns">
                     <section>
                       <div className="learning-heading">
@@ -487,6 +518,21 @@ export function PracticePage(): React.JSX.Element {
           await queryClient.invalidateQueries({ queryKey: ['courses'] })
         }}
       />
+      <CourseMaterialDialog
+        open={materialDialogOpen}
+        onOpenChange={(open) => {
+          setMaterialDialogOpen(open)
+          if (!open) setEditingMaterial(null)
+        }}
+        course={selectedCourse}
+        material={editingMaterial}
+        onSaved={async () => {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['course-materials'] }),
+            queryClient.invalidateQueries({ queryKey: ['courses'] })
+          ])
+        }}
+      />
       <MetricRecordDialog
         metric={metricToRecord}
         onOpenChange={(open) => {
@@ -552,6 +598,186 @@ function PracticeEmpty(props: {
       </button>
     </div>
   )
+}
+
+const courseMaterialLabels: Record<CourseMaterial['materialType'], string> = {
+  textbook: '教材',
+  reference: '参考书',
+  slides: '课件',
+  paper: '原文 / 论文',
+  notes: '笔记',
+  exercises: '习题资料',
+  other: '其他资料'
+}
+
+function CourseMaterialsSection(props: {
+  course: Course
+  materials: CourseMaterial[]
+  onCreate: () => void
+  onEdit: (material: CourseMaterial) => void
+}): React.JSX.Element {
+  return (
+    <section className="course-materials-section">
+      <header>
+        <div>
+          <span className="section-label">当前课程的全部条目</span>
+          <h4>学习资料</h4>
+          <p>教材、原文、课件和笔记分别建条目；附件会复制到工作区，双击文件即可打开。</p>
+        </div>
+        <button className="button button-secondary" type="button" onClick={props.onCreate}>
+          <Plus size={14} />
+          添加资料条目
+        </button>
+      </header>
+      <div className="course-material-grid">
+        {props.materials.map((material) => (
+          <article className="course-material-card" key={material.id}>
+            <header>
+              <div>
+                <span>{courseMaterialLabels[material.materialType]}</span>
+                <strong>{material.title}</strong>
+              </div>
+              <button
+                type="button"
+                aria-label={`编辑课程资料：${material.title}`}
+                onClick={() => props.onEdit(material)}
+              >
+                <Pencil size={14} />
+              </button>
+            </header>
+            {(material.author || material.edition || material.publisher || material.isbn) && (
+              <p className="course-material-meta">
+                {[material.author, material.edition, material.publisher, material.isbn]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+            {material.description && <p className="course-material-description">{material.description}</p>}
+            <CourseMaterialAttachments material={material} />
+          </article>
+        ))}
+        {props.materials.length === 0 && (
+          <p className="course-material-empty">这门课程还没有资料条目。</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function CourseMaterialAttachments(props: { material: CourseMaterial }): React.JSX.Element {
+  const queryClient = useQueryClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const attachmentsQuery = useQuery({
+    queryKey: ['course-material-attachments', props.material.id],
+    queryFn: async () =>
+      unwrap(await window.youtrace.data.listCourseMaterialAttachments(props.material.id))
+  })
+
+  const upload = async (files: File[]): Promise<void> => {
+    if (files.length === 0 || uploading) return
+    setUploading(true)
+    setError('')
+    try {
+      for (const file of files) {
+        unwrap(await window.youtrace.data.attachDroppedCourseMaterialFile(file, props.material.id))
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['course-material-attachments', props.material.id]
+        }),
+        queryClient.invalidateQueries({ queryKey: ['course-materials'] })
+      ])
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : '附件导入失败。')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const attachments = attachmentsQuery.data ?? []
+  return (
+    <div className="course-material-attachments">
+      <div
+        className={`course-material-dropzone${dragActive ? ' active' : ''}`}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault()
+          setDragActive(true)
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+        }}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragActive(false)
+          void upload(Array.from(event.dataTransfer.files))
+        }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') inputRef.current?.click()
+        }}
+      >
+        <Upload size={14} />
+        <span>{uploading ? '正在复制…' : '点击或拖拽添加多个附件'}</span>
+        <input
+          ref={inputRef}
+          hidden
+          multiple
+          type="file"
+          onChange={(event) => {
+            void upload(Array.from(event.target.files ?? []))
+            event.target.value = ''
+          }}
+        />
+      </div>
+      {attachments.length > 0 && (
+        <div className="course-material-file-list">
+          {attachments.map((attachment) => (
+            <CourseMaterialAttachmentButton key={attachment.id} attachment={attachment} />
+          ))}
+        </div>
+      )}
+      {attachments.length === 0 && !attachmentsQuery.isLoading && (
+        <span className="course-material-no-files">暂无附件</span>
+      )}
+      {error && <div className="inline-error">{error}</div>}
+    </div>
+  )
+}
+
+function CourseMaterialAttachmentButton(props: {
+  attachment: EvidenceAttachment
+}): React.JSX.Element {
+  const [error, setError] = useState('')
+  const open = async (): Promise<void> => {
+    const result = await window.youtrace.data.openCourseMaterialAttachment(props.attachment.id)
+    if (!result.ok) setError(result.error.message)
+  }
+  return (
+    <>
+      <button
+        type="button"
+        title="双击使用系统默认程序打开"
+        onDoubleClick={() => void open()}
+      >
+        <FileText size={14} />
+        <span>{props.attachment.originalName}</span>
+        <small>{formatFileSize(props.attachment.sizeBytes)}</small>
+      </button>
+      {error && <span className="course-material-file-error">{error}</span>}
+    </>
+  )
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`
+  if (bytes < 1_024 * 1_024) return `${(bytes / 1_024).toFixed(1)} KB`
+  return `${(bytes / (1_024 * 1_024)).toFixed(1)} MB`
 }
 
 interface DialogFrameProps {
@@ -904,18 +1130,143 @@ function CourseDialog(props: {
     props.onOpenChange(false)
   }
   return (
-    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="把学习资料接到项目" title={props.course ? '编辑课程' : '建立课程'} description="每门课程关联一个项目，并保留独立的教材档案。">
+    <DialogFrame open={props.open} onOpenChange={props.onOpenChange} kicker="把学习资料接到项目" title={props.course ? '编辑课程' : '建立课程'} description="每门课程关联一个项目；建立后可继续添加教材、原文、课件和笔记等多个资料条目。">
       <div className="dialog-form">
         {props.projects.length === 0 ? <div className="inline-error">请先在“项目任务”中创建一个项目。</div> : <>
           <label><span>关联项目</span><select value={projectId} onChange={(event) => setProjectId(event.target.value)}>{props.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
           <label><span>课程名称</span><input autoFocus value={courseName} onChange={(event) => setCourseName(event.target.value)} placeholder="例如：计算机网络" /></label>
-          <div className="form-row"><label><span>教材名称</span><input value={textbookTitle} onChange={(event) => setTextbookTitle(event.target.value)} placeholder="教材或主要资料" /></label><label><span>考试日期</span><input type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label></div>
+          <div className="form-row"><label><span>主教材 / 首份资料</span><input value={textbookTitle} onChange={(event) => setTextbookTitle(event.target.value)} placeholder="建立课程后还可继续添加资料" /></label><label><span>考试日期</span><input type="date" value={examDate} onChange={(event) => setExamDate(event.target.value)} /></label></div>
           <div className="form-row"><label><span>作者</span><input value={author} onChange={(event) => setAuthor(event.target.value)} /></label><label><span>版本</span><input value={edition} onChange={(event) => setEdition(event.target.value)} /></label></div>
           <div className="form-row"><label><span>ISBN</span><input value={isbn} onChange={(event) => setIsbn(event.target.value)} /></label><label><span>出版社</span><input value={publisher} onChange={(event) => setPublisher(event.target.value)} /></label></div>
         </>}
         {error && <div className="inline-error">{error}</div>}
       </div>
       <div className="dialog-actions"><Dialog.Close className="button button-secondary">取消</Dialog.Close><button className="button button-primary" disabled={!projectId || !courseName.trim() || !textbookTitle.trim()} onClick={() => void submit()}>{props.course ? '保存修改' : '建立课程'}</button></div>
+    </DialogFrame>
+  )
+}
+
+function CourseMaterialDialog(props: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  course: Course | null
+  material: CourseMaterial | null
+  onSaved: () => Promise<void>
+}): React.JSX.Element {
+  const [materialType, setMaterialType] = useState<CourseMaterial['materialType']>('other')
+  const [title, setTitle] = useState('')
+  const [author, setAuthor] = useState('')
+  const [edition, setEdition] = useState('')
+  const [isbn, setIsbn] = useState('')
+  const [publisher, setPublisher] = useState('')
+  const [description, setDescription] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    if (!props.open) return
+    setMaterialType(props.material?.materialType ?? 'other')
+    setTitle(props.material?.title ?? '')
+    setAuthor(props.material?.author ?? '')
+    setEdition(props.material?.edition ?? '')
+    setIsbn(props.material?.isbn ?? '')
+    setPublisher(props.material?.publisher ?? '')
+    setDescription(props.material?.description ?? '')
+    setError('')
+    setSaving(false)
+  }, [props.open, props.material])
+
+  const submit = async (): Promise<void> => {
+    if (!props.course || saving) return
+    setSaving(true)
+    setError('')
+    const input: CreateCourseMaterialInput = {
+      courseId: props.course.id,
+      materialType,
+      title,
+      author,
+      edition,
+      isbn,
+      publisher,
+      description
+    }
+    const result = props.material
+      ? await window.youtrace.practice.updateCourseMaterial({ id: props.material.id, ...input })
+      : await window.youtrace.practice.createCourseMaterial(input)
+    if (!result.ok) {
+      setError(result.error.message)
+      setSaving(false)
+      return
+    }
+    await props.onSaved()
+    props.onOpenChange(false)
+  }
+
+  return (
+    <DialogFrame
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      kicker={props.course?.courseName ?? '课程学习'}
+      title={props.material ? '编辑资料条目' : '添加资料条目'}
+      description="一个课程可以有多个资料条目；保存后可在条目卡片中点击或拖拽添加多个附件。"
+    >
+      <div className="dialog-form">
+        <div className="form-row">
+          <label>
+            <span>资料类型</span>
+            <select
+              value={materialType}
+              onChange={(event) =>
+                setMaterialType(event.target.value as CourseMaterial['materialType'])
+              }
+            >
+              {Object.entries(courseMaterialLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>资料名称</span>
+            <input
+              autoFocus
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="例如：第 8 版教材原文"
+            />
+          </label>
+        </div>
+        <div className="form-row">
+          <label><span>作者 / 整理人</span><input value={author} onChange={(event) => setAuthor(event.target.value)} /></label>
+          <label><span>版本</span><input value={edition} onChange={(event) => setEdition(event.target.value)} /></label>
+        </div>
+        <div className="form-row">
+          <label><span>ISBN</span><input value={isbn} onChange={(event) => setIsbn(event.target.value)} /></label>
+          <label><span>出版社 / 来源</span><input value={publisher} onChange={(event) => setPublisher(event.target.value)} /></label>
+        </div>
+        <label>
+          <span>说明</span>
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="记录用途、覆盖章节、笔记状态或其他说明。"
+          />
+        </label>
+        <div className="course-material-dialog-tip">
+          <Paperclip size={15} />
+          <span>保存后，附件会复制到工作区的 attachments/course-materials 文件夹。</span>
+        </div>
+        {error && <div className="inline-error">{error}</div>}
+      </div>
+      <div className="dialog-actions">
+        <Dialog.Close className="button button-secondary">取消</Dialog.Close>
+        <button
+          className="button button-primary"
+          type="button"
+          disabled={!props.course || !title.trim() || saving}
+          onClick={() => void submit()}
+        >
+          {saving ? '保存中…' : props.material ? '保存修改' : '添加资料'}
+        </button>
+      </div>
     </DialogFrame>
   )
 }

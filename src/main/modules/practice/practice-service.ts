@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type {
   Course,
+  CourseMaterial,
+  CreateCourseMaterialInput,
   CreateLearningTestInput,
   CreateCourseInput,
   CreateHabitInput,
@@ -18,6 +20,7 @@ import type {
   RecordReviewResultInput,
   ReviewQueueItem,
   UpdateCourseInput,
+  UpdateCourseMaterialInput,
   UpdateHabitInput,
   UpdateKnowledgeInput,
   UpdateLearningTestInput,
@@ -186,6 +189,40 @@ export class PracticeService {
 
   trashCourse(id: string): void {
     if (!this.repository.trashCourse(id, new Date().toISOString())) throw notFound('课程')
+  }
+
+  listCourseMaterials(courseId: string): CourseMaterial[] {
+    if (!this.repository.getCourse(courseId)) throw notFound('课程')
+    return this.repository.listCourseMaterials(courseId)
+  }
+
+  createCourseMaterial(input: CreateCourseMaterialInput): CourseMaterial {
+    if (!this.repository.getCourse(input.courseId)) throw notFound('课程')
+    const id = randomUUID()
+    this.repository.insertCourseMaterial(id, input, new Date().toISOString())
+    const material = this.repository.getCourseMaterial(id)
+    if (!material) throw notFound('课程资料')
+    return material
+  }
+
+  updateCourseMaterial(input: UpdateCourseMaterialInput): CourseMaterial {
+    const current = this.repository.getCourseMaterial(input.id)
+    if (!current) throw notFound('课程资料')
+    const merged: CreateCourseMaterialInput = {
+      courseId: input.courseId ?? current.courseId,
+      materialType: input.materialType ?? current.materialType,
+      title: input.title ?? current.title,
+      author: input.author ?? current.author,
+      edition: input.edition ?? current.edition,
+      isbn: input.isbn ?? current.isbn,
+      publisher: input.publisher ?? current.publisher,
+      description: input.description ?? current.description
+    }
+    if (!this.repository.getCourse(merged.courseId)) throw notFound('课程')
+    if (!this.repository.updateCourseMaterial(input.id, merged, new Date().toISOString())) {
+      throw notFound('课程资料')
+    }
+    return this.repository.getCourseMaterial(input.id)!
   }
 
   listKnowledge(projectId: string): KnowledgeItem[] {

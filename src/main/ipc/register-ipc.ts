@@ -16,6 +16,7 @@ import {
   createMemoInputSchema,
   createMilestoneInputSchema,
   createCourseInputSchema,
+  createCourseMaterialInputSchema,
   createHabitInputSchema,
   createKnowledgeInputSchema,
   createLearningTestInputSchema,
@@ -60,6 +61,7 @@ import {
   updateAreaInputSchema,
   updateChecklistItemInputSchema,
   updateCourseInputSchema,
+  updateCourseMaterialInputSchema,
   updateGoalInputSchema,
   updateHabitInputSchema,
   updateKnowledgeInputSchema,
@@ -890,6 +892,27 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => { trusted(event); practiceService.trashCourse(z.string().uuid().parse(rawId)) })
   )
 
+  ipcMain.handle('practice:list-course-materials', (event, rawCourseId) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.listCourseMaterials(z.string().uuid().parse(rawCourseId))
+    })
+  )
+
+  ipcMain.handle('practice:create-course-material', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.createCourseMaterial(createCourseMaterialInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('practice:update-course-material', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return practiceService.updateCourseMaterial(updateCourseMaterialInputSchema.parse(rawInput))
+    })
+  )
+
   ipcMain.handle('practice:list-knowledge', (event, rawProjectId) =>
     wrap(() => {
       trusted(event)
@@ -1424,6 +1447,41 @@ export function registerIpc(options: RegisterIpcOptions): void {
         throw new YouTraceError({
           code: 'EVIDENCE_ATTACHMENT_OPEN_FAILED',
           message: '无法打开成果附件。',
+          details: { reason: error }
+        })
+      }
+    })
+  )
+
+  ipcMain.handle(
+    'data:attach-dropped-course-material-file',
+    (event, rawSourcePath, rawMaterialId) =>
+      wrap(async () => {
+        trusted(event)
+        const sourcePath = z.string().trim().min(1).max(32_767).parse(rawSourcePath)
+        const materialId = z.string().uuid().parse(rawMaterialId)
+        return dataService.attachCourseMaterialFile(sourcePath, materialId)
+      })
+  )
+
+  ipcMain.handle('data:list-course-material-attachments', (event, rawMaterialId) =>
+    wrap(() => {
+      trusted(event)
+      return dataService.listCourseMaterialAttachments(z.string().uuid().parse(rawMaterialId))
+    })
+  )
+
+  ipcMain.handle('data:open-course-material-attachment', (event, rawAttachmentId) =>
+    wrap(async () => {
+      trusted(event)
+      const target = dataService.getCourseMaterialAttachmentOpenTarget(
+        z.string().uuid().parse(rawAttachmentId)
+      )
+      const error = await shell.openPath(target)
+      if (error) {
+        throw new YouTraceError({
+          code: 'COURSE_MATERIAL_ATTACHMENT_OPEN_FAILED',
+          message: '无法打开课程资料附件。',
           details: { reason: error }
         })
       }

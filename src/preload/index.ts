@@ -141,6 +141,9 @@ const api: YouTraceApi = {
     createCourse: (input) => ipcRenderer.invoke('practice:create-course', input),
     updateCourse: (input) => ipcRenderer.invoke('practice:update-course', input),
     trashCourse: (id) => ipcRenderer.invoke('practice:trash-course', id),
+    listCourseMaterials: (courseId) => ipcRenderer.invoke('practice:list-course-materials', courseId),
+    createCourseMaterial: (input) => ipcRenderer.invoke('practice:create-course-material', input),
+    updateCourseMaterial: (input) => ipcRenderer.invoke('practice:update-course-material', input),
     listKnowledge: (projectId) => ipcRenderer.invoke('practice:list-knowledge', projectId),
     createKnowledge: (input) => ipcRenderer.invoke('practice:create-knowledge', input),
     updateKnowledge: (input) => ipcRenderer.invoke('practice:update-knowledge', input),
@@ -240,6 +243,16 @@ const api: YouTraceApi = {
       ipcRenderer.invoke('data:list-evidence-attachments', evidenceId),
     openEvidenceAttachment: (attachmentId) =>
       ipcRenderer.invoke('data:open-evidence-attachment', attachmentId),
+    attachDroppedCourseMaterialFile: (file, materialId) =>
+      ipcRenderer.invoke(
+        'data:attach-dropped-course-material-file',
+        webUtils.getPathForFile(file),
+        materialId
+      ),
+    listCourseMaterialAttachments: (materialId) =>
+      ipcRenderer.invoke('data:list-course-material-attachments', materialId),
+    openCourseMaterialAttachment: (attachmentId) =>
+      ipcRenderer.invoke('data:open-course-material-attachment', attachmentId),
     listTrash: () => ipcRenderer.invoke('data:list-trash'),
     restoreTrash: (input) => ipcRenderer.invoke('data:restore-trash', input),
     purgeTrash: (input) => ipcRenderer.invoke('data:purge-trash', input)

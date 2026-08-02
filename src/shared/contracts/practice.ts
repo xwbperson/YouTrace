@@ -60,6 +60,31 @@ export const createCourseInputSchema = z.object({
 
 export const updateCourseInputSchema = createCourseInputSchema.partial().extend({ id: z.string().uuid() })
 
+export const courseMaterialTypeSchema = z.enum([
+  'textbook',
+  'reference',
+  'slides',
+  'paper',
+  'notes',
+  'exercises',
+  'other'
+])
+
+export const createCourseMaterialInputSchema = z.object({
+  courseId: z.string().uuid(),
+  materialType: courseMaterialTypeSchema.default('other'),
+  title: z.string().trim().min(1).max(300),
+  author: z.string().max(200).default(''),
+  edition: z.string().max(100).default(''),
+  isbn: z.string().max(40).default(''),
+  publisher: z.string().max(200).default(''),
+  description: z.string().max(10_000).default('')
+})
+
+export const updateCourseMaterialInputSchema = createCourseMaterialInputSchema.partial().extend({
+  id: z.string().uuid()
+})
+
 export const createKnowledgeInputSchema = z.object({
   projectId: z.string().uuid(),
   milestoneId: z.string().uuid().nullable().default(null),
@@ -170,6 +195,22 @@ export interface Course {
   knowledgeCount: number
   mistakeCount: number
   pendingReviewCount: number
+  materialCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CourseMaterial {
+  id: string
+  courseId: string
+  materialType: z.infer<typeof courseMaterialTypeSchema>
+  title: string
+  author: string
+  edition: string
+  isbn: string
+  publisher: string
+  description: string
+  attachmentCount: number
   createdAt: string
   updatedAt: string
 }
@@ -236,6 +277,8 @@ export type RecordMetricInput = z.infer<typeof recordMetricInputSchema>
 export type UpdateMetricEntryInput = z.infer<typeof updateMetricEntryInputSchema>
 export type CreateCourseInput = z.infer<typeof createCourseInputSchema>
 export type UpdateCourseInput = z.infer<typeof updateCourseInputSchema>
+export type CreateCourseMaterialInput = z.infer<typeof createCourseMaterialInputSchema>
+export type UpdateCourseMaterialInput = z.infer<typeof updateCourseMaterialInputSchema>
 export type CreateKnowledgeInput = z.infer<typeof createKnowledgeInputSchema>
 export type UpdateKnowledgeInput = z.infer<typeof updateKnowledgeInputSchema>
 export type CreateMistakeInput = z.infer<typeof createMistakeInputSchema>

@@ -227,6 +227,12 @@ export class DataService {
     return resolveWithin(this.workspaceManager.getCurrentPath(), relativePath)
   }
 
+  getCourseMaterialAttachmentOpenTarget(attachmentId: string): string {
+    const relativePath = this.repository.getCourseMaterialAttachmentPath(attachmentId)
+    if (!relativePath) throw notFound('课程资料附件')
+    return resolveWithin(this.workspaceManager.getCurrentPath(), relativePath)
+  }
+
   async maybeCreateAutomaticBackup(
     intervalHours: number,
     retention: BackupRetentionPolicy,
@@ -607,7 +613,46 @@ export class DataService {
     }
   }
 
+  listCourseMaterialAttachments(materialId: string): EvidenceAttachment[] {
+    if (!this.repository.hasCourseMaterial(materialId)) throw notFound('课程资料')
+    return this.repository.listCourseMaterialAttachments(materialId)
+  }
+
+  async attachCourseMaterialFile(
+    sourcePath: string,
+    materialId: string
+  ): Promise<ImportedEvidence['attachment']> {
+    if (!this.repository.hasCourseMaterial(materialId)) throw notFound('课程资料')
+    const prepared = await this.prepareAttachment(sourcePath, 'attachments/course-materials')
+    try {
+      if (
+        !this.repository.attachCourseMaterialFile(
+          materialId,
+          prepared.attachment,
+          new Date().toISOString()
+        )
+      ) {
+        throw notFound('课程资料')
+      }
+      return prepared.attachment
+    } catch (error) {
+      if (prepared.createdFile) await unlink(prepared.destination).catch(() => undefined)
+      throw error
+    }
+  }
+
   private async prepareEvidenceAttachment(sourcePath: string): Promise<{
+    attachment: ImportedEvidence['attachment'] & { mimeType: string | null }
+    destination: string
+    createdFile: boolean
+  }> {
+    return this.prepareAttachment(sourcePath, 'evidence')
+  }
+
+  private async prepareAttachment(
+    sourcePath: string,
+    baseDirectory: 'evidence' | 'attachments/course-materials'
+  ): Promise<{
     attachment: ImportedEvidence['attachment'] & { mimeType: string | null }
     destination: string
     createdFile: boolean
@@ -627,7 +672,7 @@ export class DataService {
     const extension = safeExtension(extname(originalName))
     const month = new Date().toISOString().slice(0, 7).replace('-', '/')
     const relativePath =
-      existing?.relativePath ?? `evidence/${month}/${attachmentId}${extension}`
+      existing?.relativePath ?? `${baseDirectory}/${month}/${attachmentId}${extension}`
     const destination = resolveWithin(root, relativePath)
     let createdFile = false
     if (!existing) {

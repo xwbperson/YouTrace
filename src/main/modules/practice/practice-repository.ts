@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3'
 import type {
   Course,
+  CourseMaterial,
+  CreateCourseMaterialInput,
   CreateLearningTestInput,
   CreateCourseInput,
   CreateHabitInput,
@@ -66,6 +68,22 @@ interface CourseRow {
   knowledge_count: number
   mistake_count: number
   pending_review_count: number
+  material_count: number
+  created_at: string
+  updated_at: string
+}
+
+interface CourseMaterialRow {
+  id: string
+  course_profile_id: string
+  material_type: CourseMaterial['materialType']
+  title: string
+  author: string
+  edition: string
+  isbn: string
+  publisher: string
+  description: string
+  attachment_count: number
   created_at: string
   updated_at: string
 }
@@ -417,9 +435,17 @@ export class PracticeRepository {
                     )) OR (r.entity_type = 'mistake' AND r.entity_id IN (
                       SELECT id FROM mistakes WHERE project_id = c.project_id
                     )))) AS pending_review_count,
+                (SELECT COUNT(*) FROM textbooks materials
+                  WHERE materials.course_profile_id = c.id) AS material_count,
                 c.created_at, c.updated_at
            FROM course_profiles c
-           LEFT JOIN textbooks t ON t.course_profile_id = c.id
+           LEFT JOIN textbooks t ON t.id = (
+             SELECT primary_material.id
+               FROM textbooks primary_material
+              WHERE primary_material.course_profile_id = c.id
+              ORDER BY primary_material.created_at, primary_material.rowid
+              LIMIT 1
+           )
           WHERE c.deleted_at IS NULL AND c.archived_at IS NULL
           ORDER BY c.created_at`
       )
@@ -448,8 +474,9 @@ export class PracticeRepository {
       database
         .prepare(
           `INSERT INTO textbooks(
-             id, course_profile_id, title, author, edition, isbn, publisher, created_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+             id, course_profile_id, material_type, title, author, edition, isbn, publisher,
+             description, created_at, updated_at
+           ) VALUES (?, ?, 'textbook', ?, ?, ?, ?, ?, '', ?, ?)`
         )
         .run(
           textbookId,
@@ -474,7 +501,11 @@ export class PracticeRepository {
         `UPDATE course_profiles SET project_id = ?, course_name = ?, exam_date = ?, updated_at = ?
           WHERE id = ? AND deleted_at IS NULL`
       ).run(input.projectId, input.courseName, input.examDate, now, id)
-      const textbook = database.prepare('SELECT id FROM textbooks WHERE course_profile_id = ?').get(id) as { id: string } | undefined
+      const textbook = database
+        .prepare(
+          'SELECT id FROM textbooks WHERE course_profile_id = ? ORDER BY created_at, rowid LIMIT 1'
+        )
+        .get(id) as { id: string } | undefined
       if (textbook) {
         database.prepare(
           `UPDATE textbooks SET title = ?, author = ?, edition = ?, isbn = ?, publisher = ?, updated_at = ?
@@ -492,6 +523,99 @@ export class PracticeRepository {
 
   trashCourse(id: string, now: string): boolean {
     return this.trashEntity('course_profiles', 'course', id, now, false)
+  }
+
+  listCourseMaterials(courseId: string): CourseMaterial[] {
+    const rows = this.database()
+      .prepare(
+        `SELECT t.id, t.course_profile_id, t.material_type, t.title, t.author, t.edition,
+                t.isbn, t.publisher, t.description,
+                (SELECT COUNT(*) FROM entity_attachments ea
+                  JOIN attachments a ON a.id = ea.attachment_id
+                 WHERE ea.entity_type = 'course_material' AND ea.entity_id = t.id
+                   AND a.pending_cleanup_at IS NULL) AS attachment_count,
+                t.created_at, t.updated_at
+           FROM textbooks t
+           JOIN course_profiles c ON c.id = t.course_profile_id
+          WHERE t.course_profile_id = ? AND c.deleted_at IS NULL AND c.archived_at IS NULL
+          ORDER BY t.created_at, t.rowid`
+      )
+      .all(courseId) as CourseMaterialRow[]
+    return rows.map(mapCourseMaterial)
+  }
+
+  getCourseMaterial(id: string): CourseMaterial | null {
+    const row = this.database()
+      .prepare(
+        `SELECT t.id, t.course_profile_id, t.material_type, t.title, t.author, t.edition,
+                t.isbn, t.publisher, t.description,
+                (SELECT COUNT(*) FROM entity_attachments ea
+                  JOIN attachments a ON a.id = ea.attachment_id
+                 WHERE ea.entity_type = 'course_material' AND ea.entity_id = t.id
+                   AND a.pending_cleanup_at IS NULL) AS attachment_count,
+                t.created_at, t.updated_at
+           FROM textbooks t
+           JOIN course_profiles c ON c.id = t.course_profile_id
+          WHERE t.id = ? AND c.deleted_at IS NULL AND c.archived_at IS NULL`
+      )
+      .get(id) as CourseMaterialRow | undefined
+    return row ? mapCourseMaterial(row) : null
+  }
+
+  insertCourseMaterial(id: string, input: CreateCourseMaterialInput, now: string): void {
+    const database = this.database()
+    database.transaction(() => {
+      database
+        .prepare(
+          `INSERT INTO textbooks(
+             id, course_profile_id, material_type, title, author, edition, isbn, publisher,
+             description, created_at, updated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          id,
+          input.courseId,
+          input.materialType,
+          input.title,
+          input.author,
+          input.edition,
+          input.isbn,
+          input.publisher,
+          input.description,
+          now,
+          now
+        )
+      this.insertAudit(database, 'course_material', id, 'created', null, input, now)
+    })()
+  }
+
+  updateCourseMaterial(id: string, input: CreateCourseMaterialInput, now: string): boolean {
+    const database = this.database()
+    const before = this.getCourseMaterial(id)
+    if (!before) return false
+    const result = database
+      .prepare(
+        `UPDATE textbooks
+            SET course_profile_id = ?, material_type = ?, title = ?, author = ?, edition = ?,
+                isbn = ?, publisher = ?, description = ?, updated_at = ?
+          WHERE id = ?`
+      )
+      .run(
+        input.courseId,
+        input.materialType,
+        input.title,
+        input.author,
+        input.edition,
+        input.isbn,
+        input.publisher,
+        input.description,
+        now,
+        id
+      )
+    if (result.changes > 0) {
+      this.insertAudit(database, 'course_material', id, 'updated', before, input, now)
+    }
+    return result.changes > 0
   }
 
   listKnowledge(projectId: string): KnowledgeItem[] {
@@ -946,6 +1070,24 @@ export function mapCourse(row: CourseRow): Course {
     knowledgeCount: row.knowledge_count,
     mistakeCount: row.mistake_count,
     pendingReviewCount: row.pending_review_count,
+    materialCount: row.material_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export function mapCourseMaterial(row: CourseMaterialRow): CourseMaterial {
+  return {
+    id: row.id,
+    courseId: row.course_profile_id,
+    materialType: row.material_type,
+    title: row.title,
+    author: row.author,
+    edition: row.edition,
+    isbn: row.isbn,
+    publisher: row.publisher,
+    description: row.description,
+    attachmentCount: row.attachment_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }

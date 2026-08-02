@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 12
+export const CURRENT_SCHEMA_VERSION = 13
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -536,11 +536,13 @@ export const INITIAL_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS textbooks (
     id TEXT PRIMARY KEY,
     course_profile_id TEXT NOT NULL REFERENCES course_profiles(id),
+    material_type TEXT NOT NULL DEFAULT 'textbook',
     title TEXT NOT NULL,
     author TEXT NOT NULL DEFAULT '',
     edition TEXT NOT NULL DEFAULT '',
     isbn TEXT NOT NULL DEFAULT '',
     publisher TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );

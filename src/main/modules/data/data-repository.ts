@@ -156,6 +156,27 @@ export class DataRepository {
     return row?.relative_path ?? null
   }
 
+  getCourseMaterialAttachmentPath(attachmentId: string): string | null {
+    const row = this.database()
+      .prepare(
+        `SELECT a.relative_path
+           FROM attachments a
+          WHERE a.id = ?
+            AND a.pending_cleanup_at IS NULL
+            AND EXISTS(
+              SELECT 1
+                FROM entity_attachments ea
+                JOIN textbooks t
+                  ON ea.entity_type = 'course_material' AND ea.entity_id = t.id
+                JOIN course_profiles c ON c.id = t.course_profile_id
+               WHERE ea.attachment_id = a.id
+                 AND c.deleted_at IS NULL AND c.archived_at IS NULL
+            )`
+      )
+      .get(attachmentId) as { relative_path: string } | undefined
+    return row?.relative_path ?? null
+  }
+
   rebuildSearchIndex(): number {
     const database = this.database()
     return database.transaction(() => {
@@ -464,6 +485,12 @@ export class DataRepository {
         this.deleteRelations(database, 'metric', [item.entityId])
         database.prepare('DELETE FROM metrics WHERE id = ?').run(item.entityId)
       } else if (item.entityType === 'course') {
+        const materialIds = (
+          database
+            .prepare('SELECT id FROM textbooks WHERE course_profile_id = ?')
+            .all(item.entityId) as Array<{ id: string }>
+        ).map((row) => row.id)
+        orphanPaths.push(...this.detachAttachments(database, 'course_material', materialIds))
         database.prepare('DELETE FROM textbooks WHERE course_profile_id = ?').run(item.entityId)
         orphanPaths.push(...this.detachAttachments(database, 'course', [item.entityId]))
         this.deleteRelations(database, 'course', [item.entityId])
@@ -593,6 +620,23 @@ export class DataRepository {
     )
   }
 
+  hasCourseMaterial(id: string): boolean {
+    return Boolean(
+      this.database()
+        .prepare(
+          `SELECT t.id
+             FROM textbooks t
+             JOIN course_profiles c ON c.id = t.course_profile_id
+            WHERE t.id = ? AND c.deleted_at IS NULL AND c.archived_at IS NULL`
+        )
+        .get(id)
+    )
+  }
+
+  listCourseMaterialAttachments(materialId: string): EvidenceAttachment[] {
+    return this.listEntityAttachments('course_material', materialId)
+  }
+
   listEvidenceAttachments(evidenceId: string): EvidenceAttachment[] {
     return (
       this.database()
@@ -667,6 +711,66 @@ export class DataRepository {
         database,
         'evidence',
         evidenceId,
+        'attachment_added',
+        { attachmentId: attachment.id, originalName: attachment.originalName },
+        now
+      )
+      return true
+    })()
+  }
+
+  attachCourseMaterialFile(
+    materialId: string,
+    attachment: {
+      id: string
+      relativePath: string
+      originalName: string
+      contentHash: string
+      sizeBytes: number
+      mimeType: string | null
+      reused: boolean
+    },
+    now: string
+  ): boolean {
+    const database = this.database()
+    return database.transaction(() => {
+      const material = database
+        .prepare(
+          `SELECT t.id
+             FROM textbooks t
+             JOIN course_profiles c ON c.id = t.course_profile_id
+            WHERE t.id = ? AND c.deleted_at IS NULL AND c.archived_at IS NULL`
+        )
+        .get(materialId)
+      if (!material) return false
+      if (!attachment.reused) {
+        database
+          .prepare(
+            `INSERT INTO attachments(
+               id, relative_path, original_name, content_hash, size_bytes, mime_type, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          )
+          .run(
+            attachment.id,
+            attachment.relativePath,
+            attachment.originalName,
+            attachment.contentHash,
+            attachment.sizeBytes,
+            attachment.mimeType,
+            now
+          )
+      }
+      database
+        .prepare(
+          `INSERT OR IGNORE INTO entity_attachments(
+             attachment_id, entity_type, entity_id, created_at
+           ) VALUES (?, 'course_material', ?, ?)`
+        )
+        .run(attachment.id, materialId, now)
+      this.insertAudit(
+        database,
+        'course_material',
+        materialId,
         'attachment_added',
         { attachmentId: attachment.id, originalName: attachment.originalName },
         now
@@ -780,6 +884,16 @@ export class DataRepository {
       database.prepare('SELECT id FROM milestones WHERE project_id = ?').all(projectId) as Array<{ id: string }>
     ).map((row) => row.id)
     const courseIds = (database.prepare('SELECT id FROM course_profiles WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
+    const courseMaterialIds = (
+      database
+        .prepare(
+          `SELECT t.id
+             FROM textbooks t
+             JOIN course_profiles c ON c.id = t.course_profile_id
+            WHERE c.project_id = ?`
+        )
+        .all(projectId) as Array<{ id: string }>
+    ).map((row) => row.id)
     const knowledgeIds = (database.prepare('SELECT id FROM knowledge_items WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
     const mistakeIds = (database.prepare('SELECT id FROM mistakes WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
     const learningTestIds = (database.prepare('SELECT id FROM learning_tests WHERE project_id = ?').all(projectId) as Array<{ id: string }>).map((row) => row.id)
@@ -850,6 +964,7 @@ export class DataRepository {
         database.prepare('UPDATE trash_entries SET purged_at = ? WHERE entity_type = ? AND entity_id = ? AND purged_at IS NULL').run(now, entityType, entityId)
       }
     }
+    orphanPaths.push(...this.detachAttachments(database, 'course_material', courseMaterialIds))
     for (const courseId of courseIds) database.prepare('DELETE FROM textbooks WHERE course_profile_id = ?').run(courseId)
     database.prepare('DELETE FROM review_queue WHERE entity_id IN (SELECT id FROM knowledge_items WHERE project_id = ?) OR entity_id IN (SELECT id FROM mistakes WHERE project_id = ?)').run(projectId, projectId)
     database.prepare('DELETE FROM mistakes WHERE project_id = ?').run(projectId)
@@ -900,6 +1015,33 @@ export class DataRepository {
       }
     }
     return orphanPaths
+  }
+
+  private listEntityAttachments(entityType: string, entityId: string): EvidenceAttachment[] {
+    return (
+      this.database()
+        .prepare(
+          `SELECT a.id, a.original_name, a.relative_path, a.size_bytes, a.content_hash
+             FROM attachments a
+             JOIN entity_attachments ea ON ea.attachment_id = a.id
+            WHERE ea.entity_type = ? AND ea.entity_id = ?
+              AND a.pending_cleanup_at IS NULL
+            ORDER BY ea.created_at, a.original_name`
+        )
+        .all(entityType, entityId) as Array<{
+        id: string
+        original_name: string
+        relative_path: string
+        size_bytes: number
+        content_hash: string
+      }>
+    ).map((row) => ({
+      id: row.id,
+      originalName: row.original_name,
+      relativePath: row.relative_path,
+      sizeBytes: row.size_bytes,
+      contentHash: row.content_hash
+    }))
   }
 
   private deleteReminders(database: Database.Database, sourceType: string, sourceIds: string[]): void {
