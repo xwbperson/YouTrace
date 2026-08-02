@@ -119,6 +119,80 @@ describe('planning application service', () => {
     expect(auditCount.count).toBeGreaterThanOrEqual(5)
   })
 
+  it('returns project and milestone context for repeated task titles', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '网络空间安全数学原理',
+      description: '按章节推进课程',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const milestones = ['第 1 章 概论', '第 2 章 有限域算术'].map((title) =>
+      planning.createMilestone({
+        projectId: project.id,
+        goalId: null,
+        title,
+        description: '',
+        plannedDate: null,
+        estimatedMinutes: null,
+        manualWeight: null,
+        importanceRating: null,
+        mastery: null,
+        verificationCriteria: '',
+        status: 'not_started',
+        includeInProgress: true
+      })
+    )
+
+    for (const milestone of milestones) {
+      planning.createTask({
+        parentTaskId: null,
+        projectId: project.id,
+        goalId: null,
+        milestoneId: milestone.id,
+        title: '预习课本',
+        description: '',
+        status: 'ready',
+        difficulty: null,
+        priority: 'medium',
+        estimatedMinutes: 60,
+        progressWeight: null,
+        startDate: null,
+        dueAt: null,
+        verificationCriteria: '',
+        includeInProgress: true,
+        tagIds: []
+      })
+    }
+
+    expect(
+      planning.listTasks({
+        projectId: project.id,
+        statuses: [],
+        tagIds: [],
+        includeDeleted: false,
+        limit: 100,
+        offset: 0
+      })
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: '预习课本',
+          projectName: project.name,
+          milestoneTitle: milestones[0]!.title
+        }),
+        expect.objectContaining({
+          title: '预习课本',
+          projectName: project.name,
+          milestoneTitle: milestones[1]!.title
+        })
+      ])
+    )
+  })
+
   it('propagates milestone progress and prevents dependency cycles', () => {
     const project = planning.createProject({
       areaId: null,

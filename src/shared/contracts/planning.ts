@@ -315,8 +315,10 @@ export interface Task {
   id: string
   parentTaskId: string | null
   projectId: string | null
+  projectName: string | null
   goalId: string | null
   milestoneId: string | null
+  milestoneTitle: string | null
   title: string
   description: string
   status: z.infer<typeof taskStatusSchema>

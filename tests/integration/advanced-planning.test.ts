@@ -99,7 +99,10 @@ describe('advanced planning lifecycle', () => {
       checked: true,
       text: '回顾错题'
     })
-    expect(planning.setChecklistProgress({ taskId: task.id, enabled: true }).progress).toBe(1)
+    expect(planning.setChecklistProgress({ taskId: task.id, enabled: true })).toMatchObject({
+      progress: 1,
+      status: 'ready'
+    })
 
     planning.setTaskRecurrence({
       taskId: task.id,

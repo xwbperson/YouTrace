@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { EffortEntry, IpcResult, Task } from '../../../shared/contracts'
+import { formatTaskContext } from './today-task-context'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -154,6 +155,9 @@ export function TodayPage(): React.JSX.Element {
         queryClient.invalidateQueries({ queryKey: ['today-tasks'] }),
         queryClient.invalidateQueries({ queryKey: ['tasks'] })
       ])
+    },
+    onError: (error) => {
+      setActionError(error.message)
     }
   })
 
@@ -234,6 +238,9 @@ export function TodayPage(): React.JSX.Element {
             </div>
             <span className="task-count">{focusTasks.length} / 最多 3 项</span>
           </div>
+          <p className="today-completion-hint">
+            <Check size={14} />线下完成也可以直接点“完成”，无需先开始计时。
+          </p>
 
           {tasksQuery.isPending ? (
             <p className="rail-message">正在读取任务…</p>
@@ -252,12 +259,16 @@ export function TodayPage(): React.JSX.Element {
                     <button
                       className="task-complete-action"
                       aria-label={`完成任务：${task.title}`}
+                      title={isCurrent ? '请先停止并记录当前计时' : '直接标记完成；适用于没有在程序内计时的任务'}
+                      disabled={completeMutation.isPending || isCurrent}
                       onClick={() => completeMutation.mutate(task)}
                     >
-                      <span />
+                      <Check size={14} />
+                      <span>完成</span>
                     </button>
-                    <div>
+                    <div className="today-task-copy">
                       <strong>{task.title}</strong>
+                      <span className="today-task-context">{formatTaskContext(task)}</span>
                       <p>
                         {task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}
                         {task.difficulty ? ` · 难度 ${task.difficulty}` : ''}
@@ -292,7 +303,7 @@ export function TodayPage(): React.JSX.Element {
           {remainingTasks.length > 0 && (
             <details className="today-backlog">
               <summary>未安排待办 · {remainingTasks.length} 项</summary>
-              <div>{remainingTasks.map((task) => <span key={task.id}><strong>{task.title}</strong><small>{task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}</small></span>)}</div>
+              <div>{remainingTasks.map((task) => <span key={task.id}><span className="today-backlog-copy"><strong>{task.title}</strong><small className="today-task-context">{formatTaskContext(task)}</small></span><small>{task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}</small><button className="today-backlog-complete" type="button" aria-label={`完成任务：${task.title}（${formatTaskContext(task)}）`} disabled={completeMutation.isPending || active?.entityId === task.id} onClick={() => completeMutation.mutate(task)}><Check size={12} />完成</button></span>)}</div>
             </details>
           )}
         </section>
@@ -316,7 +327,8 @@ export function TodayPage(): React.JSX.Element {
           <section className="panel execution-note">
             <Flag size={18} />
             <strong>今天最重要的一件事</strong>
-            <p>{tasks[0]?.title ?? '尚未设置。选择一个真正影响结果的下一步。'}</p>
+            <p>{focusTasks[0]?.title ?? '尚未设置。选择一个真正影响结果的下一步。'}</p>
+            {focusTasks[0] && <small className="today-task-context">{formatTaskContext(focusTasks[0])}</small>}
           </section>
           <section className="panel today-schedule">
             <span className="section-label">已安排时间块</span>

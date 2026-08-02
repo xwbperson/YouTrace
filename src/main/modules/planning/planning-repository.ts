@@ -55,8 +55,10 @@ interface TaskRow {
   id: string
   parent_task_id: string | null
   project_id: string | null
+  project_name: string | null
   goal_id: string | null
   milestone_id: string | null
+  milestone_title: string | null
   title: string
   description: string
   status: Task['status']
@@ -743,7 +745,8 @@ export class PlanningRepository {
     parameters.push(input.limit, input.offset)
     const rows = this.database()
       .prepare(
-        `SELECT t.id, t.parent_task_id, t.project_id, t.goal_id, t.milestone_id,
+        `SELECT t.id, t.parent_task_id, t.project_id, p.name AS project_name,
+                t.goal_id, t.milestone_id, m.title AS milestone_title,
                 t.title, t.description, t.status, t.difficulty, t.priority,
                 t.estimated_minutes,
                 COALESCE((
@@ -766,6 +769,8 @@ export class PlanningRepository {
                 t.completed_at, t.created_at, t.updated_at,
                 GROUP_CONCAT(DISTINCT ta.tag_id) AS tag_ids
            FROM tasks t
+           LEFT JOIN projects p ON p.id = t.project_id
+           LEFT JOIN milestones m ON m.id = t.milestone_id
            LEFT JOIN tag_assignments ta
              ON ta.entity_type = 'task' AND ta.entity_id = t.id
           WHERE ${conditions.join(' AND ')}
@@ -1549,7 +1554,8 @@ export class PlanningRepository {
   private listTaskRows(condition: string, parameters: unknown[]): TaskRow[] {
     return this.database()
       .prepare(
-        `SELECT t.id, t.parent_task_id, t.project_id, t.goal_id, t.milestone_id,
+        `SELECT t.id, t.parent_task_id, t.project_id, p.name AS project_name,
+                t.goal_id, t.milestone_id, m.title AS milestone_title,
                 t.title, t.description, t.status, t.difficulty, t.priority,
                 t.estimated_minutes,
                 COALESCE((
@@ -1572,6 +1578,8 @@ export class PlanningRepository {
                 t.completed_at, t.created_at, t.updated_at,
                 GROUP_CONCAT(DISTINCT ta.tag_id) AS tag_ids
            FROM tasks t
+           LEFT JOIN projects p ON p.id = t.project_id
+           LEFT JOIN milestones m ON m.id = t.milestone_id
            LEFT JOIN tag_assignments ta
              ON ta.entity_type = 'task' AND ta.entity_id = t.id
           WHERE ${condition}
@@ -1678,8 +1686,10 @@ function mapTask(row: TaskRow): Task {
     id: row.id,
     parentTaskId: row.parent_task_id,
     projectId: row.project_id,
+    projectName: row.project_name,
     goalId: row.goal_id,
     milestoneId: row.milestone_id,
+    milestoneTitle: row.milestone_title,
     title: row.title,
     description: row.description,
     status: row.status,
