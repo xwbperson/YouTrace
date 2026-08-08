@@ -56,7 +56,7 @@ describe('workspace lifecycle', () => {
       .get() as { name: string } | undefined
     database.close()
 
-    expect(migration.version).toBe(13)
+    expect(migration.version).toBe(14)
     expect(searchTable?.name).toBe('searchable_content')
 
     const bootstrapContents = await readFile(join(userDataRoot, 'bootstrap.json'), 'utf8')
@@ -80,7 +80,7 @@ describe('workspace lifecycle', () => {
   })
 
   it('upgrades a schema v9 workspace for recoverable deletion and milestone importance', async () => {
-    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v13-test-'))
+    const fixtureRoot = await mkdtemp(join(tmpdir(), 'youtrace-schema-v14-test-'))
     const databasePath = join(fixtureRoot, 'youtrace.sqlite3')
     const legacy = new Database(databasePath)
     legacy.exec(`
@@ -134,7 +134,7 @@ describe('workspace lifecycle', () => {
         expect.arrayContaining(['material_type', 'description'])
       )
       expect(legacyMilestone.importance_rating).toBeNull()
-      expect(version.version).toBe(13)
+      expect(version.version).toBe(14)
     } finally {
       manager.close()
     }

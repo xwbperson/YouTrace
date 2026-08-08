@@ -22,6 +22,7 @@ import type {
   UserPreferences,
   WorkspaceSummary
 } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -34,6 +35,10 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
   const [saved, setSaved] = useState(false)
   const [preferences, setPreferences] = useState<UserPreferences | null>(null)
   const [maintenanceMessage, setMaintenanceMessage] = useState('')
+  const [maintenanceError, setMaintenanceError] = useState('')
+  const [maintenanceBusy, setMaintenanceBusy] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const [saveBusy, setSaveBusy] = useState(false)
   const settingsQuery = useQuery({
     queryKey: ['notification-settings'],
     queryFn: async () => unwrap(await window.youtrace.reminders.getSettings())
@@ -63,17 +68,55 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
 
   const save = async (): Promise<void> => {
     if (!settings || !preferences) return
-    const [notificationResult, preferenceResult] = await Promise.all([
-      window.youtrace.reminders.updateSettings(settings),
-      window.youtrace.settings.updatePreferences(preferences)
-    ])
-    if (!notificationResult.ok || !preferenceResult.ok) return
-    setSaved(true)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['notification-settings'] }),
-      queryClient.invalidateQueries({ queryKey: ['user-preferences'] })
-    ])
-    window.setTimeout(() => setSaved(false), 1_500)
+    setSaveBusy(true)
+    setSaveError('')
+    try {
+      const [notificationResult, preferenceResult] = await Promise.all([
+        window.youtrace.reminders.updateSettings(settings),
+        window.youtrace.settings.updatePreferences(preferences)
+      ])
+      if (!notificationResult.ok) return setSaveError(notificationResult.error.message)
+      if (!preferenceResult.ok) return setSaveError(preferenceResult.error.message)
+      setSaved(true)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['notification-settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['user-preferences'] })
+      ])
+      window.setTimeout(() => setSaved(false), 1_500)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : '设置保存失败，请重试。')
+    } finally {
+      setSaveBusy(false)
+    }
+  }
+
+  const runMaintenance = async (
+    label: string,
+    operation: () => Promise<IpcResult<unknown>>,
+    successMessage: (result: unknown) => string
+  ): Promise<void> => {
+    setMaintenanceBusy(label)
+    setMaintenanceMessage('')
+    setMaintenanceError('')
+    try {
+      const result = await operation()
+      if (!result.ok) return setMaintenanceError(result.error.message)
+      setMaintenanceMessage(successMessage(result.data))
+      await backupStorageQuery.refetch()
+    } catch (error) {
+      setMaintenanceError(error instanceof Error ? error.message : `${label}失败，请重试。`)
+    } finally {
+      setMaintenanceBusy('')
+    }
+  }
+
+  const runReminderAction = async (
+    operation: () => Promise<IpcResult<unknown>>
+  ): Promise<void> => {
+    const result = await operation()
+    if (!result.ok) return setSaveError(result.error.message)
+    setSaveError('')
+    await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] })
   }
 
   return (
@@ -81,6 +124,21 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
       <header className="settings-toolbar">
         <div><span className="page-kicker">明确影响范围</span><h1>设置</h1><p>工作区内容仍只保存在你选择的本地目录。</p></div>
       </header>
+
+      {(settingsQuery.isError || preferencesQuery.isError || tagsQuery.isError || upcomingQuery.isError || backupStorageQuery.isError) && (
+        <QueryFailure
+          title="部分设置读取失败"
+          detail="当前页面不会用默认值覆盖读取失败的设置，请重新读取后再保存。"
+          onRetry={() => void Promise.all([
+            settingsQuery.refetch(),
+            preferencesQuery.refetch(),
+            tagsQuery.refetch(),
+            upcomingQuery.refetch(),
+            backupStorageQuery.refetch()
+          ])}
+        />
+      )}
+      {saveError && <div className="inline-error" role="alert">{saveError}</div>}
 
       <section className="settings-section panel">
         <header><span><HardDrive size={17} /></span><div><h2>工作区与数据</h2><p>当前连接、存储位置和写入模式。</p></div></header>
@@ -188,27 +246,28 @@ export function SettingsPage({ workspace }: { workspace: WorkspaceSummary }): Re
                 ))}
               </div>
             </div>
-            <div className="settings-actions"><button className="button button-primary" type="button" onClick={() => void save()}>{saved ? <Check size={14} /> : <Save size={14} />}{saved ? '已保存' : '保存通知设置'}</button></div>
+            <div className="settings-actions"><button className="button button-primary" type="button" disabled={saveBusy} onClick={() => void save()}>{saved ? <Check size={14} /> : <Save size={14} />}{saveBusy ? '正在保存…' : saved ? '已保存' : '保存通知设置'}</button></div>
           </>
         )}
         {(upcomingQuery.data ?? []).length > 0 && (
           <div className="upcoming-reminders">
             <h3>待处理提醒</h3>
-            {(upcomingQuery.data ?? []).slice(0, 5).map((reminder) => <article key={reminder.id}><Clock3 size={13} /><strong>{reminder.title}</strong><span>{new Date(reminder.scheduledAt).toLocaleString('zh-CN')}</span><button aria-label={`延后提醒：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.snooze(reminder.id, 30); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><TimerReset size={12} />30 分钟</button><button aria-label={`关闭单项提醒：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.dismiss(reminder.id); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><X size={12} /></button><button aria-label={`不再提醒此对象：${reminder.title}`} onClick={async () => { await window.youtrace.reminders.muteSource(reminder.sourceType, reminder.sourceId); await queryClient.invalidateQueries({ queryKey: ['upcoming-reminders'] }) }}><BellOff size={12} /></button></article>)}
+            {(upcomingQuery.data ?? []).slice(0, 5).map((reminder) => <article key={reminder.id}><Clock3 size={13} /><strong>{reminder.title}</strong><span>{new Date(reminder.scheduledAt).toLocaleString('zh-CN')}</span><button aria-label={`延后提醒：${reminder.title}`} onClick={() => void runReminderAction(() => window.youtrace.reminders.snooze(reminder.id, 30))}><TimerReset size={12} />30 分钟</button><button aria-label={`关闭单项提醒：${reminder.title}`} onClick={() => void runReminderAction(() => window.youtrace.reminders.dismiss(reminder.id))}><X size={12} /></button><button aria-label={`不再提醒此对象：${reminder.title}`} onClick={() => void runReminderAction(() => window.youtrace.reminders.muteSource(reminder.sourceType, reminder.sourceId))}><BellOff size={12} /></button></article>)}
           </div>
         )}
       </section>
       <section className="settings-section panel">
         <header><span><ShieldCheck size={17} /></span><div><h2>数据维护</h2><p>常用安全操作；完整恢复和回收站位于“更多”。</p></div></header>
         <div className="maintenance-actions">
-          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.checkWorkspace(); setMaintenanceMessage(result.ok ? `检查通过：${result.data.fileCount} 个文件` : result.error.message) }}><ShieldCheck size={14} />完整性检查</button>
-          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.createBackup('设置页手动备份'); setMaintenanceMessage(result.ok ? '已创建并校验备份' : result.error.message); await backupStorageQuery.refetch() }}><Database size={14} />立即备份</button>
-          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.exportReadable(); setMaintenanceMessage(result.ok ? '已导出 Markdown / CSV' : result.error.message) }}><Save size={14} />可读导出</button>
-          <button className="button button-secondary" onClick={async () => { const result = await window.youtrace.data.rebuildSearchIndex(); setMaintenanceMessage(result.ok ? `已从业务表重建 ${result.data.indexedCount} 条搜索索引` : result.error.message) }}><TimerReset size={14} />重建搜索索引</button>
+          <button className="button button-secondary" disabled={Boolean(maintenanceBusy)} onClick={() => void runMaintenance('完整性检查', () => window.youtrace.data.checkWorkspace(), (data) => `检查通过：${(data as { fileCount: number }).fileCount} 个文件`)}><ShieldCheck size={14} />{maintenanceBusy === '完整性检查' ? '检查中…' : '完整性检查'}</button>
+          <button className="button button-secondary" disabled={Boolean(maintenanceBusy)} onClick={() => void runMaintenance('立即备份', () => window.youtrace.data.createBackup('设置页手动备份'), () => '已创建并校验备份')}><Database size={14} />{maintenanceBusy === '立即备份' ? '备份中…' : '立即备份'}</button>
+          <button className="button button-secondary" disabled={Boolean(maintenanceBusy)} onClick={() => void runMaintenance('可读导出', () => window.youtrace.data.exportReadable(), () => '已导出 Markdown / CSV')}><Save size={14} />{maintenanceBusy === '可读导出' ? '导出中…' : '可读导出'}</button>
+          <button className="button button-secondary" disabled={Boolean(maintenanceBusy)} onClick={() => void runMaintenance('重建搜索索引', () => window.youtrace.data.rebuildSearchIndex(), (data) => `已从业务表重建 ${(data as { indexedCount: number }).indexedCount} 条搜索索引`)}><TimerReset size={14} />{maintenanceBusy === '重建搜索索引' ? '重建中…' : '重建搜索索引'}</button>
         </div>
         {maintenanceMessage && <div className="settings-note"><Check size={14} /><span>{maintenanceMessage}</span></div>}
+        {maintenanceError && <div className="inline-error" role="alert">{maintenanceError}</div>}
       </section>
-      <div className="settings-sticky-save"><button className="button button-primary" disabled={!settings || !preferences} onClick={() => void save()}>{saved ? <Check size={14} /> : <Save size={14} />}{saved ? '全部设置已保存' : '保存全部设置'}</button></div>
+      <div className="settings-sticky-save"><button className="button button-primary" disabled={!settings || !preferences || saveBusy} onClick={() => void save()}>{saved ? <Check size={14} /> : <Save size={14} />}{saveBusy ? '正在保存…' : saved ? '全部设置已保存' : '保存全部设置'}</button></div>
     </div>
   )
 }

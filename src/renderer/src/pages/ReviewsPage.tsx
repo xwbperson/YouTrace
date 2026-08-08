@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { IpcResult, Review } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -67,7 +68,15 @@ export function ReviewsPage(): React.JSX.Element {
         </button>
       </header>
 
-      {reviews.length === 0 ? (
+      {reviewsQuery.isPending ? (
+        <p className="rail-message" role="status">正在读取复盘…</p>
+      ) : reviewsQuery.isError ? (
+        <QueryFailure
+          title="复盘读取失败"
+          detail="复盘正文和快照没有被删除，请重新读取。"
+          onRetry={() => void reviewsQuery.refetch()}
+        />
+      ) : reviews.length === 0 ? (
         <div className="review-empty panel">
           <Archive size={29} />
           <strong>还没有复盘</strong>

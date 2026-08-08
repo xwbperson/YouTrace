@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, BarChart3, Clock3, Layers3, Merge, Pencil, Plus, RotateCcw, Tag, Trash2, X } from 'lucide-react'
 import { useState } from 'react'
 import type { IpcResult, Tag as TraceTag } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -17,6 +18,7 @@ export function TagsPage(): React.JSX.Element {
   const [editingTag, setEditingTag] = useState<TraceTag | null>(null)
   const [deleteTag, setDeleteTag] = useState<TraceTag | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [actionError, setActionError] = useState('')
   const tagsQuery = useQuery({
     queryKey: ['tags', showArchived],
     queryFn: async () => unwrap(await window.youtrace.planning.listTags(showArchived))
@@ -40,7 +42,13 @@ export function TagsPage(): React.JSX.Element {
         <div className="toolbar-actions"><label className="archive-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />显示已归档</label><button className="button button-primary" onClick={() => { setEditingTag(null); setDialogOpen(true) }}><Plus size={16} />新建标签</button></div>
       </header>
 
-      {tags.length === 0 ? (
+      {actionError ? <QueryFailure title="标签操作失败" error={actionError} onRetry={() => setActionError('')} retryLabel="关闭" /> : null}
+
+      {tagsQuery.isPending ? (
+        <p className="rail-message">正在读取标签…</p>
+      ) : tagsQuery.isError ? (
+        <QueryFailure title="标签加载失败" error={tagsQuery.error} onRetry={() => void tagsQuery.refetch()} />
+      ) : tags.length === 0 ? (
         <div className="record-empty panel tags-empty">
           <Tag size={25} />
           <strong>还没有自定义标签</strong>
@@ -59,7 +67,7 @@ export function TagsPage(): React.JSX.Element {
                 {!tag.archived && <button type="button" onClick={() => setSelectedTagId(tag.id)}><BarChart3 size={13} />查看统计</button>}
                 <button type="button" onClick={() => { setEditingTag(tag); setDialogOpen(true) }}><Pencil size={13} />编辑</button>
                 {!tag.archived && <button type="button" onClick={() => setMergeSourceId(tag.id)}><Merge size={13} />合并</button>}
-                <button type="button" onClick={async () => { await window.youtrace.planning.archiveTag(tag.id, !tag.archived); setSelectedTagId(''); await queryClient.invalidateQueries({ queryKey: ['tags'] }) }}>{tag.archived ? <><RotateCcw size={13} />恢复</> : <><Archive size={13} />归档</>}</button>
+                <button type="button" onClick={async () => { setActionError(''); const result = await window.youtrace.planning.archiveTag(tag.id, !tag.archived); if (!result.ok) return setActionError(result.error.message); setSelectedTagId(''); await queryClient.invalidateQueries({ queryKey: ['tags'] }) }}>{tag.archived ? <><RotateCcw size={13} />恢复</> : <><Archive size={13} />归档</>}</button>
                 {tag.archived && <button type="button" className="danger" onClick={() => setDeleteTag(tag)}><Trash2 size={13} />删除</button>}
               </footer>
             </article>
@@ -67,7 +75,9 @@ export function TagsPage(): React.JSX.Element {
         </div>
       )}
 
-      {statsQuery.data && (
+      {statsQuery.isError ? (
+        <QueryFailure compact title="标签统计加载失败" error={statsQuery.error} onRetry={() => void statsQuery.refetch()} />
+      ) : statsQuery.data && (
         <section className="tag-stats-panel panel" aria-label="标签聚合统计">
           <header>
             <div><span className="section-label">对象、投入与风险保持同一标签关系</span><h2>{tags.find((tag) => tag.id === selectedTagId)?.name} 聚合</h2></div>

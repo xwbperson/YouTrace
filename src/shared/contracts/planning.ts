@@ -203,6 +203,14 @@ export const taskListInputSchema = z.object({
   offset: z.number().int().min(0).default(0)
 })
 
+export const setDailyFocusInputSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  taskIds: z.array(z.string().uuid()).max(3).refine(
+    (taskIds) => new Set(taskIds).size === taskIds.length,
+    { message: '今日重点不能包含重复任务。' }
+  )
+})
+
 export const createTagInputSchema = z.object({
   name: z.string().trim().min(1).max(60),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable().default(null),
@@ -458,6 +466,7 @@ export type CreateMilestoneInput = z.infer<typeof createMilestoneInputSchema>
 export type UpdateMilestoneInput = z.infer<typeof updateMilestoneInputSchema>
 export type AddTaskDependencyInput = z.infer<typeof addTaskDependencyInputSchema>
 export type TaskListInput = z.infer<typeof taskListInputSchema>
+export type SetDailyFocusInput = z.infer<typeof setDailyFocusInputSchema>
 export type CreateTagInput = z.infer<typeof createTagInputSchema>
 export type UpdateTagInput = z.infer<typeof updateTagInputSchema>
 export type AssignTagInput = z.infer<typeof assignTagInputSchema>

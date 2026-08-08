@@ -1,4 +1,4 @@
-export const CURRENT_SCHEMA_VERSION = 13
+export const CURRENT_SCHEMA_VERSION = 14
 
 export const INITIAL_SCHEMA_SQL = `
   PRAGMA foreign_keys = ON;
@@ -112,6 +112,18 @@ export const INITIAL_SCHEMA_SQL = `
     archived_at TEXT,
     deleted_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS daily_focus_tasks (
+    focus_date TEXT NOT NULL,
+    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (focus_date, task_id),
+    UNIQUE (focus_date, sort_order)
+  );
+
+  CREATE INDEX IF NOT EXISTS daily_focus_date_order_idx
+    ON daily_focus_tasks(focus_date, sort_order);
 
   CREATE TABLE IF NOT EXISTS task_dependencies (
     task_id TEXT NOT NULL REFERENCES tasks(id),

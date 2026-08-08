@@ -48,6 +48,7 @@ import {
   searchInputSchema,
   saveViewInputSchema,
   setChecklistProgressInputSchema,
+  setDailyFocusInputSchema,
   setTaskRecurrenceInputSchema,
   previewTemplateInputSchema,
   saveProjectTemplateInputSchema,
@@ -400,6 +401,22 @@ export function registerIpc(options: RegisterIpcOptions): void {
     wrap(() => {
       trusted(event)
       return planningService.listTasks(taskListInputSchema.parse(rawInput))
+    })
+  )
+
+  ipcMain.handle('planning:list-daily-focus', (event, rawDate) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.listDailyFocus(
+        z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(rawDate)
+      )
+    })
+  )
+
+  ipcMain.handle('planning:set-daily-focus', (event, rawInput) =>
+    wrap(() => {
+      trusted(event)
+      return planningService.setDailyFocus(setDailyFocusInputSchema.parse(rawInput))
     })
   )
 

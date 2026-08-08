@@ -802,6 +802,44 @@ export class PlanningRepository {
     return rows[0] ? mapTask(rows[0]) : null
   }
 
+  getDailyFocusEligibleTask(id: string): Task | null {
+    const rows = this.listTaskRows(
+      `t.id = ?
+       AND t.deleted_at IS NULL
+       AND t.status IN ('ready', 'scheduled', 'in_progress', 'blocked')`,
+      [id]
+    )
+    return rows[0] ? mapTask(rows[0]) : null
+  }
+
+  listDailyFocusTaskIds(date: string): string[] {
+    return (
+      this.database()
+        .prepare(
+          `SELECT focus.task_id
+             FROM daily_focus_tasks focus
+             JOIN tasks task ON task.id = focus.task_id
+            WHERE focus.focus_date = ?
+              AND task.deleted_at IS NULL
+              AND task.status IN ('ready', 'scheduled', 'in_progress', 'blocked')
+            ORDER BY focus.sort_order`
+        )
+        .all(date) as Array<{ task_id: string }>
+    ).map((row) => row.task_id)
+  }
+
+  replaceDailyFocus(date: string, taskIds: readonly string[], now: string): void {
+    const database = this.database()
+    database.transaction(() => {
+      database.prepare('DELETE FROM daily_focus_tasks WHERE focus_date = ?').run(date)
+      const insert = database.prepare(
+        `INSERT INTO daily_focus_tasks(focus_date, task_id, sort_order, created_at)
+         VALUES (?, ?, ?, ?)`
+      )
+      taskIds.forEach((taskId, index) => insert.run(date, taskId, index, now))
+    })()
+  }
+
   insertTask(id: string, input: CreateTaskInput, now: string): void {
     const database = this.database()
     const transaction = database.transaction(() => {

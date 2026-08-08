@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { IpcResult, Memo, Project, Tag as TraceTag } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -50,6 +51,7 @@ export function MemosPage(): React.JSX.Element {
   const [editMemo, setEditMemo] = useState<Memo | null>(null)
   const [deleteMemo, setDeleteMemo] = useState<Memo | null>(null)
   const [draftHandled, setDraftHandled] = useState(false)
+  const [actionError, setActionError] = useState('')
 
   const memosQuery = useQuery({
     queryKey: ['memos', showArchived],
@@ -157,6 +159,20 @@ export function MemosPage(): React.JSX.Element {
           <span><strong>{memos.filter((memo) => memo.inbox).length}</strong> 条待处理</span>
         </div>
       </header>
+
+      {(projectsQuery.isError || tagsQuery.isError || draftsQuery.isError) && (
+        <QueryFailure
+          compact
+          title="备忘关联信息读取失败"
+          detail="正文仍可继续编辑；重新读取后项目、标签和恢复草稿会重新显示。"
+          onRetry={() => void Promise.all([
+            projectsQuery.refetch(),
+            tagsQuery.refetch(),
+            draftsQuery.refetch()
+          ])}
+        />
+      )}
+      {actionError && <div className="inline-error" role="alert">{actionError}</div>}
 
       <section className="capture-panel panel">
         {recoveryDraft && !draftHandled ? (
@@ -295,7 +311,11 @@ export function MemosPage(): React.JSX.Element {
           <label className="archive-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />显示已归档</label>
         </div>
 
-        {memos.length === 0 ? (
+        {memosQuery.isPending ? (
+          <p className="rail-message" role="status">正在读取备忘…</p>
+        ) : memosQuery.isError ? (
+          <QueryFailure title="备忘读取失败" onRetry={() => void memosQuery.refetch()} />
+        ) : memos.length === 0 ? (
           <div className="record-empty panel">
             <Inbox size={24} />
             <strong>这里还没有内容</strong>
@@ -332,7 +352,7 @@ export function MemosPage(): React.JSX.Element {
                         <Trash2 size={13} />
                       </button>
                     )}
-                    <button aria-label={memo.archived ? '恢复备忘' : '归档备忘'} onClick={async () => { await window.youtrace.execution.archiveMemo(memo.id, !memo.archived); await queryClient.invalidateQueries({ queryKey: ['memos'] }) }}>
+                    <button aria-label={memo.archived ? '恢复备忘' : '归档备忘'} onClick={async () => { const result = await window.youtrace.execution.archiveMemo(memo.id, !memo.archived); if (!result.ok) return setActionError(result.error.message); setActionError(''); await queryClient.invalidateQueries({ queryKey: ['memos'] }) }}>
                       {memo.archived ? <RotateCcw size={13} /> : <Archive size={13} />}
                     </button>
                   </div>

@@ -28,6 +28,7 @@ import type {
   TaskRecurrence,
   SetTaskRecurrenceInput,
   SetChecklistProgressInput,
+  SetDailyFocusInput,
   UpdateAreaInput,
   UpdateChecklistItemInput,
   UpdateGoalInput,
@@ -198,6 +199,40 @@ export class PlanningService {
 
   listTasks(input: TaskListInput): Task[] {
     return applyTaskProgress(this.repository.listTasks(input))
+  }
+
+  listDailyFocus(date: string): Task[] {
+    return applyTaskProgress(
+      this.repository
+        .listDailyFocusTaskIds(date)
+        .map((id) => this.repository.getDailyFocusEligibleTask(id))
+        .filter((task): task is Task => task !== null)
+    )
+  }
+
+  setDailyFocus(input: SetDailyFocusInput): Task[] {
+    if (input.taskIds.length > 3) {
+      throw new YouTraceError({
+        code: 'TODAY_FOCUS_LIMIT',
+        message: '今日重点最多选择 3 项。'
+      })
+    }
+    if (new Set(input.taskIds).size !== input.taskIds.length) {
+      throw new YouTraceError({
+        code: 'TODAY_FOCUS_DUPLICATE',
+        message: '今日重点不能包含重复任务。'
+      })
+    }
+    for (const taskId of input.taskIds) {
+      if (!this.repository.getDailyFocusEligibleTask(taskId)) {
+        throw new YouTraceError({
+          code: 'TODAY_FOCUS_TASK_UNAVAILABLE',
+          message: '只能把未完成且未删除的任务设为今日重点。'
+        })
+      }
+    }
+    this.repository.replaceDailyFocus(input.date, input.taskIds, new Date().toISOString())
+    return this.listDailyFocus(input.date)
   }
 
   createTask(input: CreateTaskInput): Task {

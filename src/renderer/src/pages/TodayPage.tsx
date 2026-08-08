@@ -2,6 +2,8 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
+  ChevronDown,
+  ChevronUp,
   Check,
   Clock3,
   Flag,
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { EffortEntry, IpcResult, Task } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 import { formatTaskContext } from './today-task-context'
 
 function unwrap<T>(result: IpcResult<T>): T {
@@ -27,6 +30,7 @@ export function TodayPage(): React.JSX.Element {
   const [overrideReason, setOverrideReason] = useState('')
   const [actionError, setActionError] = useState('')
   const [now, setNow] = useState(Date.now())
+  const today = useMemo(() => new Date().toLocaleDateString('sv-SE'), [])
 
   const tasksQuery = useQuery({
     queryKey: ['today-tasks'],
@@ -46,6 +50,10 @@ export function TodayPage(): React.JSX.Element {
     queryKey: ['active-effort'],
     queryFn: async () => unwrap(await window.youtrace.execution.getActiveEffort()),
     refetchInterval: 10_000
+  })
+  const focusQuery = useQuery({
+    queryKey: ['daily-focus', today],
+    queryFn: async () => unwrap(await window.youtrace.planning.listDailyFocus(today))
   })
   const todayStart = useMemo(() => {
     const date = new Date()
@@ -84,14 +92,7 @@ export function TodayPage(): React.JSX.Element {
   }, [activeQuery.data])
 
   const tasks = tasksQuery.data ?? []
-  const today = new Date().toLocaleDateString('sv-SE')
-  const focusTasks = [...tasks]
-    .sort((left, right) => {
-      const leftToday = left.startDate === today || left.dueAt?.slice(0, 10) === today ? 0 : 1
-      const rightToday = right.startDate === today || right.dueAt?.slice(0, 10) === today ? 0 : 1
-      return leftToday - rightToday
-    })
-    .slice(0, 3)
+  const focusTasks = focusQuery.data ?? []
   const remainingTasks = tasks.filter((task) => !focusTasks.some((focus) => focus.id === task.id))
   const active = activeQuery.data ?? null
   const plannedMinutes = focusTasks.reduce((sum, task) => sum + (task.estimatedMinutes ?? 0), 0)
@@ -153,13 +154,57 @@ export function TodayPage(): React.JSX.Element {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['today-tasks'] }),
-        queryClient.invalidateQueries({ queryKey: ['tasks'] })
+        queryClient.invalidateQueries({ queryKey: ['tasks'] }),
+        queryClient.invalidateQueries({ queryKey: ['daily-focus', today] })
       ])
     },
     onError: (error) => {
       setActionError(error.message)
     }
   })
+
+  const focusMutation = useMutation({
+    mutationFn: async (taskIds: string[]) =>
+      unwrap(await window.youtrace.planning.setDailyFocus({ date: today, taskIds })),
+    onSuccess: (nextFocus) => {
+      setActionError('')
+      queryClient.setQueryData(['daily-focus', today], nextFocus)
+    },
+    onError: (error) => setActionError(error.message)
+  })
+
+  const toggleFocus = (task: Task): void => {
+    const currentIds = focusTasks.map((item) => item.id)
+    if (currentIds.includes(task.id)) {
+      focusMutation.mutate(currentIds.filter((id) => id !== task.id))
+      return
+    }
+    if (currentIds.length >= 3) {
+      setActionError('今日重点最多选择 3 项，请先移除一项。')
+      return
+    }
+    focusMutation.mutate([...currentIds, task.id])
+  }
+
+  const moveFocus = (taskId: string, direction: -1 | 1): void => {
+    const currentIds = focusTasks.map((item) => item.id)
+    const index = currentIds.indexOf(taskId)
+    const nextIndex = index + direction
+    if (index < 0 || nextIndex < 0 || nextIndex >= currentIds.length) return
+    const nextIds = [...currentIds]
+    ;[nextIds[index], nextIds[nextIndex]] = [nextIds[nextIndex]!, nextIds[index]!]
+    focusMutation.mutate(nextIds)
+  }
+
+  const retryTodayData = (): void => {
+    void Promise.all([
+      tasksQuery.refetch(),
+      focusQuery.refetch(),
+      activeQuery.refetch(),
+      blocksQuery.refetch(),
+      todayEffortsQuery.refetch()
+    ])
+  }
 
   const quickUpdate = async (
     task: Task,
@@ -187,6 +232,14 @@ export function TodayPage(): React.JSX.Element {
         </div>
       </header>
 
+      {(tasksQuery.isError || focusQuery.isError || activeQuery.isError || todayEffortsQuery.isError) && (
+        <QueryFailure
+          title="今日执行数据读取失败"
+          detail="任务和投入记录仍保存在工作区中，请重新读取后再继续操作。"
+          onRetry={retryTodayData}
+        />
+      )}
+
       <section className={`active-session ${active ? 'is-active' : ''}`}>
         <div className="session-orbit">
           {active ? <Pause size={23} /> : <Play size={23} />}
@@ -210,7 +263,8 @@ export function TodayPage(): React.JSX.Element {
                 <button
                   className="button button-secondary"
                   onClick={async () => {
-                    await window.youtrace.execution.resumeEffort(active.id)
+                    const result = await window.youtrace.execution.resumeEffort(active.id)
+                    if (!result.ok) return setActionError(result.error.message)
                     setNow(Date.now())
                     await queryClient.invalidateQueries({ queryKey: ['active-effort'] })
                   }}
@@ -242,17 +296,23 @@ export function TodayPage(): React.JSX.Element {
             <Check size={14} />线下完成也可以直接点“完成”，无需先开始计时。
           </p>
 
-          {tasksQuery.isPending ? (
+          {tasksQuery.isPending || focusQuery.isPending ? (
             <p className="rail-message">正在读取任务…</p>
+          ) : tasksQuery.isError || focusQuery.isError ? (
+            <QueryFailure
+              compact
+              title="任务或今日重点读取失败"
+              onRetry={() => void Promise.all([tasksQuery.refetch(), focusQuery.refetch()])}
+            />
           ) : focusTasks.length === 0 ? (
             <div className="today-empty">
-              <Check size={23} />
-              <strong>现在没有待执行任务</strong>
-              <p>可以在“计划”中创建下一步，或者先写一条快速备忘。</p>
+              <Flag size={23} />
+              <strong>{tasks.length === 0 ? '现在没有待执行任务' : '还没有选择今日重点'}</strong>
+              <p>{tasks.length === 0 ? '可以在“计划”中创建下一步，或者先写一条快速备忘。' : '从下方待办中选择最多三项，首页会只展示你明确选中的任务。'}</p>
             </div>
           ) : (
             <div className="today-task-list">
-              {focusTasks.map((task) => {
+              {focusTasks.map((task, index) => {
                 const isCurrent = active?.entityId === task.id
                 return (
                   <article key={task.id} className={isCurrent ? 'current' : ''}>
@@ -291,6 +351,9 @@ export function TodayPage(): React.JSX.Element {
                       </button>
                     )}
                     <div className="today-task-quick">
+                      <button type="button" title="上移重点" disabled={focusMutation.isPending || index === 0} onClick={() => moveFocus(task.id, -1)}><ChevronUp size={12} /></button>
+                      <button type="button" title="下移重点" disabled={focusMutation.isPending || index === focusTasks.length - 1} onClick={() => moveFocus(task.id, 1)}><ChevronDown size={12} /></button>
+                      <button type="button" title="移出今日重点" disabled={focusMutation.isPending} onClick={() => toggleFocus(task)}>移出</button>
                       <button type="button" title="转明日" onClick={() => void quickUpdate(task, { id: task.id, startDate: tomorrowDate() })}>明日</button>
                       <button type="button" title="延期一天" onClick={() => void quickUpdate(task, { id: task.id, dueAt: task.dueAt ? new Date(Date.parse(task.dueAt) + 86_400_000).toISOString() : new Date(Date.now() + 86_400_000).toISOString() })}>延期</button>
                       <button type="button" title="标为阻塞" onClick={() => void quickUpdate(task, { id: task.id, status: 'blocked' })}>阻塞</button>
@@ -301,9 +364,9 @@ export function TodayPage(): React.JSX.Element {
             </div>
           )}
           {remainingTasks.length > 0 && (
-            <details className="today-backlog">
+            <details className="today-backlog" open={focusTasks.length === 0}>
               <summary>未安排待办 · {remainingTasks.length} 项</summary>
-              <div>{remainingTasks.map((task) => <span key={task.id}><span className="today-backlog-copy"><strong>{task.title}</strong><small className="today-task-context">{formatTaskContext(task)}</small></span><small>{task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}</small><button className="today-backlog-complete" type="button" aria-label={`完成任务：${task.title}（${formatTaskContext(task)}）`} disabled={completeMutation.isPending || active?.entityId === task.id} onClick={() => completeMutation.mutate(task)}><Check size={12} />完成</button></span>)}</div>
+              <div>{remainingTasks.map((task) => <span key={task.id}><span className="today-backlog-copy"><strong>{task.title}</strong><small className="today-task-context">{formatTaskContext(task)}</small></span><small>{task.estimatedMinutes ? `${task.estimatedMinutes} 分钟` : '未估时'}</small><span className="today-backlog-actions"><button className="today-backlog-focus" type="button" disabled={focusMutation.isPending || focusTasks.length >= 3} onClick={() => toggleFocus(task)}><Flag size={12} />设为重点</button><button className="today-backlog-complete" type="button" aria-label={`完成任务：${task.title}（${formatTaskContext(task)}）`} disabled={completeMutation.isPending || active?.entityId === task.id} onClick={() => completeMutation.mutate(task)}><Check size={12} />完成</button></span></span>)}</div>
             </details>
           )}
         </section>
@@ -332,7 +395,7 @@ export function TodayPage(): React.JSX.Element {
           </section>
           <section className="panel today-schedule">
             <span className="section-label">已安排时间块</span>
-            {(blocksQuery.data ?? []).length === 0 ? <p>今天还没有时间块。</p> : (blocksQuery.data ?? []).map((block) => <article key={block.id}><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(block.startsAt))}</strong><span>{block.title}</span><small>{block.durationMinutes} 分钟</small></article>)}
+            {blocksQuery.isError ? <QueryFailure compact title="时间块读取失败" onRetry={() => void blocksQuery.refetch()} /> : (blocksQuery.data ?? []).length === 0 ? <p>今天还没有时间块。</p> : (blocksQuery.data ?? []).map((block) => <article key={block.id}><strong>{new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(new Date(block.startsAt))}</strong><span>{block.title}</span><small>{block.durationMinutes} 分钟</small></article>)}
           </section>
         </aside>
       </div>

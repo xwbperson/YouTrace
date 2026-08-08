@@ -25,6 +25,7 @@ import type {
   Task,
   TimeBlock
 } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 type CalendarView = 'day' | 'week' | 'month' | 'plans' | 'countdowns'
 type TemporalDeleteTarget =
@@ -84,6 +85,7 @@ export function CalendarPage(): React.JSX.Element {
   const [editingCountdown, setEditingCountdown] = useState<Countdown | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<TemporalDeleteTarget | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
   const weekStart = useMemo(() => startOfWeek(anchorDate), [anchorDate])
   const calendarStart = useMemo(
     () =>
@@ -142,6 +144,7 @@ export function CalendarPage(): React.JSX.Element {
 
   const blocks = blocksQuery.data ?? []
   const moveToDay = async (block: TimeBlock, day: Date): Promise<void> => {
+    setActionError('')
     const start = new Date(block.startsAt)
     const end = new Date(block.endsAt)
     const duration = end.getTime() - start.getTime()
@@ -152,7 +155,11 @@ export function CalendarPage(): React.JSX.Element {
       startsAt: movedStart.toISOString(),
       endsAt: new Date(movedStart.getTime() + duration).toISOString()
     })
-    if (result.ok) await queryClient.invalidateQueries({ queryKey: ['time-blocks'] })
+    if (!result.ok) {
+      setActionError(result.error.message)
+      return
+    }
+    await queryClient.invalidateQueries({ queryKey: ['time-blocks'] })
   }
 
   return (
@@ -175,6 +182,18 @@ export function CalendarPage(): React.JSX.Element {
         </div>
       </header>
 
+      {actionError ? (
+        <QueryFailure title="日历操作失败" error={actionError} onRetry={() => setActionError('')} retryLabel="关闭" />
+      ) : null}
+
+      {tasksQuery.isError || tagsQuery.isError ? (
+        <QueryFailure
+          title="日历关联数据加载失败"
+          error={tasksQuery.error ?? tagsQuery.error}
+          onRetry={() => void Promise.all([tasksQuery.refetch(), tagsQuery.refetch()])}
+        />
+      ) : null}
+
       <div className="calendar-tabs" role="tablist" aria-label="日历视图">
         <button role="tab" aria-selected={view === 'day'} className={view === 'day' ? 'active' : ''} onClick={() => setView('day')}>日</button>
         <button role="tab" aria-selected={view === 'week'} className={view === 'week' ? 'active' : ''} onClick={() => setView('week')}>周日历</button>
@@ -184,7 +203,11 @@ export function CalendarPage(): React.JSX.Element {
       </div>
 
       {['day', 'week', 'month'].includes(view) && (
-        <section className={`week-calendar panel calendar-view-${view}`}>
+        blocksQuery.isPending ? (
+          <p className="rail-message">正在读取日历安排…</p>
+        ) : blocksQuery.isError ? (
+          <QueryFailure title="日历安排加载失败" error={blocksQuery.error} onRetry={() => void blocksQuery.refetch()} />
+        ) : <section className={`week-calendar panel calendar-view-${view}`}>
           <header>
             <button type="button" aria-label="上一周期" onClick={() => setAnchorDate(navigateCalendar(anchorDate, view, -1))}><ChevronLeft size={16} /></button>
             <div>
@@ -253,7 +276,11 @@ export function CalendarPage(): React.JSX.Element {
 
       {view === 'plans' && (
         <section className="plan-board">
-          {(plansQuery.data ?? []).length === 0 ? (
+          {plansQuery.isPending ? (
+            <p className="rail-message">正在读取周期计划…</p>
+          ) : plansQuery.isError ? (
+            <QueryFailure title="周期计划加载失败" error={plansQuery.error} onRetry={() => void plansQuery.refetch()} />
+          ) : (plansQuery.data ?? []).length === 0 ? (
             <CalendarEmpty title="本周还没有周期计划" copy="计划引用现有任务；后续调整任务时，不会产生另一份副本。" action="新建计划" onAction={() => setPlanDialogOpen(true)} />
           ) : (
             (plansQuery.data ?? []).map((plan) => <PlanCard key={plan.id} plan={plan} onEdit={() => { setEditingPlan(plan); setPlanDialogOpen(true) }} onDelete={() => setDeleteTarget({ type: 'plan', id: plan.id, title: plan.title })} />)
@@ -267,7 +294,11 @@ export function CalendarPage(): React.JSX.Element {
             <div><span className="section-label">自然日、工作日与真实速度</span><h2>期限雷达</h2></div>
             <button className="button button-primary" type="button" onClick={() => { setEditingCountdown(null); setCountdownDialogOpen(true) }}><Plus size={15} />新建倒计时</button>
           </header>
-          {(countdownsQuery.data ?? []).length === 0 ? (
+          {countdownsQuery.isPending ? (
+            <p className="rail-message">正在读取倒计时…</p>
+          ) : countdownsQuery.isError ? (
+            <QueryFailure title="倒计时加载失败" error={countdownsQuery.error} onRetry={() => void countdownsQuery.refetch()} />
+          ) : (countdownsQuery.data ?? []).length === 0 ? (
             <CalendarEmpty title="还没有倒计时" copy="添加期限和剩余工作量后，系统会给出建议速度与风险原因。" action="建立第一个倒计时" onAction={() => setCountdownDialogOpen(true)} />
           ) : (
             <div className="countdown-list">

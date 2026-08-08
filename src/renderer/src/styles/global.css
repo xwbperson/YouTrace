@@ -2508,6 +2508,58 @@ kbd {
   background: var(--surface-soft);
 }
 
+.query-failure {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 12px 14px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
+  border-radius: 9px;
+}
+
+.query-failure > svg {
+  align-self: start;
+  margin-top: 2px;
+}
+
+.query-failure > div {
+  display: grid;
+  gap: 3px;
+}
+
+.query-failure strong {
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.query-failure span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.query-failure button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  color: var(--danger);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.query-failure.compact {
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
 .button-danger {
   color: white;
   background: var(--danger);
@@ -5913,6 +5965,11 @@ kbd {
   background: var(--surface);
 }
 
+.today-task-quick button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
 .today-backlog {
   margin-top: 12px;
   padding-top: 10px;
@@ -5954,6 +6011,31 @@ kbd {
   flex: 1;
   min-width: 0;
   gap: 2px;
+}
+
+.today-backlog-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.today-backlog-focus {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: var(--time);
+  background: var(--time-soft);
+  border: 1px solid color-mix(in srgb, var(--time) 28%, var(--border));
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.today-backlog-focus:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .today-backlog-complete {

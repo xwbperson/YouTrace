@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import type { BackupInfo, IpcResult, TrashItem, WorkspaceCheck } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -54,18 +55,24 @@ export function DataPage(): React.JSX.Element {
     setBusy(label)
     setError('')
     setMessage('')
-    const result = await operation()
-    setBusy('')
-    if (!result.ok) {
-      setError(result.error.message)
+    try {
+      const result = await operation()
+      if (!result.ok) {
+        setError(result.error.message)
+        return false
+      }
+      setMessage(`${label}已完成。`)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['backups'] }),
+        queryClient.invalidateQueries({ queryKey: ['trash'] })
+      ])
+      return true
+    } catch (operationError) {
+      setError(operationError instanceof Error ? operationError.message : `${label}失败，请重试。`)
       return false
+    } finally {
+      setBusy('')
     }
-    setMessage(`${label}已完成。`)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['backups'] }),
-      queryClient.invalidateQueries({ queryKey: ['trash'] })
-    ])
-    return true
   }
 
   const chooseEmptyDirectory = async (): Promise<string | null> => {
@@ -130,11 +137,34 @@ export function DataPage(): React.JSX.Element {
     }
   }
 
+  const checkWorkspace = async (): Promise<void> => {
+    setBusy('检查')
+    setError('')
+    setMessage('')
+    try {
+      const result = await window.youtrace.data.checkWorkspace()
+      if (!result.ok) return setError(result.error.message)
+      setCheck(result.data)
+      setMessage('工作区检查已完成。')
+    } catch (checkError) {
+      setError(checkError instanceof Error ? checkError.message : '工作区检查失败，请重试。')
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <div className="data-page">
       <header className="data-toolbar">
         <div><span className="page-kicker">验证后才算安全</span><h1>数据中心</h1><p>备份、迁移和恢复始终保留源工作区，不自动合并或删除。</p></div>
       </header>
+      {(backupsQuery.isError || trashQuery.isError) && (
+        <QueryFailure
+          title="数据中心列表读取失败"
+          detail="备份和回收站内容没有被删除，请重新读取。"
+          onRetry={() => void Promise.all([backupsQuery.refetch(), trashQuery.refetch()])}
+        />
+      )}
       <div className="data-tabs" role="tablist" aria-label="数据管理视图">
         <button role="tab" aria-selected={tab === 'safety'} className={tab === 'safety' ? 'active' : ''} onClick={() => setTab('safety')}>备份与迁移</button>
         <button role="tab" aria-selected={tab === 'trash'} className={tab === 'trash' ? 'active' : ''} onClick={() => setTab('trash')}>回收站 <span>{trash.length}</span></button>
@@ -144,17 +174,12 @@ export function DataPage(): React.JSX.Element {
         <div className="data-safety-grid">
           <section className="data-actions-panel panel">
             <header><span><ShieldCheck size={18} /></span><div><h2>工作区检查</h2><p>检查 SQLite、schema 和附件引用。</p></div></header>
-            <button className="data-operation" type="button" onClick={async () => {
-              setBusy('检查')
-              const result = await window.youtrace.data.checkWorkspace()
-              setBusy('')
-              if (result.ok) { setCheck(result.data); setMessage('工作区检查已完成。') } else setError(result.error.message)
-            }}><RefreshCw size={17} /><span><strong>运行完整性检查</strong><small>{busy === '检查' ? '正在检查…' : '只读检查，不修改业务数据'}</small></span></button>
-            <button className="data-operation" type="button" onClick={() => void run('备份', () => window.youtrace.data.createBackup('手动备份'))}><DatabaseBackup size={17} /><span><strong>创建已验证备份</strong><small>在线 SQLite 快照 + 文件清单 SHA-256</small></span></button>
-            <button className="data-operation" type="button" onClick={() => void run('可读导出', () => window.youtrace.data.exportReadable())}><Download size={17} /><span><strong>导出 Markdown / CSV</strong><small>用于查看和分析，不作为实时数据库</small></span></button>
-            <button className="data-operation" type="button" onClick={() => void run('便携导出', () => window.youtrace.data.exportPortable())}><FileArchive size={17} /><span><strong>导出 .ytrace 便携包</strong><small>完整工作区传输载体</small></span></button>
-            <button className="data-operation" type="button" onClick={() => void migrate()}><FolderInput size={17} /><span><strong>迁移工作区根目录</strong><small>复制—校验—试开—切换，源目录保留</small></span></button>
-            <button className="data-operation" type="button" onClick={() => void importPortable()}><Upload size={17} /><span><strong>导入 .ytrace 到新工作区</strong><small>隔离校验，不与当前工作区合并</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void checkWorkspace()}><RefreshCw size={17} /><span><strong>运行完整性检查</strong><small>{busy === '检查' ? '正在检查…' : '只读检查，不修改业务数据'}</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void run('备份', () => window.youtrace.data.createBackup('手动备份'))}><DatabaseBackup size={17} /><span><strong>创建已验证备份</strong><small>在线 SQLite 快照 + 文件清单 SHA-256</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void run('可读导出', () => window.youtrace.data.exportReadable())}><Download size={17} /><span><strong>导出 Markdown / CSV</strong><small>用于查看和分析，不作为实时数据库</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void run('便携导出', () => window.youtrace.data.exportPortable())}><FileArchive size={17} /><span><strong>导出 .ytrace 便携包</strong><small>完整工作区传输载体</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void migrate()}><FolderInput size={17} /><span><strong>迁移工作区根目录</strong><small>复制—校验—试开—切换，源目录保留</small></span></button>
+            <button className="data-operation" type="button" disabled={Boolean(busy)} onClick={() => void importPortable()}><Upload size={17} /><span><strong>导入 .ytrace 到新工作区</strong><small>隔离校验，不与当前工作区合并</small></span></button>
           </section>
           <section className="backup-panel panel">
             <header><div><span className="section-label">已验证恢复点</span><h2>备份</h2></div><strong>{backups.length}</strong></header>

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookmarkPlus, FileText, Filter, Layers3, Pencil, Search, Tag, TimerReset, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import type { IpcResult, ParsedSearchInput, SearchResult } from '../../../shared/contracts'
+import { QueryFailure } from './QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -33,6 +34,7 @@ export function GlobalSearch({
   const [saveName, setSaveName] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingViewId, setEditingViewId] = useState('')
+  const [actionError, setActionError] = useState('')
   const queryClient = useQueryClient()
 
   useEffect(() => {
@@ -122,11 +124,11 @@ export function GlobalSearch({
       ? await window.youtrace.planning.updateSavedView({ id: editingViewId, name: saveName, filters })
       : await window.youtrace.planning.saveView({ name: saveName, filters })
     setSaving(false)
-    if (result.ok) {
-      setSaveName('')
-      setEditingViewId('')
-      await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
-    }
+    if (!result.ok) return setActionError(result.error.message)
+    setActionError('')
+    setSaveName('')
+    setEditingViewId('')
+    await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
   }
 
   return (
@@ -174,7 +176,9 @@ export function GlobalSearch({
                     type="button"
                     aria-label={`删除视图：${view.name}`}
                     onClick={async () => {
-                      await window.youtrace.planning.deleteSavedView(view.id)
+                      const result = await window.youtrace.planning.deleteSavedView(view.id)
+                      if (!result.ok) return setActionError(result.error.message)
+                      setActionError('')
                       if (editingViewId === view.id) { setEditingViewId(''); setSaveName('') }
                       await queryClient.invalidateQueries({ queryKey: ['saved-views'] })
                     }}
@@ -185,6 +189,19 @@ export function GlobalSearch({
               </span>
             ))}
           </div>
+          {(projectsQuery.isError || tagsQuery.isError || savedViewsQuery.isError) && (
+            <QueryFailure
+              compact
+              title="搜索筛选条件读取失败"
+              detail="搜索正文仍可继续使用；重新读取后项目、标签和保存视图会恢复。"
+              onRetry={() => void Promise.all([
+                projectsQuery.refetch(),
+                tagsQuery.refetch(),
+                savedViewsQuery.refetch()
+              ])}
+            />
+          )}
+          {actionError && <div className="inline-error" role="alert">{actionError}</div>}
           <div className="search-filter-grid" aria-label="组合筛选">
             <span className="search-filter-label"><Filter size={13} />筛选</span>
             <select aria-label="筛选状态" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -228,6 +245,12 @@ export function GlobalSearch({
               </div>
             ) : resultsQuery.isPending ? (
               <div className="search-state">正在搜索…</div>
+            ) : resultsQuery.isError ? (
+              <QueryFailure
+                title="搜索暂时失败"
+                detail="索引和业务数据没有被删除，请重新搜索。"
+                onRetry={() => void resultsQuery.refetch()}
+              />
             ) : results.length === 0 ? (
               <div className="search-state">
                 <strong>没有找到符合条件的内容</strong>

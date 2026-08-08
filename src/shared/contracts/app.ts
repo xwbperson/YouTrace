@@ -21,6 +21,7 @@ import type {
   SearchResult,
   SetTaskRecurrenceInput,
   SetChecklistProgressInput,
+  SetDailyFocusInput,
   Tag,
   TagStats,
   Task,
@@ -257,6 +258,8 @@ export interface YouTraceApi {
     updateMilestone(input: UpdateMilestoneInput): Promise<IpcResult<Milestone>>
     trashMilestone(id: string): Promise<IpcResult<void>>
     listTasks(input: TaskListInput): Promise<IpcResult<Task[]>>
+    listDailyFocus(date: string): Promise<IpcResult<Task[]>>
+    setDailyFocus(input: SetDailyFocusInput): Promise<IpcResult<Task[]>>
     createTask(input: CreateTaskInput): Promise<IpcResult<Task>>
     updateTask(input: UpdateTaskInput): Promise<IpcResult<Task>>
     trashTask(id: string): Promise<IpcResult<void>>

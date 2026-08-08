@@ -24,6 +24,7 @@ import type {
   IpcResult,
   Task
 } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -107,6 +108,19 @@ export function RecordsPage(): React.JSX.Element {
         </div>
       </header>
 
+      {(effortsQuery.isError || summaryQuery.isError || evidenceQuery.isError || tasksQuery.isError) && (
+        <QueryFailure
+          title="记录页面读取不完整"
+          detail="投入和成果仍保存在工作区中，请重新读取后再判断是否为空。"
+          onRetry={() => void Promise.all([
+            effortsQuery.refetch(),
+            summaryQuery.refetch(),
+            evidenceQuery.refetch(),
+            tasksQuery.refetch()
+          ])}
+        />
+      )}
+
       <div className="record-stats">
         <article>
           <Clock3 size={18} />
@@ -150,7 +164,11 @@ export function RecordsPage(): React.JSX.Element {
 
         {tab === 'effort' ? (
           <div className="effort-timeline">
-            {(effortsQuery.data ?? []).length === 0 ? (
+            {effortsQuery.isPending ? (
+              <p className="rail-message" role="status">正在读取努力记录…</p>
+            ) : effortsQuery.isError ? (
+              <QueryFailure title="努力记录读取失败" onRetry={() => void effortsQuery.refetch()} />
+            ) : (effortsQuery.data ?? []).length === 0 ? (
               <div className="record-empty">
                 <TimerReset size={24} />
                 <strong>还没有努力记录</strong>
@@ -186,7 +204,11 @@ export function RecordsPage(): React.JSX.Element {
           </div>
         ) : (
           <div className="evidence-grid">
-            {(evidenceQuery.data ?? []).length === 0 ? (
+            {evidenceQuery.isPending ? (
+              <p className="rail-message" role="status">正在读取成果…</p>
+            ) : evidenceQuery.isError ? (
+              <QueryFailure title="成果读取失败" onRetry={() => void evidenceQuery.refetch()} />
+            ) : (evidenceQuery.data ?? []).length === 0 ? (
               <div className="record-empty">
                 <Award size={24} />
                 <strong>还没有成果证据</strong>

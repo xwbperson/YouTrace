@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { IpcResult, Project, ProjectTemplate, TemplatePreview } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 function unwrap<T>(result: IpcResult<T>): T {
   if (!result.ok) throw new Error(result.error.message)
@@ -35,6 +36,8 @@ export function TemplatesPage(): React.JSX.Element {
   const [deleteTemplate, setDeleteTemplate] = useState<ProjectTemplate | null>(null)
   const [showArchived, setShowArchived] = useState(false)
   const [appliedName, setAppliedName] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
   const templatesQuery = useQuery({
     queryKey: ['templates', showArchived],
     queryFn: async () => unwrap(await window.youtrace.workflow.listTemplates(showArchived))
@@ -49,6 +52,7 @@ export function TemplatesPage(): React.JSX.Element {
   }, [selectedId, templates])
 
   const selectTemplate = async (template: ProjectTemplate): Promise<void> => {
+    setActionError('')
     setSelectedId(template.id)
     const name = projectName.trim() || `我的${template.name}`
     setProjectName(name)
@@ -57,17 +61,25 @@ export function TemplatesPage(): React.JSX.Element {
       projectName: name
     })
     if (result.ok) setPreview(result.data)
+    else setActionError(result.error.message)
   }
 
   const apply = async (): Promise<void> => {
     if (!selectedId || !projectName.trim()) return
-    const result = await window.youtrace.workflow.applyTemplate({
-      templateId: selectedId,
-      projectName
-    })
-    if (result.ok) {
+    setActionBusy(true)
+    setActionError('')
+    try {
+      const result = await window.youtrace.workflow.applyTemplate({
+        templateId: selectedId,
+        projectName
+      })
+      if (!result.ok) return setActionError(result.error.message)
       setAppliedName(result.data.project.name)
       await queryClient.invalidateQueries({ queryKey: ['projects'] })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : '应用模板失败。')
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -77,11 +89,15 @@ export function TemplatesPage(): React.JSX.Element {
         <div><span className="page-kicker">复用结构，不复制历史</span><h1>模板</h1><p>先预览将创建的里程碑和任务，再写入工作区。</p></div>
         <div className="toolbar-actions"><label className="archive-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />显示已归档</label><button className="button button-secondary" type="button" onClick={() => { setEditingTemplate(null); setSaveOpen(true) }}><Save size={15} />从项目保存</button></div>
       </header>
+      {actionError ? <QueryFailure title="模板操作失败" error={actionError} onRetry={() => setActionError('')} retryLabel="关闭" /> : null}
+      {templatesQuery.isError || projectsQuery.isError ? (
+        <QueryFailure title="模板数据加载失败" error={templatesQuery.error ?? projectsQuery.error} onRetry={() => void Promise.all([templatesQuery.refetch(), projectsQuery.refetch()])} />
+      ) : null}
       <div className="template-layout">
         <section className="template-gallery">
-          {templates.map((template, index) => {
+          {templatesQuery.isPending ? <p className="rail-message">正在读取模板…</p> : templates.map((template, index) => {
             const Icon = icons[index % icons.length]!
-            return <article key={template.id} className={`template-gallery-item ${template.id === selectedId ? 'active' : ''} ${template.archived ? 'archived' : ''}`}><button className="template-select" type="button" onClick={() => template.archived ? (setSelectedId(template.id), setPreview(null)) : void selectTemplate(template)}><span className="template-icon"><Icon size={20} /></span><span><small>{template.builtIn ? '内置模板' : template.archived ? '已归档模板' : '自定义模板'}</small><strong>{template.name}</strong><p>{template.description}</p><em>{template.milestoneCount} 个里程碑 · {template.taskCount} 个任务</em></span><ArrowRight size={15} /></button>{!template.builtIn && <footer><button type="button" onClick={() => { setEditingTemplate(template); setSaveOpen(true) }}><Pencil size={12} />编辑</button><button type="button" onClick={async () => { await window.youtrace.workflow.archiveTemplate(template.id, !template.archived); if (selectedId === template.id) { setSelectedId(null); setPreview(null) } await queryClient.invalidateQueries({ queryKey: ['templates'] }) }}>{template.archived ? <><RotateCcw size={12} />恢复</> : <><Archive size={12} />归档</>}</button>{template.archived && <button type="button" className="danger" onClick={() => setDeleteTemplate(template)}><Trash2 size={12} />删除</button>}</footer>}</article>
+            return <article key={template.id} className={`template-gallery-item ${template.id === selectedId ? 'active' : ''} ${template.archived ? 'archived' : ''}`}><button className="template-select" type="button" onClick={() => template.archived ? (setSelectedId(template.id), setPreview(null)) : void selectTemplate(template)}><span className="template-icon"><Icon size={20} /></span><span><small>{template.builtIn ? '内置模板' : template.archived ? '已归档模板' : '自定义模板'}</small><strong>{template.name}</strong><p>{template.description}</p><em>{template.milestoneCount} 个里程碑 · {template.taskCount} 个任务</em></span><ArrowRight size={15} /></button>{!template.builtIn && <footer><button type="button" onClick={() => { setEditingTemplate(template); setSaveOpen(true) }}><Pencil size={12} />编辑</button><button type="button" onClick={async () => { setActionError(''); const result = await window.youtrace.workflow.archiveTemplate(template.id, !template.archived); if (!result.ok) return setActionError(result.error.message); if (selectedId === template.id) { setSelectedId(null); setPreview(null) } await queryClient.invalidateQueries({ queryKey: ['templates'] }) }}>{template.archived ? <><RotateCcw size={12} />恢复</> : <><Archive size={12} />归档</>}</button>{template.archived && <button type="button" className="danger" onClick={() => setDeleteTemplate(template)}><Trash2 size={12} />删除</button>}</footer>}</article>
           })}
         </section>
         <aside className="template-preview panel">
@@ -92,7 +108,7 @@ export function TemplatesPage(): React.JSX.Element {
               {preview.milestones.map((milestone, index) => <article key={`${milestone.title}-${index}`}><header><span>{String(index + 1).padStart(2, '0')}</span><strong>{milestone.title}</strong><small>{milestone.tasks.length} 项</small></header><div>{milestone.tasks.map((task) => <span key={`${task.title}-${index}`}>{task.title}<small>{task.estimatedMinutes ?? '—'} 分钟</small></span>)}</div></article>)}
             </div>
             {appliedName && <div className="template-success"><Plus size={13} />已创建项目“{appliedName}”</div>}
-            <footer><span>仅创建结构，不包含投入、成果或历史记录。</span><button className="button button-primary" type="button" disabled={!projectName.trim()} onClick={() => void apply()}>应用模板</button></footer>
+            <footer><span>仅创建结构，不包含投入、成果或历史记录。</span><button className="button button-primary" type="button" disabled={!projectName.trim() || actionBusy} onClick={() => void apply()}>{actionBusy ? '正在应用…' : '应用模板'}</button></footer>
           </>}
         </aside>
       </div>

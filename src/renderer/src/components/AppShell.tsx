@@ -30,6 +30,7 @@ import { TagsPage } from '../pages/TagsPage'
 import { GlobalSearch } from './GlobalSearch'
 import { CalendarPage } from '../pages/CalendarPage'
 import { CountdownSummary } from './CountdownSummary'
+import { QueryFailure } from './QueryFeedback'
 import { ReviewsPage } from '../pages/ReviewsPage'
 import { TemplatesPage } from '../pages/TemplatesPage'
 import { SettingsPage } from '../pages/SettingsPage'
@@ -69,6 +70,7 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
       }).format(new Date()),
     []
   )
+  const todayDate = useMemo(() => new Date().toLocaleDateString('sv-SE'), [])
   const preferencesQuery = useQuery({
     queryKey: ['user-preferences'],
     queryFn: async () => {
@@ -77,17 +79,10 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
       return result.data
     }
   })
-  const dashboardTasksQuery = useQuery({
-    queryKey: ['dashboard-tasks'],
+  const dailyFocusQuery = useQuery({
+    queryKey: ['daily-focus', todayDate],
     queryFn: async () => {
-      const result = await window.youtrace.planning.listTasks({
-        projectId: null,
-        statuses: ['ready', 'scheduled', 'in_progress', 'blocked'],
-        tagIds: [],
-        includeDeleted: false,
-        limit: 100,
-        offset: 0
-      })
+      const result = await window.youtrace.planning.listDailyFocus(todayDate)
       if (!result.ok) throw new Error(result.error.message)
       return result.data
     }
@@ -123,8 +118,7 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
       return result.data
     }
   })
-  const dashboardTasks = dashboardTasksQuery.data ?? []
-  const dashboardFocus = dashboardTasks.slice(0, 3)
+  const dashboardFocus = dailyFocusQuery.data ?? []
   const dashboardEfforts = dashboardEffortsQuery.data ?? []
   const weeklyMinutes = dashboardEfforts.reduce((sum, effort) => sum + effort.effectiveMinutes, 0)
   const dailyMinutes = [1, 2, 3, 4, 5, 6, 0].map((day) =>
@@ -330,21 +324,35 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
               </button>
             </div>
 
-            <div className="empty-focus">
+            {dailyFocusQuery.isError ? (
+              <QueryFailure
+                title="今日重点读取失败"
+                detail="任务仍保存在工作区中，本页不会把读取失败显示成空列表。"
+                onRetry={() => void dailyFocusQuery.refetch()}
+              />
+            ) : dailyFocusQuery.isPending ? (
+              <p className="rail-message" role="status">正在读取今日重点…</p>
+            ) : <div className="empty-focus">
               <div className="focus-orbit" aria-hidden="true">
                 <span />
               </div>
               <div>
                 <strong>{dashboardFocus[0]?.title ?? '还没有选定今日重点'}</strong>
-                <p>{dashboardFocus.length ? `当前候选 ${dashboardFocus.length} 项；在今日执行台可开始计时或快速调整。` : '从一个目标中挑选下一步，或先快速记录脑中的事情。'}</p>
+                <p>{dashboardFocus.length ? `今天已选择 ${dashboardFocus.length} 项；在今日执行台可开始计时或调整顺序。` : '到今日执行台，从现有待办中明确选择最多三项。'}</p>
               </div>
-              <button className="button button-secondary" type="button" onClick={() => setActive(dashboardFocus.length ? 'today' : 'plan')}>
+              <button className="button button-secondary" type="button" onClick={() => setActive('today')}>
                 <Plus size={16} />
-                {dashboardFocus.length ? '进入今日执行台' : '创建第一项任务'}
+                {dashboardFocus.length ? '进入今日执行台' : '选择今日重点'}
               </button>
-            </div>
+            </div>}
 
-            <div className="capacity-line">
+            {preferencesQuery.isError ? (
+              <QueryFailure
+                compact
+                title="今日容量设置读取失败"
+                onRetry={() => void preferencesQuery.refetch()}
+              />
+            ) : <div className="capacity-line">
               <span>
                 <Clock3 size={15} />
                 今日容量
@@ -353,7 +361,7 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
                 <span style={{ width: `${Math.min(100, Math.round((plannedMinutes / capacityMinutes) * 100))}%` }} />
               </div>
               <strong>{formatDashboardMinutes(plannedMinutes)} / {formatDashboardMinutes(capacityMinutes)}</strong>
-            </div>
+            </div>}
           </section>
 
           <CountdownSummary onOpenCalendar={() => setActive('calendar')} />
@@ -409,14 +417,20 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
               </div>
               <strong className="weekly-total">{formatDashboardMinutes(weeklyMinutes)}</strong>
             </div>
-            <div className="weekly-bars" aria-label="本周暂无投入记录">
+            {dashboardEffortsQuery.isError ? (
+              <QueryFailure
+                compact
+                title="本周投入读取失败"
+                onRetry={() => void dashboardEffortsQuery.refetch()}
+              />
+            ) : <div className="weekly-bars" aria-label="本周暂无投入记录">
               {['一', '二', '三', '四', '五', '六', '日'].map((day, index) => (
                 <div key={day}>
                   <span style={{ height: `${Math.max(4, Math.round((dailyMinutes[index]! / maxDailyMinutes) * 64))}px` }} />
                   <small>{day}</small>
                 </div>
               ))}
-            </div>
+            </div>}
           </section>
 
           <section className="inbox-panel panel">
@@ -431,7 +445,13 @@ export function AppShell({ workspace, onWorkspaceChange }: AppShellProps): React
               写下突然想到的事情…
               <kbd>Ctrl N</kbd>
             </button>
-            <p>可以稍后转换为任务、知识点或错题，原始内容会保留。</p>
+            {dashboardMemosQuery.isError ? (
+              <QueryFailure
+                compact
+                title="备忘数量读取失败"
+                onRetry={() => void dashboardMemosQuery.refetch()}
+              />
+            ) : <p>可以稍后转换为任务、知识点或错题，原始内容会保留。</p>}
           </section>
             </main>
           </>

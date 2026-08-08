@@ -418,4 +418,65 @@ describe('planning application service', () => {
     expect(ids('协议状态机')).not.toContain(target.id)
     expect(ids('其他协议状态机')).toHaveLength(1)
   })
+
+  it('persists at most three explicitly ordered daily focus tasks', () => {
+    const project = planning.createProject({
+      areaId: null,
+      name: '今日重点项目',
+      description: '',
+      status: 'active',
+      startDate: null,
+      targetDate: null,
+      successCriteria: '',
+      progressMode: 'equal'
+    })
+    const createTask = (title: string) =>
+      planning.createTask({
+        parentTaskId: null,
+        projectId: project.id,
+        goalId: null,
+        milestoneId: null,
+        title,
+        description: '',
+        status: 'ready',
+        difficulty: null,
+        priority: 'medium',
+        estimatedMinutes: 30,
+        progressWeight: null,
+        startDate: null,
+        dueAt: null,
+        verificationCriteria: '',
+        includeInProgress: true,
+        tagIds: []
+      })
+
+    const first = createTask('第一重点')
+    const second = createTask('第二重点')
+    const third = createTask('第三重点')
+    const fourth = createTask('第四候选')
+
+    planning.setDailyFocus({
+      date: '2026-08-08',
+      taskIds: [second.id, first.id, third.id]
+    })
+    expect(planning.listDailyFocus('2026-08-08').map((task) => task.id)).toEqual([
+      second.id,
+      first.id,
+      third.id
+    ])
+    expect(planning.listDailyFocus('2026-08-09')).toEqual([])
+
+    expect(() =>
+      planning.setDailyFocus({
+        date: '2026-08-08',
+        taskIds: [first.id, second.id, third.id, fourth.id]
+      })
+    ).toThrow(/最多选择 3 项/)
+
+    planning.updateTask({ id: second.id, status: 'completed' })
+    expect(planning.listDailyFocus('2026-08-08').map((task) => task.id)).toEqual([
+      first.id,
+      third.id
+    ])
+  })
 })

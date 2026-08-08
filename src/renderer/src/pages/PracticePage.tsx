@@ -40,6 +40,7 @@ import type {
   Project,
   EvidenceAttachment
 } from '../../../shared/contracts'
+import { QueryFailure } from '../components/QueryFeedback'
 
 type PracticeView = 'habits' | 'metrics' | 'learning'
 
@@ -78,6 +79,8 @@ export function PracticePage(): React.JSX.Element {
   const [testDialogOpen, setTestDialogOpen] = useState(false)
   const [editingTest, setEditingTest] = useState<LearningTest | null>(null)
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState('')
+  const [actionBusy, setActionBusy] = useState('')
   const today = useMemo(() => localDate(), [])
   const projectId = scopeId === 'personal' ? null : scopeId
 
@@ -166,8 +169,29 @@ export function PracticePage(): React.JSX.Element {
       ),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['habits'] })
-    }
+    },
+    onError: (error) => setActionError(error.message)
   })
+
+  const runPracticeAction = async (
+    label: string,
+    operation: () => Promise<IpcResult<unknown>>,
+    queryKeys: string[]
+  ): Promise<void> => {
+    setActionBusy(label)
+    setActionError('')
+    try {
+      const result = await operation()
+      if (!result.ok) return setActionError(result.error.message)
+      await Promise.all(
+        queryKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey: [queryKey] }))
+      )
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : `${label}失败，请重试。`)
+    } finally {
+      setActionBusy('')
+    }
+  }
 
   const scopeSelector = (
     <label className="practice-scope">
@@ -218,6 +242,16 @@ export function PracticePage(): React.JSX.Element {
         </button>
       </div>
 
+      {projectsQuery.isError && (
+        <QueryFailure
+          compact
+          title="项目范围读取失败"
+          detail="习惯、指标和课程数据没有被删除，请重新读取项目范围。"
+          onRetry={() => void projectsQuery.refetch()}
+        />
+      )}
+      {actionError && <div className="inline-error" role="alert">{actionError}</div>}
+
       {view === 'habits' && (
         <section className="practice-section">
           <header>
@@ -234,7 +268,11 @@ export function PracticePage(): React.JSX.Element {
               </button>
             </div>
           </header>
-          {(habitsQuery.data ?? []).length === 0 ? (
+          {habitsQuery.isPending ? (
+            <p className="rail-message" role="status">正在读取习惯…</p>
+          ) : habitsQuery.isError ? (
+            <QueryFailure title="习惯读取失败" onRetry={() => void habitsQuery.refetch()} />
+          ) : (habitsQuery.data ?? []).length === 0 ? (
             <PracticeEmpty
               icon={<Flame size={25} />}
               title="还没有这个范围的习惯"
@@ -252,8 +290,7 @@ export function PracticePage(): React.JSX.Element {
                     aria-label={habit.todayStatus === 'completed' ? `清除今日记录 ${habit.name}` : `完成 ${habit.name}`}
                     onClick={async () => {
                       if (habit.todayStatus === 'completed') {
-                        await window.youtrace.practice.clearHabitRecord(habit.id, today)
-                        await queryClient.invalidateQueries({ queryKey: ['habits'] })
+                        await runPracticeAction('清除习惯记录', () => window.youtrace.practice.clearHabitRecord(habit.id, today), ['habits'])
                       } else recordHabit.mutate({ habit, status: 'completed' })
                     }}
                   >
@@ -276,14 +313,13 @@ export function PracticePage(): React.JSX.Element {
                     className="quiet-action"
                     onClick={async () => {
                       if (habit.todayStatus === 'skipped') {
-                        await window.youtrace.practice.clearHabitRecord(habit.id, today)
-                        await queryClient.invalidateQueries({ queryKey: ['habits'] })
+                        await runPracticeAction('清除习惯记录', () => window.youtrace.practice.clearHabitRecord(habit.id, today), ['habits'])
                       } else recordHabit.mutate({ habit, status: 'skipped' })
                     }}
                   >
                     {habit.todayStatus === 'skipped' ? '清除跳过' : '跳过'}
                   </button>
-                  <div className="practice-card-actions"><button type="button" aria-label={`编辑习惯：${habit.name}`} onClick={() => { setEditingHabit(habit); setHabitDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除习惯：${habit.name}`} onClick={async () => { await window.youtrace.practice.trashHabit(habit.id); await queryClient.invalidateQueries({ queryKey: ['habits'] }) }}><Trash2 size={13} /></button></div>
+                  <div className="practice-card-actions"><button type="button" aria-label={`编辑习惯：${habit.name}`} onClick={() => { setEditingHabit(habit); setHabitDialogOpen(true) }}><Pencil size={13} /></button><button type="button" disabled={Boolean(actionBusy)} aria-label={`删除习惯：${habit.name}`} onClick={() => void runPracticeAction('删除习惯', () => window.youtrace.practice.trashHabit(habit.id), ['habits', 'trash'])}><Trash2 size={13} /></button></div>
                 </article>
               ))}
             </div>
@@ -307,7 +343,11 @@ export function PracticePage(): React.JSX.Element {
               </button>
             </div>
           </header>
-          {(metricsQuery.data ?? []).length === 0 ? (
+          {metricsQuery.isPending ? (
+            <p className="rail-message" role="status">正在读取指标…</p>
+          ) : metricsQuery.isError ? (
+            <QueryFailure title="指标读取失败" onRetry={() => void metricsQuery.refetch()} />
+          ) : (metricsQuery.data ?? []).length === 0 ? (
             <PracticeEmpty
               icon={<Gauge size={25} />}
               title="还没有这个范围的指标"
@@ -342,7 +382,7 @@ export function PracticePage(): React.JSX.Element {
                         <Plus size={13} />
                         记录
                       </button>
-                      <div className="practice-card-actions"><button type="button" aria-label={`编辑指标：${metric.name}`} onClick={() => { setEditingMetric(metric); setMetricDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除指标：${metric.name}`} onClick={async () => { await window.youtrace.practice.trashMetric(metric.id); await queryClient.invalidateQueries({ queryKey: ['metrics'] }) }}><Trash2 size={13} /></button></div>
+                      <div className="practice-card-actions"><button type="button" aria-label={`编辑指标：${metric.name}`} onClick={() => { setEditingMetric(metric); setMetricDialogOpen(true) }}><Pencil size={13} /></button><button type="button" disabled={Boolean(actionBusy)} aria-label={`删除指标：${metric.name}`} onClick={() => void runPracticeAction('删除指标', () => window.youtrace.practice.trashMetric(metric.id), ['metrics', 'trash'])}><Trash2 size={13} /></button></div>
                     </footer>
                   </article>
                 )
@@ -365,7 +405,11 @@ export function PracticePage(): React.JSX.Element {
               建立课程
             </button>
           </header>
-          {courses.length === 0 ? (
+          {coursesQuery.isPending ? (
+            <p className="rail-message" role="status">正在读取课程…</p>
+          ) : coursesQuery.isError ? (
+            <QueryFailure title="课程读取失败" onRetry={() => void coursesQuery.refetch()} />
+          ) : courses.length === 0 ? (
             <PracticeEmpty
               icon={<BookOpen size={25} />}
               title="还没有课程档案"
@@ -416,9 +460,23 @@ export function PracticePage(): React.JSX.Element {
                          测试
                        </button>
                        <button className="button button-secondary" type="button" onClick={() => { setEditingCourse(selectedCourse); setCourseDialogOpen(true) }}><Pencil size={14} />编辑课程</button>
-                       <button className="button button-danger" type="button" onClick={async () => { await window.youtrace.practice.trashCourse(selectedCourse.id); await queryClient.invalidateQueries({ queryKey: ['courses'] }) }}><Trash2 size={14} />删除课程</button>
+                       <button className="button button-danger" type="button" disabled={Boolean(actionBusy)} onClick={() => void runPracticeAction('删除课程', () => window.youtrace.practice.trashCourse(selectedCourse.id), ['courses', 'trash'])}><Trash2 size={14} />删除课程</button>
                     </div>
                   </header>
+                  {(courseMaterialsQuery.isError || knowledgeQuery.isError || courseMilestonesQuery.isError || mistakesQuery.isError || testsQuery.isError || reviewQueueQuery.isError) && (
+                    <QueryFailure
+                      title="课程明细读取不完整"
+                      detail="部分资料、知识点、错题、测试或复习队列暂时无法读取，请重试。"
+                      onRetry={() => void Promise.all([
+                        courseMaterialsQuery.refetch(),
+                        knowledgeQuery.refetch(),
+                        courseMilestonesQuery.refetch(),
+                        mistakesQuery.refetch(),
+                        testsQuery.refetch(),
+                        reviewQueueQuery.refetch()
+                      ])}
+                    />
+                  )}
                   <CourseMaterialsSection
                     course={selectedCourse}
                     materials={courseMaterialsQuery.data ?? []}
@@ -448,7 +506,7 @@ export function PracticePage(): React.JSX.Element {
                               {item.nextReviewDate ? ` · ${item.nextReviewDate} 复习` : ''}
                              </span>
                            </div>
-                           <div className="practice-card-actions"><button type="button" aria-label={`编辑知识点：${item.title}`} onClick={() => { setEditingKnowledge(item); setKnowledgeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除知识点：${item.title}`} onClick={async () => { await window.youtrace.practice.trashKnowledge(item.id); await Promise.all([queryClient.invalidateQueries({ queryKey: ['knowledge'] }), queryClient.invalidateQueries({ queryKey: ['courses'] }), queryClient.invalidateQueries({ queryKey: ['review-queue'] })]) }}><Trash2 size={13} /></button></div>
+                           <div className="practice-card-actions"><button type="button" aria-label={`编辑知识点：${item.title}`} onClick={() => { setEditingKnowledge(item); setKnowledgeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" disabled={Boolean(actionBusy)} aria-label={`删除知识点：${item.title}`} onClick={() => void runPracticeAction('删除知识点', () => window.youtrace.practice.trashKnowledge(item.id), ['knowledge', 'courses', 'review-queue', 'trash'])}><Trash2 size={13} /></button></div>
                         </article>
                       ))}
                       {(knowledgeQuery.data ?? []).length === 0 && <p>还没有知识点。</p>}
@@ -469,7 +527,7 @@ export function PracticePage(): React.JSX.Element {
                               {item.nextReviewDate ? ` · ${item.nextReviewDate} 复习` : ''}
                              </span>
                            </div>
-                           <div className="practice-card-actions"><button type="button" aria-label={`编辑错题：${item.question}`} onClick={() => { setEditingMistake(item); setMistakeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除错题：${item.question}`} onClick={async () => { await window.youtrace.practice.trashMistake(item.id); await Promise.all([queryClient.invalidateQueries({ queryKey: ['mistakes'] }), queryClient.invalidateQueries({ queryKey: ['courses'] }), queryClient.invalidateQueries({ queryKey: ['review-queue'] })]) }}><Trash2 size={13} /></button></div>
+                           <div className="practice-card-actions"><button type="button" aria-label={`编辑错题：${item.question}`} onClick={() => { setEditingMistake(item); setMistakeDialogOpen(true) }}><Pencil size={13} /></button><button type="button" disabled={Boolean(actionBusy)} aria-label={`删除错题：${item.question}`} onClick={() => void runPracticeAction('删除错题', () => window.youtrace.practice.trashMistake(item.id), ['mistakes', 'courses', 'review-queue', 'trash'])}><Trash2 size={13} /></button></div>
                         </article>
                       ))}
                       {(mistakesQuery.data ?? []).length === 0 && <p>还没有错题。</p>}
@@ -478,12 +536,12 @@ export function PracticePage(): React.JSX.Element {
                   <div className="learning-followup">
                     <section>
                       <div className="learning-heading"><span>测试记录</span><strong>{testsQuery.data?.length ?? 0}</strong></div>
-                      {(testsQuery.data ?? []).slice(0, 5).map((test) => <article key={test.id}><ClipboardCheck size={14} /><div><strong>{test.title}</strong><span>{test.score === null ? '未记录成绩' : `${test.score} / ${test.maxScore ?? '—'}`} · {new Date(test.testedAt).toLocaleDateString('zh-CN')}</span></div><div className="practice-card-actions"><button type="button" aria-label={`编辑测试：${test.title}`} onClick={() => { setEditingTest(test); setTestDialogOpen(true) }}><Pencil size={13} /></button><button type="button" aria-label={`删除测试：${test.title}`} onClick={async () => { await window.youtrace.practice.trashLearningTest(test.id); await queryClient.invalidateQueries({ queryKey: ['learning-tests'] }) }}><Trash2 size={13} /></button></div></article>)}
+                      {(testsQuery.data ?? []).slice(0, 5).map((test) => <article key={test.id}><ClipboardCheck size={14} /><div><strong>{test.title}</strong><span>{test.score === null ? '未记录成绩' : `${test.score} / ${test.maxScore ?? '—'}`} · {new Date(test.testedAt).toLocaleDateString('zh-CN')}</span></div><div className="practice-card-actions"><button type="button" aria-label={`编辑测试：${test.title}`} onClick={() => { setEditingTest(test); setTestDialogOpen(true) }}><Pencil size={13} /></button><button type="button" disabled={Boolean(actionBusy)} aria-label={`删除测试：${test.title}`} onClick={() => void runPracticeAction('删除测试', () => window.youtrace.practice.trashLearningTest(test.id), ['learning-tests', 'courses', 'trash'])}><Trash2 size={13} /></button></div></article>)}
                       {(testsQuery.data ?? []).length === 0 && <p>还没有测试记录。</p>}
                     </section>
                     <section>
                       <div className="learning-heading"><span>复习队列</span><strong>{(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').length}</strong></div>
-                      {(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').slice(0, 6).map((item) => <article className="review-queue-row" key={item.id}><RotateCcw size={14} /><div><strong>{item.title}</strong><span>{item.scheduledDate} · {item.entityType === 'knowledge' ? '知识点' : '错题'}</span></div><div>{(['again', 'hard', 'good', 'easy'] as const).map((result) => <button key={result} type="button" onClick={async () => { await window.youtrace.practice.recordReviewResult({ queueId: item.id, result, reviewedAt: new Date().toISOString() }); await Promise.all([queryClient.invalidateQueries({ queryKey: ['review-queue'] }), queryClient.invalidateQueries({ queryKey: ['knowledge'] }), queryClient.invalidateQueries({ queryKey: ['mistakes'] }), queryClient.invalidateQueries({ queryKey: ['courses'] })]) }}>{reviewResultLabel(result)}</button>)}</div></article>)}
+                      {(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').slice(0, 6).map((item) => <article className="review-queue-row" key={item.id}><RotateCcw size={14} /><div><strong>{item.title}</strong><span>{item.scheduledDate} · {item.entityType === 'knowledge' ? '知识点' : '错题'}</span></div><div>{(['again', 'hard', 'good', 'easy'] as const).map((result) => <button key={result} type="button" disabled={Boolean(actionBusy)} onClick={() => void runPracticeAction('记录复习结果', () => window.youtrace.practice.recordReviewResult({ queueId: item.id, result, reviewedAt: new Date().toISOString() }), ['review-queue', 'knowledge', 'mistakes', 'courses'])}>{reviewResultLabel(result)}</button>)}</div></article>)}
                       {(reviewQueueQuery.data ?? []).filter((item) => item.status === 'pending').length === 0 && <p>当前没有待复习内容。</p>}
                     </section>
                   </div>
